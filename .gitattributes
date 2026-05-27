@@ -1,0 +1,2 @@
+src/aria_et/assets/abcct/
+[[:space:]][[:space:]]** filter=lfs diff=lfs merge=lfs -text
