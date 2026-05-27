@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from aria_et.tasks import BATTERY_ORDER
+
+
+DemoCalibrationRunner = Callable[..., int]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,10 +20,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print the configured battery order.",
     )
 
+    demo_calibration = subparsers.add_parser(
+        "demo-calibration",
+        help="Run the bundled Pikachu calibration sequence in PsychoPy.",
+    )
+    demo_calibration.add_argument(
+        "--windowed",
+        action="store_true",
+        help="Run in a window instead of full screen.",
+    )
+    demo_calibration.add_argument(
+        "--size",
+        default="1024x768",
+        help="Window size for --windowed mode, formatted as WIDTHxHEIGHT.",
+    )
+    demo_calibration.add_argument(
+        "--no-sound",
+        action="store_true",
+        help="Disable calibration sound playback.",
+    )
+    demo_calibration.add_argument(
+        "--point-duration",
+        type=float,
+        default=1.0,
+        help="Seconds to display each calibration point.",
+    )
+
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    demo_calibration_runner: DemoCalibrationRunner | None = None,
+) -> int:
     args = build_parser().parse_args(argv)
 
     if args.command == "list-tasks":
@@ -28,4 +60,28 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(task.task_id)
         return 0
 
+    if args.command == "demo-calibration":
+        runner = demo_calibration_runner
+        if runner is None:
+            from aria_et.psychopy.calibration import run_pikachu_calibration_demo
+
+            runner = run_pikachu_calibration_demo
+
+        return runner(
+            fullscreen=not args.windowed,
+            window_size=parse_window_size(args.size),
+            play_sound=not args.no_sound,
+            point_duration_seconds=args.point_duration,
+        )
+
     raise ValueError(f"Unsupported command: {args.command}")
+
+
+def parse_window_size(value: str) -> tuple[int, int]:
+    try:
+        width, height = value.lower().split("x", maxsplit=1)
+        return int(width), int(height)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            f"Expected size formatted as WIDTHxHEIGHT: {value}"
+        ) from error
