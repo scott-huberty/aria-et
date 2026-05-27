@@ -30,28 +30,28 @@ wheels = [
 name = "aria-et"
 version = "0.1.0"
 source = { editable = "." }
-dependencies = [
-    { name = "psychopy" },
-    { name = "titta" },
-]
 
 [package.dev-dependencies]
 dev = [
     { name = "hatchling" },
     { name = "pytest" },
 ]
+psychopy = [
+    { name = "psychopy" },
+]
+tobii = [
+    { name = "titta" },
+]
 
 [package.metadata]
-requires-dist = [
-    { name = "psychopy", specifier = ">=2026.1.3" },
-    { name = "titta", specifier = ">=2.2.2" },
-]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "hatchling", specifier = ">=1.29.0" },
     { name = "pytest", specifier = ">=9.0.3" },
 ]
+psychopy = [{ name = "psychopy", specifier = ">=2026.1.3" }]
+tobii = [{ name = "titta", specifier = ">=2.2.2" }]
 
 [[package]]
 name = "astunparse"
