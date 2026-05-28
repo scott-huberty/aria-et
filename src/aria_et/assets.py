@@ -37,6 +37,12 @@ class StaticSocialScenesAssets:
         return abcct_asset(f"static-social-scenes/sounds/{filename}")
 
 
+@dataclass(frozen=True)
+class SocialInteractiveAssets:
+    def video(self, filename: str) -> Traversable:
+        return abcct_asset(f"social-interactive/videos/{filename}")
+
+
 def abcct_asset(relative_path: str) -> Traversable:
     return files(ASSET_PACKAGE).joinpath(ASSET_ROOT, relative_path)
 
@@ -62,3 +68,7 @@ def activity_monitoring_assets() -> ActivityMonitoringAssets:
 
 def static_social_scenes_assets() -> StaticSocialScenesAssets:
     return StaticSocialScenesAssets()
+
+
+def social_interactive_assets() -> SocialInteractiveAssets:
+    return SocialInteractiveAssets()

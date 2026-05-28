@@ -2,6 +2,7 @@ from aria_et.assets import (
     abcct_asset,
     activity_monitoring_assets,
     pikachu_calibration_assets,
+    social_interactive_assets,
     static_social_scenes_assets,
 )
 
@@ -52,3 +53,10 @@ def test_static_social_scenes_assets_resolve_bundled_images_and_soundtracks():
     assert assets.image("static1_f0.jpg").is_file()
     assert assets.image("popout1_f0.jpg").is_file()
     assert assets.sound("si_song2_vp080.wav").is_file()
+
+
+def test_social_interactive_assets_resolve_bundled_videos():
+    assets = social_interactive_assets()
+
+    assert assets.video("sibs1_non_15s.avi").is_file()
+    assert assets.video("sibs11_soc_15s.avi").is_file()
