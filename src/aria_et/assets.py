@@ -17,6 +17,17 @@ class CalibrationAssets:
     sound: Traversable
 
 
+@dataclass(frozen=True)
+class ActivityMonitoringAssets:
+    soundtrack: Traversable
+
+    def image(self, filename: str) -> Traversable:
+        return abcct_asset(f"activity-monitoring/images/{filename}")
+
+    def video(self, filename: str) -> Traversable:
+        return abcct_asset(f"activity-monitoring/videos/{filename}")
+
+
 def abcct_asset(relative_path: str) -> Traversable:
     return files(ASSET_PACKAGE).joinpath(ASSET_ROOT, relative_path)
 
@@ -32,3 +43,9 @@ def pikachu_calibration_assets() -> CalibrationAssets:
     sound = abcct_asset("calibration/pikachu/sounds/pikachu.wav")
 
     return CalibrationAssets(animation_frames=frames, sound=sound)
+
+
+def activity_monitoring_assets() -> ActivityMonitoringAssets:
+    return ActivityMonitoringAssets(
+        soundtrack=abcct_asset("activity-monitoring/sounds/satie.wav")
+    )

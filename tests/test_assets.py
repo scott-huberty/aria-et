@@ -1,4 +1,8 @@
-from aria_et.assets import abcct_asset, pikachu_calibration_assets
+from aria_et.assets import (
+    abcct_asset,
+    activity_monitoring_assets,
+    pikachu_calibration_assets,
+)
 
 
 def test_can_resolve_bundled_abcct_asset():
@@ -30,3 +34,12 @@ def test_pikachu_calibration_assets_include_sound():
 
     assert assets.sound.name == "pikachu.wav"
     assert assets.sound.is_file()
+
+
+def test_activity_monitoring_assets_resolve_bundled_media_and_soundtrack():
+    assets = activity_monitoring_assets()
+
+    assert assets.image("ams_a4_s6_b4_ga_d1_f1.jpg").is_file()
+    assert assets.video("am_a3_s5_b3_gm_d1_f0.avi").is_file()
+    assert assets.soundtrack.name == "satie.wav"
+    assert assets.soundtrack.is_file()
