@@ -54,6 +54,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=1.0,
         help="Seconds to display each calibration point.",
     )
+    demo_calibration.add_argument(
+        "--advance-on-space",
+        action="store_true",
+        help="Wait for Space before moving to the next calibration point.",
+    )
 
     return parser
 
@@ -81,6 +86,7 @@ def main(
             window_size=parse_window_size(args.size),
             play_sound=not args.no_sound,
             point_duration_seconds=args.point_duration,
+            advance_on_space=args.advance_on_space,
         )
 
     raise ValueError(f"Unsupported command: {args.command}")

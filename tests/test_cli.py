@@ -43,6 +43,7 @@ def test_demo_calibration_invokes_injected_runner():
             "window_size": (800, 600),
             "play_sound": False,
             "point_duration_seconds": 0.25,
+            "advance_on_space": False,
         }
     ]
 
@@ -63,6 +64,7 @@ def test_demo_calibration_defaults_to_windowed_runner_options():
             "window_size": (1024, 768),
             "play_sound": True,
             "point_duration_seconds": 1.0,
+            "advance_on_space": False,
         }
     ]
 
@@ -78,6 +80,22 @@ def test_demo_calibration_can_request_fullscreen():
 
     assert exit_code == 0
     assert calls[0]["fullscreen"] is True
+
+
+def test_demo_calibration_can_wait_for_space_between_points():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        ["demo-calibration", "--advance-on-space"],
+        demo_calibration_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls[0]["advance_on_space"] is True
 
 
 def test_parse_window_size():

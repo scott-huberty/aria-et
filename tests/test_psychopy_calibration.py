@@ -187,5 +187,65 @@ def test_psychopy_presenter_can_abort_between_animation_frames():
     ]
 
 
+def test_psychopy_presenter_can_wait_for_advance_between_points():
+    sequence = build_pikachu_calibration_sequence()
+    window = FakeWindow()
+    factories = FakePsychoPyFactories()
+    checks = 0
+
+    def advance_after_one_wait():
+        nonlocal checks
+        checks += 1
+        return checks % 2 == 0
+
+    result = make_presenter(
+        window,
+        factories,
+        point_duration_seconds=0.1,
+        frame_duration_seconds=0.1,
+        advance_requested=advance_after_one_wait,
+    ).present(sequence, ManualClock(), RecordingEventSink())
+
+    assert [point.label for point in result.presented_points] == [
+        "center",
+        "top-left",
+        "top-right",
+        "bottom-right",
+        "bottom-left",
+    ]
+    assert len(factories.waits) == 10
+
+
+def test_psychopy_presenter_can_abort_while_waiting_for_advance():
+    sequence = build_pikachu_calibration_sequence()
+    window = FakeWindow()
+    factories = FakePsychoPyFactories()
+    event_sink = RecordingEventSink()
+    abort_checks = 0
+
+    def never_advance():
+        return False
+
+    def abort_after_one_wait():
+        nonlocal abort_checks
+        abort_checks += 1
+        return abort_checks > 1
+
+    result = make_presenter(
+        window,
+        factories,
+        point_duration_seconds=0.1,
+        frame_duration_seconds=0.1,
+        advance_requested=never_advance,
+        abort_requested=abort_after_one_wait,
+    ).present(sequence, ManualClock(), event_sink)
+
+    assert result.presented_points == ()
+    assert [event.name for event in event_sink.events][-2:] == [
+        "calibration.aborted",
+        "calibration.ended",
+    ]
+
+
 def test_importing_psychopy_presenter_does_not_import_psychopy():
     assert "psychopy" not in sys.modules

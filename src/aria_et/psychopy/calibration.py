@@ -41,6 +41,7 @@ ImageFactory = Callable[[WindowLike, str, tuple[float, float], tuple[float, floa
 SoundFactory = Callable[[str], SoundLike]
 Wait = Callable[[float], None]
 AbortCheck = Callable[[], bool]
+AdvanceCheck = Callable[[], bool]
 StatusSink = Callable[[str], None]
 
 
@@ -55,6 +56,7 @@ class PsychoPyCalibrationPresenter:
     image_size_pixels: tuple[float, float] = (120, 120)
     play_sound: bool = True
     abort_requested: AbortCheck | None = None
+    advance_requested: AdvanceCheck | None = None
 
     def present(
         self,
@@ -137,6 +139,8 @@ class PsychoPyCalibrationPresenter:
 
         self._play_sound(point.stimulus.sound)
         if not self._draw_animation(point):
+            return None
+        if not self._wait_for_advance():
             return None
 
         ended_at = clock.now()
@@ -225,6 +229,17 @@ class PsychoPyCalibrationPresenter:
     def _abort_requested(self) -> bool:
         return self.abort_requested is not None and self.abort_requested()
 
+    def _wait_for_advance(self) -> bool:
+        if self.advance_requested is None:
+            return True
+
+        while not self.advance_requested():
+            if self._abort_requested():
+                return False
+            self._wait()(self.frame_duration_seconds)
+
+        return True
+
 
 @dataclass
 class PsychoPyClock:
@@ -240,6 +255,7 @@ def run_pikachu_calibration_demo(
     window_size: tuple[int, int] = (1024, 768),
     play_sound: bool = True,
     point_duration_seconds: float = 1.0,
+    advance_on_space: bool = False,
     status_sink: StatusSink | None = None,
 ) -> int:
     status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
@@ -260,12 +276,22 @@ def run_pikachu_calibration_demo(
         color="black",
     )
     try:
-        status("Running Pikachu calibration. Press Escape to stop.")
+        if advance_on_space:
+            status("Running Pikachu calibration. Press Space for each point; Escape stops.")
+        else:
+            status("Running Pikachu calibration. Press Escape to stop.")
+
+        event.clearEvents()
         presenter = PsychoPyCalibrationPresenter(
             window=window,
             play_sound=play_sound,
             point_duration_seconds=point_duration_seconds,
             abort_requested=lambda: bool(event.getKeys(keyList=["escape"])),
+            advance_requested=(
+                lambda: bool(event.getKeys(keyList=["space"]))
+                if advance_on_space
+                else None
+            ),
         )
         presenter.present(
             build_pikachu_calibration_sequence(),
