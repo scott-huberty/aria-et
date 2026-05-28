@@ -28,6 +28,15 @@ class ActivityMonitoringAssets:
         return abcct_asset(f"activity-monitoring/videos/{filename}")
 
 
+@dataclass(frozen=True)
+class StaticSocialScenesAssets:
+    def image(self, filename: str) -> Traversable:
+        return abcct_asset(f"static-social-scenes/images/{filename}")
+
+    def sound(self, filename: str) -> Traversable:
+        return abcct_asset(f"static-social-scenes/sounds/{filename}")
+
+
 def abcct_asset(relative_path: str) -> Traversable:
     return files(ASSET_PACKAGE).joinpath(ASSET_ROOT, relative_path)
 
@@ -49,3 +58,7 @@ def activity_monitoring_assets() -> ActivityMonitoringAssets:
     return ActivityMonitoringAssets(
         soundtrack=abcct_asset("activity-monitoring/sounds/satie.wav")
     )
+
+
+def static_social_scenes_assets() -> StaticSocialScenesAssets:
+    return StaticSocialScenesAssets()
