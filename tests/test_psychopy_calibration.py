@@ -159,5 +159,33 @@ def test_psychopy_presenter_can_disable_sound():
     assert factories.played == []
 
 
+def test_psychopy_presenter_can_abort_between_animation_frames():
+    sequence = build_pikachu_calibration_sequence()
+    window = FakeWindow()
+    factories = FakePsychoPyFactories()
+    event_sink = RecordingEventSink()
+    checks = 0
+
+    def abort_after_first_frame():
+        nonlocal checks
+        checks += 1
+        return checks > 2
+
+    result = make_presenter(
+        window,
+        factories,
+        point_duration_seconds=0.3,
+        frame_duration_seconds=0.1,
+        abort_requested=abort_after_first_frame,
+    ).present(sequence, ManualClock(), event_sink)
+
+    assert result.presented_points == ()
+    assert window.flips == 1
+    assert [event.name for event in event_sink.events][-2:] == [
+        "calibration.aborted",
+        "calibration.ended",
+    ]
+
+
 def test_importing_psychopy_presenter_does_not_import_psychopy():
     assert "psychopy" not in sys.modules

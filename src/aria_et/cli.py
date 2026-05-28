@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Callable, Sequence
 
 from aria_et.tasks import BATTERY_ORDER
@@ -24,11 +25,19 @@ def build_parser() -> argparse.ArgumentParser:
         "demo-calibration",
         help="Run the bundled Pikachu calibration sequence in PsychoPy.",
     )
-    demo_calibration.add_argument(
-        "--windowed",
+    display_mode = demo_calibration.add_mutually_exclusive_group()
+    display_mode.add_argument(
+        "--fullscreen",
         action="store_true",
-        help="Run in a window instead of full screen.",
+        help="Run full screen.",
     )
+    display_mode.add_argument(
+        "--windowed",
+        action="store_false",
+        dest="fullscreen",
+        help="Run in a window. This is the default.",
+    )
+    demo_calibration.set_defaults(fullscreen=False)
     demo_calibration.add_argument(
         "--size",
         default="1024x768",
@@ -68,7 +77,7 @@ def main(
             runner = run_pikachu_calibration_demo
 
         return runner(
-            fullscreen=not args.windowed,
+            fullscreen=args.fullscreen,
             window_size=parse_window_size(args.size),
             play_sound=not args.no_sound,
             point_duration_seconds=args.point_duration,
@@ -85,3 +94,7 @@ def parse_window_size(value: str) -> tuple[int, int]:
         raise argparse.ArgumentTypeError(
             f"Expected size formatted as WIDTHxHEIGHT: {value}"
         ) from error
+
+
+if __name__ == "__main__":
+    sys.exit(main())

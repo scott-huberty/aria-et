@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from importlib.resources import as_file
@@ -39,6 +40,8 @@ class SoundLike(Protocol):
 ImageFactory = Callable[[WindowLike, str, tuple[float, float], tuple[float, float]], DrawableLike]
 SoundFactory = Callable[[str], SoundLike]
 Wait = Callable[[float], None]
+AbortCheck = Callable[[], bool]
+StatusSink = Callable[[str], None]
 
 
 @dataclass(frozen=True)
@@ -51,6 +54,7 @@ class PsychoPyCalibrationPresenter:
     frame_duration_seconds: float = 1 / 30
     image_size_pixels: tuple[float, float] = (120, 120)
     play_sound: bool = True
+    abort_requested: AbortCheck | None = None
 
     def present(
         self,
@@ -67,11 +71,33 @@ class PsychoPyCalibrationPresenter:
             )
         )
 
-        presented_points = tuple(
-            self._present_point(point, clock, event_sink) for point in sequence.points
-        )
+        presented_points = []
+        aborted = False
+        for point in sequence.points:
+            if self._abort_requested():
+                aborted = True
+                break
+
+            presented_point = self._present_point(point, clock, event_sink)
+            if presented_point is None:
+                aborted = True
+                break
+
+            presented_points.append(presented_point)
 
         ended_at = clock.now()
+        if aborted:
+            event_sink.emit(
+                RuntimeEvent(
+                    "calibration.aborted",
+                    ended_at,
+                    {
+                        "sequence_id": sequence.sequence_id,
+                        "point_count": len(presented_points),
+                    },
+                )
+            )
+
         event_sink.emit(
             RuntimeEvent(
                 "calibration.ended",
@@ -85,7 +111,7 @@ class PsychoPyCalibrationPresenter:
 
         return CalibrationRunResult(
             sequence_id=sequence.sequence_id,
-            presented_points=presented_points,
+            presented_points=tuple(presented_points),
             started_at=started_at,
             ended_at=ended_at,
         )
@@ -95,7 +121,7 @@ class PsychoPyCalibrationPresenter:
         point: CalibrationPoint,
         clock: Clock,
         event_sink: EventSink,
-    ) -> PresentedCalibrationPoint:
+    ) -> PresentedCalibrationPoint | None:
         started_at = clock.now()
         event_sink.emit(
             RuntimeEvent(
@@ -110,7 +136,8 @@ class PsychoPyCalibrationPresenter:
         )
 
         self._play_sound(point.stimulus.sound)
-        self._draw_animation(point)
+        if not self._draw_animation(point):
+            return None
 
         ended_at = clock.now()
         event_sink.emit(
@@ -128,12 +155,15 @@ class PsychoPyCalibrationPresenter:
             ended_at=ended_at,
         )
 
-    def _draw_animation(self, point: CalibrationPoint) -> None:
+    def _draw_animation(self, point: CalibrationPoint) -> bool:
         position = self._to_window_position(point.target.position)
         frames = point.stimulus.animation_frames
         frame_count = max(1, round(self.point_duration_seconds / self.frame_duration_seconds))
 
         for frame_index in range(frame_count):
+            if self._abort_requested():
+                return False
+
             frame = frames[frame_index % len(frames)]
             with as_file(frame) as frame_path:
                 image = self._image_factory()(
@@ -145,6 +175,8 @@ class PsychoPyCalibrationPresenter:
                 image.draw()
             self.window.flip()
             self._wait()(self.frame_duration_seconds)
+
+        return True
 
     def _play_sound(self, sound: Traversable) -> None:
         if not self.play_sound:
@@ -190,6 +222,9 @@ class PsychoPyCalibrationPresenter:
 
         return core.wait
 
+    def _abort_requested(self) -> bool:
+        return self.abort_requested is not None and self.abort_requested()
+
 
 @dataclass
 class PsychoPyClock:
@@ -205,11 +240,19 @@ def run_pikachu_calibration_demo(
     window_size: tuple[int, int] = (1024, 768),
     play_sound: bool = True,
     point_duration_seconds: float = 1.0,
+    status_sink: StatusSink | None = None,
 ) -> int:
-    from psychopy import core, visual
+    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+
+    status("Importing PsychoPy...")
+    from psychopy import core, event, visual
 
     from aria_et.runtime import RecordingEventSink
 
+    status(
+        "Opening PsychoPy window "
+        f"({window_size[0]}x{window_size[1]}, fullscreen={fullscreen})..."
+    )
     window = visual.Window(
         size=window_size,
         fullscr=fullscreen,
@@ -217,17 +260,21 @@ def run_pikachu_calibration_demo(
         color="black",
     )
     try:
+        status("Running Pikachu calibration. Press Escape to stop.")
         presenter = PsychoPyCalibrationPresenter(
             window=window,
             play_sound=play_sound,
             point_duration_seconds=point_duration_seconds,
+            abort_requested=lambda: bool(event.getKeys(keyList=["escape"])),
         )
         presenter.present(
             build_pikachu_calibration_sequence(),
             PsychoPyClock(core.Clock()),
             RecordingEventSink(),
         )
+        status("Calibration demo finished.")
     finally:
+        status("Closing PsychoPy window...")
         window.close()
 
     return 0

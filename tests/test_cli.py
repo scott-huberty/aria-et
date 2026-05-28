@@ -47,7 +47,7 @@ def test_demo_calibration_invokes_injected_runner():
     ]
 
 
-def test_demo_calibration_defaults_to_fullscreen_runner_options():
+def test_demo_calibration_defaults_to_windowed_runner_options():
     calls = []
 
     def runner(**kwargs):
@@ -59,12 +59,25 @@ def test_demo_calibration_defaults_to_fullscreen_runner_options():
     assert exit_code == 0
     assert calls == [
         {
-            "fullscreen": True,
+            "fullscreen": False,
             "window_size": (1024, 768),
             "play_sound": True,
             "point_duration_seconds": 1.0,
         }
     ]
+
+
+def test_demo_calibration_can_request_fullscreen():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(["demo-calibration", "--fullscreen"], demo_calibration_runner=runner)
+
+    assert exit_code == 0
+    assert calls[0]["fullscreen"] is True
 
 
 def test_parse_window_size():
