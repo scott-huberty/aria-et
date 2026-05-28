@@ -2,6 +2,7 @@ from aria_et.assets import (
     abcct_asset,
     activity_monitoring_assets,
     pikachu_calibration_assets,
+    pupillary_light_reflex_assets,
     social_interactive_assets,
     static_social_scenes_assets,
 )
@@ -60,3 +61,11 @@ def test_social_interactive_assets_resolve_bundled_videos():
 
     assert assets.video("sibs1_non_15s.avi").is_file()
     assert assets.video("sibs11_soc_15s.avi").is_file()
+
+
+def test_pupillary_light_reflex_assets_resolve_bundled_videos():
+    assets = pupillary_light_reflex_assets()
+
+    assert assets.video("plr65.avi").is_file()
+    assert assets.video("plr71.avi").is_file()
+    assert assets.video("plr78.avi").is_file()

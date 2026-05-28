@@ -43,6 +43,12 @@ class SocialInteractiveAssets:
         return abcct_asset(f"social-interactive/videos/{filename}")
 
 
+@dataclass(frozen=True)
+class PupillaryLightReflexAssets:
+    def video(self, filename: str) -> Traversable:
+        return abcct_asset(f"pupillary-light-reflex/videos/{filename}")
+
+
 def abcct_asset(relative_path: str) -> Traversable:
     return files(ASSET_PACKAGE).joinpath(ASSET_ROOT, relative_path)
 
@@ -72,3 +78,7 @@ def static_social_scenes_assets() -> StaticSocialScenesAssets:
 
 def social_interactive_assets() -> SocialInteractiveAssets:
     return SocialInteractiveAssets()
+
+
+def pupillary_light_reflex_assets() -> PupillaryLightReflexAssets:
+    return PupillaryLightReflexAssets()
