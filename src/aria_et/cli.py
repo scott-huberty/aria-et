@@ -11,6 +11,7 @@ from aria_et.tasks import BATTERY_ORDER
 
 DemoCalibrationRunner = Callable[..., int]
 DemoActivityMonitoringRunner = Callable[..., int]
+DemoSocialInteractiveRunner = Callable[..., int]
 DemoStaticSocialScenesRunner = Callable[..., int]
 
 
@@ -106,6 +107,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print AM rendering diagnostics.",
     )
 
+    demo_si = subparsers.add_parser(
+        "demo-si",
+        help="Run the bundled Social Interactive sequence in PsychoPy.",
+    )
+    si_display_mode = demo_si.add_mutually_exclusive_group()
+    si_display_mode.add_argument(
+        "--fullscreen",
+        action="store_true",
+        help="Run full screen.",
+    )
+    si_display_mode.add_argument(
+        "--windowed",
+        action="store_false",
+        dest="fullscreen",
+        help="Run in a window. This is the default.",
+    )
+    demo_si.set_defaults(fullscreen=False)
+    demo_si.add_argument(
+        "--size",
+        default="1024x768",
+        help="Window size for --windowed mode, formatted as WIDTHxHEIGHT.",
+    )
+    demo_si.add_argument(
+        "--no-sound",
+        action="store_true",
+        help="Disable movie audio playback.",
+    )
+    demo_si.add_argument(
+        "--trial-limit",
+        type=int,
+        default=None,
+        help="Limit the number of SI trials for demos.",
+    )
+    demo_si.add_argument(
+        "--debug-render",
+        action="store_true",
+        help="Print SI rendering diagnostics.",
+    )
+
     demo_ss = subparsers.add_parser(
         "demo-ss",
         help="Run the bundled Static Social Scenes sequence in PsychoPy.",
@@ -152,6 +192,7 @@ def main(
     argv: Sequence[str] | None = None,
     demo_calibration_runner: DemoCalibrationRunner | None = None,
     demo_activity_monitoring_runner: DemoActivityMonitoringRunner | None = None,
+    demo_social_interactive_runner: DemoSocialInteractiveRunner | None = None,
     demo_static_social_scenes_runner: DemoStaticSocialScenesRunner | None = None,
 ) -> int:
     args = build_parser().parse_args(argv)
@@ -183,6 +224,21 @@ def main(
             from aria_et.psychopy.activity_monitoring import run_activity_monitoring_demo
 
             runner = run_activity_monitoring_demo
+
+        return runner(
+            fullscreen=args.fullscreen,
+            window_size=parse_window_size(args.size),
+            play_sound=not args.no_sound,
+            trial_limit=args.trial_limit,
+            debug_render=args.debug_render,
+        )
+
+    if args.command == "demo-si":
+        runner = demo_social_interactive_runner
+        if runner is None:
+            from aria_et.psychopy.social_interactive import run_social_interactive_demo
+
+            runner = run_social_interactive_demo
 
         return runner(
             fullscreen=args.fullscreen,
