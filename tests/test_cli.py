@@ -116,6 +116,39 @@ def test_demo_calibration_can_enable_render_debug_logging():
     assert calls[0]["debug_render"] is True
 
 
+def test_demo_activity_monitoring_invokes_injected_runner():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        [
+            "demo-am",
+            "--fullscreen",
+            "--size",
+            "800x600",
+            "--no-sound",
+            "--trial-limit",
+            "2",
+            "--debug-render",
+        ],
+        demo_activity_monitoring_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "fullscreen": True,
+            "window_size": (800, 600),
+            "play_sound": False,
+            "trial_limit": 2,
+            "debug_render": True,
+        }
+    ]
+
+
 def test_parse_window_size():
     assert parse_window_size("1920x1080") == (1920, 1080)
 
