@@ -22,6 +22,7 @@ from aria_et.runtime import (
 
 class WindowLike(Protocol):
     size: Sequence[float]
+    clientSize: Sequence[float]
 
     def flip(self) -> None:
         """Present the next frame."""
@@ -43,6 +44,7 @@ Wait = Callable[[float], None]
 AbortCheck = Callable[[], bool]
 AdvanceCheck = Callable[[], bool]
 StatusSink = Callable[[str], None]
+RenderStatus = Callable[[str], None]
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,7 @@ class PsychoPyCalibrationPresenter:
     play_sound: bool = True
     abort_requested: AbortCheck | None = None
     advance_requested: AdvanceCheck | None = None
+    render_status: RenderStatus | None = None
 
     def present(
         self,
@@ -125,6 +128,7 @@ class PsychoPyCalibrationPresenter:
         event_sink: EventSink,
     ) -> PresentedCalibrationPoint | None:
         started_at = clock.now()
+        window_position = self._to_window_position(point.target.position)
         event_sink.emit(
             RuntimeEvent(
                 "calibration.point.started",
@@ -133,6 +137,8 @@ class PsychoPyCalibrationPresenter:
                     "label": point.target.label,
                     "x": point.target.position.x,
                     "y": point.target.position.y,
+                    "window_x": window_position[0],
+                    "window_y": window_position[1],
                 },
             )
         )
@@ -163,12 +169,23 @@ class PsychoPyCalibrationPresenter:
         position = self._to_window_position(point.target.position)
         frames = point.stimulus.animation_frames
         frame_count = max(1, round(self.point_duration_seconds / self.frame_duration_seconds))
+        self._render_status(
+            f"Animation started: {point.target.label} "
+            f"frame_count={frame_count} frame_duration={self.frame_duration_seconds}"
+        )
 
         for frame_index in range(frame_count):
             if self._abort_requested():
+                self._render_status(
+                    f"Animation aborted before frame: {point.target.label} "
+                    f"frame={frame_index + 1}/{frame_count}"
+                )
                 return False
 
             frame = frames[frame_index % len(frames)]
+            self._render_status(
+                f"Frame image create: {point.target.label} frame={frame_index + 1}/{frame_count}"
+            )
             with as_file(frame) as frame_path:
                 image = self._image_factory()(
                     self.window,
@@ -176,10 +193,23 @@ class PsychoPyCalibrationPresenter:
                     position,
                     self.image_size_pixels,
                 )
+                self._render_status(
+                    f"Frame draw: {point.target.label} frame={frame_index + 1}/{frame_count}"
+                )
                 image.draw()
+            self._render_status(
+                f"Frame flip: {point.target.label} frame={frame_index + 1}/{frame_count}"
+            )
             self.window.flip()
+            self._render_status(
+                f"Frame wait: {point.target.label} frame={frame_index + 1}/{frame_count}"
+            )
             self._wait()(self.frame_duration_seconds)
+            self._render_status(
+                f"Frame done: {point.target.label} frame={frame_index + 1}/{frame_count}"
+            )
 
+        self._render_status(f"Animation ended: {point.target.label}")
         return True
 
     def _play_sound(self, sound: Traversable) -> None:
@@ -190,11 +220,14 @@ class PsychoPyCalibrationPresenter:
             self._sound_factory()(str(sound_path)).play()
 
     def _to_window_position(self, point: NormalizedPoint) -> tuple[float, float]:
-        width, height = self.window.size
+        width, height = self._coordinate_size()
         return (
             (point.x - 0.5) * width,
             (0.5 - point.y) * height,
         )
+
+    def _coordinate_size(self) -> Sequence[float]:
+        return getattr(self.window, "clientSize", self.window.size)
 
     def _image_factory(self) -> ImageFactory:
         if self.image_factory is not None:
@@ -233,12 +266,19 @@ class PsychoPyCalibrationPresenter:
         if self.advance_requested is None:
             return True
 
+        self._render_status("Waiting for advance")
         while not self.advance_requested():
             if self._abort_requested():
+                self._render_status("Advance wait aborted")
                 return False
             self._wait()(self.frame_duration_seconds)
 
+        self._render_status("Advance received")
         return True
+
+    def _render_status(self, message: str) -> None:
+        if self.render_status is not None:
+            self.render_status(message)
 
 
 @dataclass
@@ -249,6 +289,36 @@ class PsychoPyClock:
         return self.psychopy_clock.getTime()
 
 
+@dataclass
+class StatusLoggingEventSink:
+    delegate: EventSink
+    status: StatusSink
+
+    def emit(self, event: RuntimeEvent) -> None:
+        self.delegate.emit(event)
+        if event.name == "calibration.started":
+            self.status(f"Calibration started: {event.payload['sequence_id']}")
+        elif event.name == "calibration.point.started":
+            self.status(
+                "Point started: "
+                f"{event.payload['label']} "
+                f"normalized=({event.payload['x']}, {event.payload['y']}) "
+                f"window=({event.payload['window_x']}, {event.payload['window_y']})"
+            )
+        elif event.name == "calibration.point.ended":
+            self.status(f"Point ended: {event.payload['label']}")
+        elif event.name == "calibration.aborted":
+            self.status(
+                "Calibration aborted after "
+                f"{event.payload['point_count']} completed point(s)."
+            )
+        elif event.name == "calibration.ended":
+            self.status(
+                "Calibration ended after "
+                f"{event.payload['point_count']} completed point(s)."
+            )
+
+
 def run_pikachu_calibration_demo(
     *,
     fullscreen: bool = True,
@@ -256,6 +326,7 @@ def run_pikachu_calibration_demo(
     play_sound: bool = True,
     point_duration_seconds: float = 1.0,
     advance_on_space: bool = False,
+    debug_render: bool = False,
     status_sink: StatusSink | None = None,
 ) -> int:
     status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
@@ -275,6 +346,11 @@ def run_pikachu_calibration_demo(
         units="pix",
         color="black",
     )
+    status(
+        "PsychoPy window sizes: "
+        f"size={tuple(window.size)} "
+        f"clientSize={tuple(getattr(window, 'clientSize', ())) or 'unavailable'}"
+    )
     try:
         if advance_on_space:
             status("Running Pikachu calibration. Press Space for each point; Escape stops.")
@@ -282,21 +358,23 @@ def run_pikachu_calibration_demo(
             status("Running Pikachu calibration. Press Escape to stop.")
 
         event.clearEvents()
+        abort_requested = lambda: bool(event.getKeys(keyList=["escape"]))
+        advance_requested = None
+        if advance_on_space:
+            advance_requested = lambda: bool(event.getKeys(keyList=["space"]))
+
         presenter = PsychoPyCalibrationPresenter(
             window=window,
             play_sound=play_sound,
             point_duration_seconds=point_duration_seconds,
-            abort_requested=lambda: bool(event.getKeys(keyList=["escape"])),
-            advance_requested=(
-                lambda: bool(event.getKeys(keyList=["space"]))
-                if advance_on_space
-                else None
-            ),
+            abort_requested=abort_requested,
+            advance_requested=advance_requested,
+            render_status=status if debug_render else None,
         )
         presenter.present(
             build_pikachu_calibration_sequence(),
             PsychoPyClock(core.Clock()),
-            RecordingEventSink(),
+            StatusLoggingEventSink(RecordingEventSink(), status),
         )
         status("Calibration demo finished.")
     finally:

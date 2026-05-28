@@ -59,6 +59,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Wait for Space before moving to the next calibration point.",
     )
+    demo_calibration.add_argument(
+        "--debug-render",
+        action="store_true",
+        help="Print frame-level PsychoPy rendering diagnostics.",
+    )
 
     return parser
 
@@ -87,6 +92,7 @@ def main(
             play_sound=not args.no_sound,
             point_duration_seconds=args.point_duration,
             advance_on_space=args.advance_on_space,
+            debug_render=args.debug_render,
         )
 
     raise ValueError(f"Unsupported command: {args.command}")

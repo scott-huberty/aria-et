@@ -2,14 +2,19 @@ import sys
 from dataclasses import dataclass, field
 
 from aria_et.calibration import build_pikachu_calibration_sequence
-from aria_et.psychopy.calibration import PsychoPyCalibrationPresenter
+from aria_et.psychopy.calibration import PsychoPyCalibrationPresenter, StatusLoggingEventSink
 from aria_et.runtime import ManualClock, RecordingEventSink
 
 
 @dataclass
 class FakeWindow:
     size: tuple[float, float] = (1000, 800)
+    clientSize: tuple[float, float] | None = None
     flips: int = 0
+
+    def __post_init__(self):
+        if self.clientSize is None:
+            self.clientSize = self.size
 
     def flip(self) -> None:
         self.flips += 1
@@ -112,6 +117,55 @@ def test_psychopy_presenter_maps_normalized_positions_to_pixel_positions():
     ]
 
 
+def test_psychopy_presenter_uses_client_size_for_retina_window_positions():
+    sequence = build_pikachu_calibration_sequence()
+    window = FakeWindow(size=(2000, 1600), clientSize=(1000, 800))
+    factories = FakePsychoPyFactories()
+
+    make_presenter(
+        window,
+        factories,
+        point_duration_seconds=0.1,
+        frame_duration_seconds=0.1,
+    ).present(sequence, ManualClock(), RecordingEventSink())
+
+    assert [image.pos for image in factories.images] == [
+        (0.0, 0.0),
+        (-400.0, 320.0),
+        (400.0, 320.0),
+        (400.0, -320.0),
+        (-400.0, -320.0),
+    ]
+
+
+def test_psychopy_presenter_emits_window_positions_with_point_start_events():
+    sequence = build_pikachu_calibration_sequence()
+    window = FakeWindow(size=(1000, 800))
+    factories = FakePsychoPyFactories()
+    event_sink = RecordingEventSink()
+
+    make_presenter(
+        window,
+        factories,
+        point_duration_seconds=0.1,
+        frame_duration_seconds=0.1,
+    ).present(sequence, ManualClock(), event_sink)
+
+    point_starts = [
+        event for event in event_sink.events if event.name == "calibration.point.started"
+    ]
+    assert [
+        (event.payload["label"], event.payload["window_x"], event.payload["window_y"])
+        for event in point_starts
+    ] == [
+        ("center", 0.0, 0.0),
+        ("top-left", -400.0, 320.0),
+        ("top-right", 400.0, 320.0),
+        ("bottom-right", 400.0, -320.0),
+        ("bottom-left", -400.0, -320.0),
+    ]
+
+
 def test_psychopy_presenter_draws_animation_frames_and_flips_window():
     sequence = build_pikachu_calibration_sequence()
     window = FakeWindow()
@@ -131,6 +185,32 @@ def test_psychopy_presenter_draws_animation_frames_and_flips_window():
     assert factories.images[0].path.endswith("imrewspn_001.bmp")
     assert factories.images[1].path.endswith("imrewspn_002.bmp")
     assert factories.images[2].path.endswith("imrewspn_003.bmp")
+
+
+def test_psychopy_presenter_can_log_frame_level_render_progress():
+    sequence = build_pikachu_calibration_sequence()
+    window = FakeWindow()
+    factories = FakePsychoPyFactories()
+    statuses = []
+
+    make_presenter(
+        window,
+        factories,
+        point_duration_seconds=0.1,
+        frame_duration_seconds=0.1,
+        render_status=statuses.append,
+    ).present(sequence, ManualClock(), RecordingEventSink())
+
+    assert statuses[:6] == [
+        "Animation started: center frame_count=1 frame_duration=0.1",
+        "Frame image create: center frame=1/1",
+        "Frame draw: center frame=1/1",
+        "Frame flip: center frame=1/1",
+        "Frame wait: center frame=1/1",
+        "Frame done: center frame=1/1",
+    ]
+    assert "Animation ended: center" in statuses
+    assert "Waiting for advance" not in statuses
 
 
 def test_psychopy_presenter_plays_sound_for_each_point():
@@ -245,6 +325,41 @@ def test_psychopy_presenter_can_abort_while_waiting_for_advance():
         "calibration.aborted",
         "calibration.ended",
     ]
+
+
+def test_status_logging_event_sink_logs_point_progression():
+    delegate = RecordingEventSink()
+    statuses = []
+    sink = StatusLoggingEventSink(delegate, statuses.append)
+
+    sink.emit(
+        delegate_event(
+            "calibration.point.started",
+            {
+                "label": "top-left",
+                "x": 0.1,
+                "y": 0.1,
+                "window_x": -400.0,
+                "window_y": 320.0,
+            },
+        )
+    )
+    sink.emit(delegate_event("calibration.point.ended", {"label": "top-left"}))
+
+    assert [event.name for event in delegate.events] == [
+        "calibration.point.started",
+        "calibration.point.ended",
+    ]
+    assert statuses == [
+        "Point started: top-left normalized=(0.1, 0.1) window=(-400.0, 320.0)",
+        "Point ended: top-left",
+    ]
+
+
+def delegate_event(name, payload):
+    from aria_et.runtime import RuntimeEvent
+
+    return RuntimeEvent(name, 0.0, payload)
 
 
 def test_importing_psychopy_presenter_does_not_import_psychopy():
