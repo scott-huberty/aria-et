@@ -13,6 +13,7 @@ DemoCalibrationRunner = Callable[..., int]
 DemoActivityMonitoringRunner = Callable[..., int]
 DemoSocialInteractiveRunner = Callable[..., int]
 DemoStaticSocialScenesRunner = Callable[..., int]
+DemoPupillaryLightReflexRunner = Callable[..., int]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -185,6 +186,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print SS rendering diagnostics.",
     )
 
+    demo_plr = subparsers.add_parser(
+        "demo-plr",
+        help="Run the bundled Pupillary Light Reflex sequence in PsychoPy.",
+    )
+    plr_display_mode = demo_plr.add_mutually_exclusive_group()
+    plr_display_mode.add_argument(
+        "--fullscreen",
+        action="store_true",
+        help="Run full screen.",
+    )
+    plr_display_mode.add_argument(
+        "--windowed",
+        action="store_false",
+        dest="fullscreen",
+        help="Run in a window. This is the default.",
+    )
+    demo_plr.set_defaults(fullscreen=False)
+    demo_plr.add_argument(
+        "--size",
+        default="1024x768",
+        help="Window size for --windowed mode, formatted as WIDTHxHEIGHT.",
+    )
+    demo_plr.add_argument(
+        "--no-sound",
+        action="store_true",
+        help="Disable movie audio playback.",
+    )
+    demo_plr.add_argument(
+        "--trial-limit",
+        type=int,
+        default=None,
+        help="Limit the number of PLR trials for demos.",
+    )
+    demo_plr.add_argument(
+        "--debug-render",
+        action="store_true",
+        help="Print PLR rendering diagnostics.",
+    )
+
     return parser
 
 
@@ -194,6 +234,7 @@ def main(
     demo_activity_monitoring_runner: DemoActivityMonitoringRunner | None = None,
     demo_social_interactive_runner: DemoSocialInteractiveRunner | None = None,
     demo_static_social_scenes_runner: DemoStaticSocialScenesRunner | None = None,
+    demo_pupillary_light_reflex_runner: DemoPupillaryLightReflexRunner | None = None,
 ) -> int:
     args = build_parser().parse_args(argv)
 
@@ -254,6 +295,23 @@ def main(
             from aria_et.psychopy.static_social_scenes import run_static_social_scenes_demo
 
             runner = run_static_social_scenes_demo
+
+        return runner(
+            fullscreen=args.fullscreen,
+            window_size=parse_window_size(args.size),
+            play_sound=not args.no_sound,
+            trial_limit=args.trial_limit,
+            debug_render=args.debug_render,
+        )
+
+    if args.command == "demo-plr":
+        runner = demo_pupillary_light_reflex_runner
+        if runner is None:
+            from aria_et.psychopy.pupillary_light_reflex import (
+                run_pupillary_light_reflex_demo,
+            )
+
+            runner = run_pupillary_light_reflex_demo
 
         return runner(
             fullscreen=args.fullscreen,

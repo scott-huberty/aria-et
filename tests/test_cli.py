@@ -215,6 +215,39 @@ def test_demo_static_social_scenes_invokes_injected_runner():
     ]
 
 
+def test_demo_pupillary_light_reflex_invokes_injected_runner():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        [
+            "demo-plr",
+            "--fullscreen",
+            "--size",
+            "800x600",
+            "--no-sound",
+            "--trial-limit",
+            "2",
+            "--debug-render",
+        ],
+        demo_pupillary_light_reflex_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "fullscreen": True,
+            "window_size": (800, 600),
+            "play_sound": False,
+            "trial_limit": 2,
+            "debug_render": True,
+        }
+    ]
+
+
 def test_parse_window_size():
     assert parse_window_size("1920x1080") == (1920, 1080)
 
