@@ -216,15 +216,16 @@ def test_psychopy_presenter_can_log_frame_level_render_progress():
     assert "Waiting for advance" not in statuses
 
 
-def test_psychopy_presenter_does_not_play_sound_for_reward_animations():
+def test_psychopy_presenter_plays_reward_sound_for_each_point():
     sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow()
     factories = FakePsychoPyFactories()
 
     make_presenter(window, factories).present(sequence, ManualClock(), RecordingEventSink())
 
-    assert factories.sounds == []
-    assert factories.played == []
+    assert len(factories.sounds) == 5
+    assert all(path.endswith(".wav") for path in factories.played)
+    assert all("snd_gap_rew" in path for path in factories.played)
 
 
 def test_psychopy_presenter_can_disable_sound():

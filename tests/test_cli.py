@@ -64,7 +64,7 @@ def test_demo_calibration_defaults_to_windowed_runner_options():
             "fullscreen": False,
             "window_size": (1024, 768),
             "play_sound": True,
-            "point_duration_seconds": 1.0,
+            "point_duration_seconds": 3.0,
             "advance_on_space": False,
             "debug_render": False,
         }

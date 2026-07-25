@@ -23,6 +23,13 @@ def test_gap_overlap_reward_calibration_assets_include_ordered_frame_animations(
         for animation in assets.animations
         for frame in animation.frames
     )
+    assert [sound.name for sound in assets.sounds] == [
+        "snd_gap_rew01.wav",
+        "snd_gap_rew02.wav",
+        "snd_gap_rew03.wav",
+        "snd_gap_rew05.wav",
+    ]
+    assert all(sound.is_file() for sound in assets.sounds)
 
 
 def test_activity_monitoring_assets_resolve_bundled_media_and_soundtrack():

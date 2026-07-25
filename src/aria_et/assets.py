@@ -14,6 +14,7 @@ ASSET_ROOT = "assets/abcct"
 @dataclass(frozen=True)
 class CalibrationRewardAssets:
     animations: tuple["CalibrationRewardAnimation", ...]
+    sounds: tuple[Traversable, ...]
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ def abcct_asset(relative_path: str) -> Traversable:
 
 def gap_overlap_reward_calibration_assets() -> CalibrationRewardAssets:
     animation_dir = abcct_asset("calibration/Gap-Overlap/Frames/Reward")
+    sound_dir = abcct_asset("calibration/Gap-Overlap/Auditory")
     animations = tuple(
         CalibrationRewardAnimation(
             name=animation.name,
@@ -75,8 +77,18 @@ def gap_overlap_reward_calibration_assets() -> CalibrationRewardAssets:
             key=lambda path: path.name,
         )
     )
+    sounds = tuple(
+        sorted(
+            (
+                path
+                for path in sound_dir.iterdir()
+                if path.name.startswith("snd_gap_rew") and path.name.endswith(".wav")
+            ),
+            key=lambda path: path.name,
+        )
+    )
 
-    return CalibrationRewardAssets(animations=animations)
+    return CalibrationRewardAssets(animations=animations, sounds=sounds)
 
 
 def activity_monitoring_assets() -> ActivityMonitoringAssets:

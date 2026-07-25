@@ -73,9 +73,13 @@ def calibration_stimuli_from_reward_assets(
     if any(not animation.frames for animation in assets.animations):
         raise ValueError("Calibration reward animations must include at least one frame.")
 
+    if not assets.sounds:
+        raise ValueError("Calibration reward assets must include at least one sound.")
+
     return tuple(
-        CalibrationStimulus(animation_frames=animation.frames)
+        CalibrationStimulus(animation_frames=animation.frames, sound=sound)
         for animation in assets.animations
+        for sound in assets.sounds
     )
 
 
