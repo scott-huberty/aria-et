@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.resources import as_file
 from typing import Protocol
 
@@ -66,6 +66,7 @@ class PsychoPyStaticSocialScenesPresenter:
     trial_limit: int | None = None
     frame_duration_seconds: float = 1 / 30
     render_status: StatusSink | None = None
+    _active_sounds: list[SoundLike] = field(default_factory=list, init=False, repr=False)
 
     def present(
         self,
@@ -168,7 +169,9 @@ class PsychoPyStaticSocialScenesPresenter:
             return
 
         with as_file(trial.stimulus.soundtrack) as soundtrack_path:
-            self._sound_factory()(str(soundtrack_path)).play()
+            sound_object = self._sound_factory()(str(soundtrack_path))
+            sound_object.play()
+            self._active_sounds.append(sound_object)
 
     def _selected_trials(
         self,

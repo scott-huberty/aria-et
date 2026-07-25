@@ -140,7 +140,8 @@ def test_static_social_scenes_presenter_plays_soundtracks_only_when_enabled():
     window = FakeWindow()
     factories = FakeFactories()
 
-    make_presenter(window, factories, trial_limit=2).present(
+    presenter = make_presenter(window, factories, trial_limit=2)
+    presenter.present(
         sequence,
         ManualClock(),
         RecordingEventSink(),
@@ -149,15 +150,23 @@ def test_static_social_scenes_presenter_plays_soundtracks_only_when_enabled():
     assert len(factories.sound_plays) == 2
     assert factories.sound_plays[0].endswith("si_song2_vp080.wav")
     assert factories.sound_plays[1].endswith("si_song3_vp080.wav")
+    assert [sound.path for sound in presenter._active_sounds] == factories.sound_plays
 
     muted_factories = FakeFactories()
-    make_presenter(window, muted_factories, trial_limit=2, play_sound=False).present(
+    muted_presenter = make_presenter(
+        window,
+        muted_factories,
+        trial_limit=2,
+        play_sound=False,
+    )
+    muted_presenter.present(
         sequence,
         ManualClock(),
         RecordingEventSink(),
     )
 
     assert muted_factories.sound_plays == []
+    assert muted_presenter._active_sounds == []
 
 
 def test_static_social_scenes_presenter_can_limit_trials_for_demos():
