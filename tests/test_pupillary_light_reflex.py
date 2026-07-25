@@ -11,25 +11,25 @@ def test_pupillary_light_reflex_sequence_matches_abcct_o1_order_files():
     assert [block.block_id for block in sequence.blocks] == [
         f"PLR-B{index:02d}-O1" for index in range(1, 19)
     ]
-    assert [trial.stimulus.video.name for trial in sequence.trials] == [
-        "plr78.avi",
-        "plr65.avi",
-        "plr71.avi",
-        "plr65.avi",
-        "plr78.avi",
-        "plr71.avi",
-        "plr78.avi",
-        "plr71.avi",
-        "plr65.avi",
-        "plr71.avi",
-        "plr65.avi",
-        "plr78.avi",
-        "plr65.avi",
-        "plr71.avi",
-        "plr78.avi",
-        "plr71.avi",
-        "plr78.avi",
-        "plr65.avi",
+    assert [trial.stimulus.sound.name for trial in sequence.trials] == [
+        "plr78.wav",
+        "plr65.wav",
+        "plr71.wav",
+        "plr65.wav",
+        "plr78.wav",
+        "plr71.wav",
+        "plr78.wav",
+        "plr71.wav",
+        "plr65.wav",
+        "plr71.wav",
+        "plr65.wav",
+        "plr78.wav",
+        "plr65.wav",
+        "plr71.wav",
+        "plr78.wav",
+        "plr71.wav",
+        "plr78.wav",
+        "plr65.wav",
     ]
 
 
@@ -48,10 +48,17 @@ def test_pupillary_light_reflex_sequence_has_expected_balance_and_blocks():
 def test_pupillary_light_reflex_sequence_tracks_clip_timing_metadata():
     sequence = build_pupillary_light_reflex_sequence()
 
-    assert all(trial.presentation_seconds == 6.2 for trial in sequence.trials)
+    assert all(trial.presentation_seconds == 187 / 30 for trial in sequence.trials)
     assert all(trial.frame_rate_hz == 30 for trial in sequence.trials)
-    assert all(trial.frame_count == 186 for trial in sequence.trials)
+    assert all(trial.frame_count == 187 for trial in sequence.trials)
     assert all(trial.flash_frame_count == 4 for trial in sequence.trials)
+    assert {
+        trial.stimulus_id: trial.flash_frame_start for trial in sequence.trials
+    } == {
+        "plr65": 67,
+        "plr71": 73,
+        "plr78": 80,
+    }
 
 
 def test_pupillary_light_reflex_sequence_tracks_trial_numbering():
@@ -70,7 +77,13 @@ def test_pupillary_light_reflex_sequence_tracks_trial_numbering():
 def test_pupillary_light_reflex_sequence_uses_bundled_video_assets():
     sequence = build_pupillary_light_reflex_sequence()
 
-    assert all(trial.stimulus.video.is_file() for trial in sequence.trials)
+    assert all(trial.stimulus.sound.is_file() for trial in sequence.trials)
+    assert all(len(trial.stimulus.frames) == 187 for trial in sequence.trials)
+    assert all(
+        frame.is_file()
+        for trial in sequence.trials
+        for frame in trial.stimulus.frames
+    )
 
 
 def test_pupillary_light_reflex_domain_does_not_import_runtime_backends():

@@ -59,6 +59,9 @@ def test_social_interactive_assets_resolve_bundled_videos():
 def test_pupillary_light_reflex_assets_resolve_bundled_videos():
     assets = pupillary_light_reflex_assets()
 
-    assert assets.video("plr65.avi").is_file()
-    assert assets.video("plr71.avi").is_file()
-    assert assets.video("plr78.avi").is_file()
+    assert len(assets.frames("plr65")) == 187
+    assert len(assets.frames("plr71")) == 187
+    assert len(assets.frames("plr78")) == 187
+    assert assets.frames("plr65")[0].name == "frame_001.png"
+    assert assets.sound("plr65").name == "plr65.wav"
+    assert assets.sound("plr65").is_file()

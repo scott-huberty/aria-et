@@ -51,8 +51,17 @@ class SocialInteractiveAssets:
 
 @dataclass(frozen=True)
 class PupillaryLightReflexAssets:
-    def video(self, filename: str) -> Traversable:
-        return abcct_asset(f"pupillary-light-reflex/videos/{filename}")
+    def frames(self, stimulus_id: str) -> tuple[Traversable, ...]:
+        frame_dir = abcct_asset(f"pupillary-light-reflex/frames/{stimulus_id}")
+        return tuple(
+            sorted(
+                (path for path in frame_dir.iterdir() if path.name.endswith(".png")),
+                key=lambda path: path.name,
+            )
+        )
+
+    def sound(self, stimulus_id: str) -> Traversable:
+        return abcct_asset(f"pupillary-light-reflex/sounds/{stimulus_id}.wav")
 
 
 def abcct_asset(relative_path: str) -> Traversable:

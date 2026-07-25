@@ -1,8 +1,6 @@
 import sys
 from dataclasses import dataclass, field
 
-import pytest
-
 from aria_et.psychopy.pupillary_light_reflex import (
     PsychoPyPupillaryLightReflexPresenter,
 )
@@ -20,38 +18,40 @@ class FakeWindow:
 
 
 @dataclass
-class FakeMovie:
+class FakeImage:
     path: str
-    play_sound: bool
     draws: list[str]
-    plays: list[tuple[str, bool]]
-    stops: list[str]
-
-    def play(self):
-        self.plays.append((self.path, self.play_sound))
 
     def draw(self):
         self.draws.append(self.path)
 
-    def stop(self):
-        self.stops.append(self.path)
+
+@dataclass
+class FakeSound:
+    path: str
+    played: list[str]
+
+    def play(self):
+        self.played.append(self.path)
 
 
 @dataclass
 class FakeFactories:
-    movie_draws: list[str] = field(default_factory=list)
-    movie_plays: list[tuple[str, bool]] = field(default_factory=list)
-    movie_stops: list[str] = field(default_factory=list)
+    images: list[FakeImage] = field(default_factory=list)
+    image_draws: list[str] = field(default_factory=list)
+    sounds: list[FakeSound] = field(default_factory=list)
+    sound_plays: list[str] = field(default_factory=list)
     waits: list[float] = field(default_factory=list)
 
-    def make_movie(self, window, movie, play_sound):
-        return FakeMovie(
-            movie,
-            play_sound,
-            self.movie_draws,
-            self.movie_plays,
-            self.movie_stops,
-        )
+    def make_image(self, window, image):
+        fake_image = FakeImage(image, self.image_draws)
+        self.images.append(fake_image)
+        return fake_image
+
+    def make_sound(self, path):
+        fake_sound = FakeSound(path, self.sound_plays)
+        self.sounds.append(fake_sound)
+        return fake_sound
 
     def wait(self, seconds):
         self.waits.append(seconds)
@@ -62,7 +62,8 @@ def make_presenter(window, factories, **overrides):
     defaults.update(overrides)
     return PsychoPyPupillaryLightReflexPresenter(
         window=window,
-        movie_factory=factories.make_movie,
+        image_factory=factories.make_image,
+        sound_factory=factories.make_sound,
         wait=factories.wait,
         **defaults,
     )
@@ -88,7 +89,7 @@ def test_pupillary_light_reflex_presenter_presents_trials_in_sequence_order():
     assert event_sink.events[-1].name == "pupillary-light-reflex.ended"
 
 
-def test_pupillary_light_reflex_presenter_uses_movie_factory_with_plr_metadata():
+def test_pupillary_light_reflex_presenter_uses_frame_and_sound_factories_with_plr_metadata():
     sequence = build_pupillary_light_reflex_sequence()
     window = FakeWindow()
     factories = FakeFactories()
@@ -104,11 +105,13 @@ def test_pupillary_light_reflex_presenter_uses_movie_factory_with_plr_metadata()
         ("PLR-B01-O1", "plr78"),
         ("PLR-B02-O1", "plr65"),
     ]
-    assert len(factories.movie_plays) == 2
-    assert factories.movie_plays[0][0].endswith("plr78.avi")
-    assert factories.movie_plays[0][1] is True
-    assert factories.movie_plays[1][0].endswith("plr65.avi")
-    assert event_sink.events[1].payload["frame_count"] == 186
+    assert len(factories.images) == 374
+    assert factories.images[0].path.endswith("plr78/frame_001.png")
+    assert factories.images[187].path.endswith("plr65/frame_001.png")
+    assert factories.sound_plays[0].endswith("plr78.wav")
+    assert factories.sound_plays[1].endswith("plr65.wav")
+    assert event_sink.events[1].payload["frame_count"] == 187
+    assert event_sink.events[1].payload["flash_frame_start"] == 80
     assert event_sink.events[1].payload["flash_frame_count"] == 4
 
 
@@ -123,26 +126,35 @@ def test_pupillary_light_reflex_presenter_honors_trial_timing():
         RecordingEventSink(),
     )
 
-    assert factories.waits == [6.2, 6.2]
+    assert len(factories.waits) == 374
+    assert all(wait == 10 for wait in factories.waits)
 
 
-def test_pupillary_light_reflex_presenter_draws_movie_frames_through_duration():
+def test_pupillary_light_reflex_presenter_draws_frames_and_emits_flash_frame_events():
     sequence = build_pupillary_light_reflex_sequence()
     window = FakeWindow()
     factories = FakeFactories()
 
+    event_sink = RecordingEventSink()
     make_presenter(window, factories, trial_limit=1, frame_duration_seconds=2).present(
         sequence,
         ManualClock(),
-        RecordingEventSink(),
+        event_sink,
     )
 
-    assert len(factories.movie_draws) == 4
-    assert factories.waits == pytest.approx([2, 2, 2, 0.2])
-    assert len(factories.movie_stops) == 1
+    assert len(factories.image_draws) == 187
+    assert factories.waits == [2] * 187
+    assert window.flips == 187
+    flash_events = [
+        event
+        for event in event_sink.events
+        if event.name == "pupillary-light-reflex.flash-frame.presented"
+    ]
+    assert [event.payload["frame_index"] for event in flash_events] == [80, 81, 82, 83]
+    assert [event.payload["flash_frame_index"] for event in flash_events] == [1, 2, 3, 4]
 
 
-def test_pupillary_light_reflex_presenter_can_disable_movie_audio():
+def test_pupillary_light_reflex_presenter_can_disable_audio():
     sequence = build_pupillary_light_reflex_sequence()
     window = FakeWindow()
     factories = FakeFactories()
@@ -153,7 +165,8 @@ def test_pupillary_light_reflex_presenter_can_disable_movie_audio():
         RecordingEventSink(),
     )
 
-    assert factories.movie_plays[0][1] is False
+    assert factories.sounds == []
+    assert factories.sound_plays == []
 
 
 def test_pupillary_light_reflex_presenter_can_limit_trials_for_demos():

@@ -10,7 +10,8 @@ from aria_et.assets import PupillaryLightReflexAssets, pupillary_light_reflex_as
 
 @dataclass(frozen=True)
 class PupillaryLightReflexStimulus:
-    video: Traversable
+    frames: tuple[Traversable, ...]
+    sound: Traversable
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class PupillaryLightReflexTrial:
     presentation_seconds: float
     frame_rate_hz: float
     frame_count: int
+    flash_frame_start: int
     flash_frame_count: int
 
 
@@ -48,28 +50,28 @@ class PupillaryLightReflexSequence:
 class _TrialDefinition:
     block_id: str
     stimulus_id: str
-    filename: str
+    flash_frame_start: int
 
 
 _TRIAL_DEFINITIONS: tuple[_TrialDefinition, ...] = (
-    _TrialDefinition("PLR-B01-O1", "plr78", "plr78.avi"),
-    _TrialDefinition("PLR-B02-O1", "plr65", "plr65.avi"),
-    _TrialDefinition("PLR-B03-O1", "plr71", "plr71.avi"),
-    _TrialDefinition("PLR-B04-O1", "plr65", "plr65.avi"),
-    _TrialDefinition("PLR-B05-O1", "plr78", "plr78.avi"),
-    _TrialDefinition("PLR-B06-O1", "plr71", "plr71.avi"),
-    _TrialDefinition("PLR-B07-O1", "plr78", "plr78.avi"),
-    _TrialDefinition("PLR-B08-O1", "plr71", "plr71.avi"),
-    _TrialDefinition("PLR-B09-O1", "plr65", "plr65.avi"),
-    _TrialDefinition("PLR-B10-O1", "plr71", "plr71.avi"),
-    _TrialDefinition("PLR-B11-O1", "plr65", "plr65.avi"),
-    _TrialDefinition("PLR-B12-O1", "plr78", "plr78.avi"),
-    _TrialDefinition("PLR-B13-O1", "plr65", "plr65.avi"),
-    _TrialDefinition("PLR-B14-O1", "plr71", "plr71.avi"),
-    _TrialDefinition("PLR-B15-O1", "plr78", "plr78.avi"),
-    _TrialDefinition("PLR-B16-O1", "plr71", "plr71.avi"),
-    _TrialDefinition("PLR-B17-O1", "plr78", "plr78.avi"),
-    _TrialDefinition("PLR-B18-O1", "plr65", "plr65.avi"),
+    _TrialDefinition("PLR-B01-O1", "plr78", 80),
+    _TrialDefinition("PLR-B02-O1", "plr65", 67),
+    _TrialDefinition("PLR-B03-O1", "plr71", 73),
+    _TrialDefinition("PLR-B04-O1", "plr65", 67),
+    _TrialDefinition("PLR-B05-O1", "plr78", 80),
+    _TrialDefinition("PLR-B06-O1", "plr71", 73),
+    _TrialDefinition("PLR-B07-O1", "plr78", 80),
+    _TrialDefinition("PLR-B08-O1", "plr71", 73),
+    _TrialDefinition("PLR-B09-O1", "plr65", 67),
+    _TrialDefinition("PLR-B10-O1", "plr71", 73),
+    _TrialDefinition("PLR-B11-O1", "plr65", 67),
+    _TrialDefinition("PLR-B12-O1", "plr78", 80),
+    _TrialDefinition("PLR-B13-O1", "plr65", 67),
+    _TrialDefinition("PLR-B14-O1", "plr71", 73),
+    _TrialDefinition("PLR-B15-O1", "plr78", 80),
+    _TrialDefinition("PLR-B16-O1", "plr71", 73),
+    _TrialDefinition("PLR-B17-O1", "plr78", 80),
+    _TrialDefinition("PLR-B18-O1", "plr65", 67),
 )
 
 
@@ -101,15 +103,20 @@ def _build_trial(
     assets: PupillaryLightReflexAssets,
     sequence_trial_number: int,
 ) -> PupillaryLightReflexTrial:
+    frames = assets.frames(definition.stimulus_id)
     return PupillaryLightReflexTrial(
         trial_id=f"plr-{sequence_trial_number:02d}",
         block_number=sequence_trial_number,
         block_trial_number=1,
         sequence_trial_number=sequence_trial_number,
         stimulus_id=definition.stimulus_id,
-        stimulus=PupillaryLightReflexStimulus(video=assets.video(definition.filename)),
-        presentation_seconds=6.2,
+        stimulus=PupillaryLightReflexStimulus(
+            frames=frames,
+            sound=assets.sound(definition.stimulus_id),
+        ),
+        presentation_seconds=len(frames) / 30,
         frame_rate_hz=30,
-        frame_count=186,
+        frame_count=len(frames),
+        flash_frame_start=definition.flash_frame_start,
         flash_frame_count=4,
     )
