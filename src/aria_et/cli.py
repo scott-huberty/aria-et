@@ -55,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     demo_calibration.add_argument(
         "--point-duration",
         type=float,
-        default=1.0,
+        default=3.0,
         help="Seconds to display each calibration point.",
     )
     demo_calibration.add_argument(
