@@ -75,6 +75,8 @@ class PsychoPyPupillaryLightReflexPresenter:
         clock: Clock,
         event_sink: EventSink,
     ) -> PupillaryLightReflexRunResult:
+        selected_blocks = self._selected_blocks(sequence)
+        image_cache = self._prepare_image_cache(selected_blocks)
         started_at = clock.now()
         event_sink.emit(
             RuntimeEvent(
@@ -85,8 +87,8 @@ class PsychoPyPupillaryLightReflexPresenter:
         )
 
         presented_trials = tuple(
-            self._present_trial(block.block_id, trial, clock, event_sink)
-            for block in self._selected_blocks(sequence)
+            self._present_trial(block.block_id, trial, image_cache, clock, event_sink)
+            for block in selected_blocks
             for trial in block.trials
         )
 
@@ -113,11 +115,11 @@ class PsychoPyPupillaryLightReflexPresenter:
         self,
         block_id: str,
         trial: PupillaryLightReflexTrial,
+        image_cache: dict[str, tuple[DrawableLike, ...]],
         clock: Clock,
         event_sink: EventSink,
     ) -> PresentedPupillaryLightReflexTrial:
-        self._render_status(f"PLR trial preload: {trial.trial_id} {trial.stimulus_id}")
-        images = self._prepare_images(trial.stimulus.frames)
+        images = image_cache[trial.stimulus_id]
         started_at = clock.now()
         event_sink.emit(
             RuntimeEvent(
@@ -157,6 +159,19 @@ class PsychoPyPupillaryLightReflexPresenter:
             started_at=started_at,
             ended_at=ended_at,
         )
+
+    def _prepare_image_cache(
+        self,
+        blocks,
+    ) -> dict[str, tuple[DrawableLike, ...]]:
+        cache = {}
+        for block in blocks:
+            for trial in block.trials:
+                if trial.stimulus_id in cache:
+                    continue
+                self._render_status(f"PLR preload: {trial.stimulus_id}")
+                cache[trial.stimulus_id] = self._prepare_images(trial.stimulus.frames)
+        return cache
 
     def _prepare_images(self, frames: tuple[Traversable, ...]) -> tuple[DrawableLike, ...]:
         images = []

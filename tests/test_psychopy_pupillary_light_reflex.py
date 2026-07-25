@@ -115,6 +115,24 @@ def test_pupillary_light_reflex_presenter_uses_frame_and_sound_factories_with_pl
     assert event_sink.events[1].payload["flash_frame_count"] == 4
 
 
+def test_pupillary_light_reflex_presenter_reuses_preloaded_stimulus_images():
+    sequence = build_pupillary_light_reflex_sequence()
+    window = FakeWindow()
+    factories = FakeFactories()
+
+    make_presenter(window, factories, trial_limit=5).present(
+        sequence,
+        ManualClock(),
+        RecordingEventSink(),
+    )
+
+    assert len(factories.images) == 187 * 3
+    assert len(factories.image_draws) == 187 * 5
+    assert sum("plr78/frame_001.png" in path for path in factories.image_draws) == 2
+    assert sum("plr65/frame_001.png" in path for path in factories.image_draws) == 2
+    assert sum("plr71/frame_001.png" in path for path in factories.image_draws) == 1
+
+
 def test_pupillary_light_reflex_presenter_honors_trial_timing():
     sequence = build_pupillary_light_reflex_sequence()
     window = FakeWindow()
