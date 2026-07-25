@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.resources import as_file
 from typing import Protocol
 
@@ -18,6 +18,7 @@ from aria_et.runtime import Clock, EventSink, RuntimeEvent
 
 class WindowLike(Protocol):
     size: Sequence[float]
+    color: str | tuple[float, float, float]
 
     def flip(self) -> None:
         """Present the next frame."""
@@ -42,6 +43,9 @@ class MovieLike(Protocol):
 class SoundLike(Protocol):
     def play(self) -> None:
         """Start sound playback."""
+
+    def stop(self) -> None:
+        """Stop sound playback."""
 
 
 ImageFactory = Callable[[WindowLike, str], DrawableLike]
@@ -78,7 +82,9 @@ class PsychoPyActivityMonitoringPresenter:
     play_sound: bool = True
     trial_limit: int | None = None
     frame_duration_seconds: float = 1 / 30
+    inter_trial_interval_seconds: float = 1.0
     render_status: StatusSink | None = None
+    _active_sounds: list[SoundLike] = field(default_factory=list, init=False, repr=False)
 
     def present(
         self,
@@ -86,6 +92,7 @@ class PsychoPyActivityMonitoringPresenter:
         clock: Clock,
         event_sink: EventSink,
     ) -> ActivityMonitoringRunResult:
+        selected_trials = self._selected_trials(sequence)
         started_at = clock.now()
         event_sink.emit(
             RuntimeEvent(
@@ -95,10 +102,11 @@ class PsychoPyActivityMonitoringPresenter:
             )
         )
 
-        presented_trials = tuple(
-            self._present_trial(trial, clock, event_sink)
-            for trial in self._selected_trials(sequence)
-        )
+        presented_trials = []
+        for trial_index, trial in enumerate(selected_trials):
+            presented_trials.append(self._present_trial(trial, clock, event_sink))
+            if trial_index < len(selected_trials) - 1:
+                self._present_inter_trial_interval(clock, event_sink)
 
         ended_at = clock.now()
         event_sink.emit(
@@ -114,7 +122,7 @@ class PsychoPyActivityMonitoringPresenter:
 
         return ActivityMonitoringRunResult(
             sequence_id=sequence.sequence_id,
-            presented_trials=presented_trials,
+            presented_trials=tuple(presented_trials),
             started_at=started_at,
             ended_at=ended_at,
         )
@@ -168,7 +176,10 @@ class PsychoPyActivityMonitoringPresenter:
         self._render_status(f"Image trial: {trial.trial_id} {trial.stimulus.media.name}")
         with as_file(trial.stimulus.media) as media_path:
             image = self._image_factory()(self.window, str(media_path))
-            self._draw_for_duration(image, trial.presentation_seconds)
+            try:
+                self._draw_for_duration(image, trial.presentation_seconds)
+            finally:
+                self._stop_active_sounds()
 
     def _present_movie_trial(self, trial: ActivityMonitoringTrial) -> None:
         self._render_status(f"Movie trial: {trial.trial_id} {trial.stimulus.media.name}")
@@ -194,7 +205,38 @@ class PsychoPyActivityMonitoringPresenter:
             return
 
         with as_file(trial.stimulus.soundtrack) as soundtrack_path:
-            self._sound_factory()(str(soundtrack_path)).play()
+            sound_object = self._sound_factory()(str(soundtrack_path))
+            sound_object.play()
+            self._active_sounds.append(sound_object)
+
+    def _present_inter_trial_interval(
+        self,
+        clock: Clock,
+        event_sink: EventSink,
+    ) -> None:
+        started_at = clock.now()
+        event_sink.emit(
+            RuntimeEvent(
+                "activity-monitoring.inter-trial-interval.started",
+                started_at,
+                {"duration_seconds": self.inter_trial_interval_seconds},
+            )
+        )
+        self.window.color = "black"
+        self.window.flip()
+        self._wait()(self.inter_trial_interval_seconds)
+        event_sink.emit(
+            RuntimeEvent(
+                "activity-monitoring.inter-trial-interval.ended",
+                clock.now(),
+                {"duration_seconds": self.inter_trial_interval_seconds},
+            )
+        )
+
+    def _stop_active_sounds(self) -> None:
+        for sound_object in self._active_sounds:
+            sound_object.stop()
+        self._active_sounds.clear()
 
     def _selected_trials(
         self,
