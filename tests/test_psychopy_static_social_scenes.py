@@ -30,22 +30,31 @@ class FakeImage:
 class FakeSound:
     path: str
     plays: list[str]
+    stops: list[str]
+    events: list[tuple[str, str]]
 
     def play(self):
         self.plays.append(self.path)
+        self.events.append(("play", self.path))
+
+    def stop(self):
+        self.stops.append(self.path)
+        self.events.append(("stop", self.path))
 
 
 @dataclass
 class FakeFactories:
     image_draws: list[str] = field(default_factory=list)
     sound_plays: list[str] = field(default_factory=list)
+    sound_stops: list[str] = field(default_factory=list)
+    sound_events: list[tuple[str, str]] = field(default_factory=list)
     waits: list[float] = field(default_factory=list)
 
     def make_image(self, window, image):
         return FakeImage(image, self.image_draws)
 
     def make_sound(self, path):
-        return FakeSound(path, self.sound_plays)
+        return FakeSound(path, self.sound_plays, self.sound_stops, self.sound_events)
 
     def wait(self, seconds):
         self.waits.append(seconds)
@@ -150,7 +159,14 @@ def test_static_social_scenes_presenter_plays_soundtracks_only_when_enabled():
     assert len(factories.sound_plays) == 2
     assert factories.sound_plays[0].endswith("si_song2_vp080.wav")
     assert factories.sound_plays[1].endswith("si_song3_vp080.wav")
-    assert [sound.path for sound in presenter._active_sounds] == factories.sound_plays
+    assert factories.sound_stops == factories.sound_plays
+    assert factories.sound_events == [
+        ("play", factories.sound_plays[0]),
+        ("stop", factories.sound_plays[0]),
+        ("play", factories.sound_plays[1]),
+        ("stop", factories.sound_plays[1]),
+    ]
+    assert presenter._active_sounds == []
 
     muted_factories = FakeFactories()
     muted_presenter = make_presenter(
@@ -166,6 +182,7 @@ def test_static_social_scenes_presenter_plays_soundtracks_only_when_enabled():
     )
 
     assert muted_factories.sound_plays == []
+    assert muted_factories.sound_stops == []
     assert muted_presenter._active_sounds == []
 
 

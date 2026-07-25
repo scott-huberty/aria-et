@@ -33,6 +33,9 @@ class SoundLike(Protocol):
     def play(self) -> None:
         """Start sound playback."""
 
+    def stop(self) -> None:
+        """Stop sound playback."""
+
 
 ImageFactory = Callable[[WindowLike, str], DrawableLike]
 SoundFactory = Callable[[str], SoundLike]
@@ -128,16 +131,19 @@ class PsychoPyStaticSocialScenesPresenter:
             )
         )
 
-        self.window.color = _psychopy_rgb(trial.background_rgb)
-        self.window.flip()
-        self._wait()(trial.preblank_seconds)
-        self._wait()(trial.fixation_seconds)
-        self._play_soundtrack(trial)
-        self._render_status(f"SS trial: {trial.trial_id} {trial.stimulus.image.name}")
-        with as_file(trial.stimulus.image) as image_path:
-            image = self._image_factory()(self.window, str(image_path))
-            self._draw_for_duration(image, trial.presentation_seconds)
-        self._wait()(trial.post_blank_seconds)
+        try:
+            self.window.color = _psychopy_rgb(trial.background_rgb)
+            self.window.flip()
+            self._wait()(trial.preblank_seconds)
+            self._wait()(trial.fixation_seconds)
+            self._play_soundtrack(trial)
+            self._render_status(f"SS trial: {trial.trial_id} {trial.stimulus.image.name}")
+            with as_file(trial.stimulus.image) as image_path:
+                image = self._image_factory()(self.window, str(image_path))
+                self._draw_for_duration(image, trial.presentation_seconds)
+            self._wait()(trial.post_blank_seconds)
+        finally:
+            self._stop_active_sounds()
 
         ended_at = clock.now()
         event_sink.emit(
@@ -172,6 +178,11 @@ class PsychoPyStaticSocialScenesPresenter:
             sound_object = self._sound_factory()(str(soundtrack_path))
             sound_object.play()
             self._active_sounds.append(sound_object)
+
+    def _stop_active_sounds(self) -> None:
+        for sound_object in self._active_sounds:
+            sound_object.stop()
+        self._active_sounds.clear()
 
     def _selected_trials(
         self,
