@@ -4,11 +4,8 @@ from random import Random
 import pytest
 
 from aria_et.calibration import (
-    CalibrationAssets,
     NormalizedPoint,
     build_gap_overlap_reward_calibration_sequence,
-    build_pikachu_calibration_sequence,
-    calibration_stimulus_from_assets,
     calibration_stimuli_from_reward_assets,
     five_point_targets,
 )
@@ -91,24 +88,11 @@ def test_gap_overlap_reward_calibration_sequence_selects_per_point_with_rng():
 
     assert [point.stimulus.animation_frames[0].parent.name for point in sequence.points] == [
         "Face_Animation",
-        "Mini_Animation",
+        "Pig_Rotate_Animation",
         "Bear_Animation",
-        "Pig_Rotate_Animation",
-        "Pig_Rotate_Animation",
+        "Star_Rotate_Animation",
+        "Star_Rotate_Animation",
     ]
-
-
-def test_pikachu_calibration_sequence_name_is_a_compatibility_wrapper():
-    sequence = build_pikachu_calibration_sequence()
-
-    assert sequence.sequence_id == "gap-overlap-reward-5-point"
-
-
-def test_calibration_stimulus_requires_animation_frames():
-    with pytest.raises(ValueError, match="at least one frame"):
-        calibration_stimulus_from_assets(
-            CalibrationAssets(animation_frames=(), sound="pikachu.wav")
-        )
 
 
 def test_calibration_reward_stimuli_require_animations():

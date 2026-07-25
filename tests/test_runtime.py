@@ -2,7 +2,7 @@ import sys
 
 import pytest
 
-from aria_et.calibration import build_pikachu_calibration_sequence
+from aria_et.calibration import build_gap_overlap_reward_calibration_sequence
 from aria_et.runtime import (
     FakeCalibrationPresenter,
     ManualClock,
@@ -11,7 +11,7 @@ from aria_et.runtime import (
 
 
 def test_fake_calibration_presenter_presents_all_points_in_order():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     clock = ManualClock()
     event_sink = RecordingEventSink()
 
@@ -32,7 +32,7 @@ def test_fake_calibration_presenter_presents_all_points_in_order():
 
 
 def test_fake_calibration_presenter_preserves_target_positions():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     clock = ManualClock()
     event_sink = RecordingEventSink()
 
@@ -48,7 +48,7 @@ def test_fake_calibration_presenter_preserves_target_positions():
 
 
 def test_fake_calibration_presenter_emits_lifecycle_events():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     clock = ManualClock(timestamp=10)
     event_sink = RecordingEventSink()
 
@@ -82,7 +82,7 @@ def test_fake_calibration_presenter_emits_lifecycle_events():
 
 
 def test_point_started_events_include_target_coordinates():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     clock = ManualClock()
     event_sink = RecordingEventSink()
 

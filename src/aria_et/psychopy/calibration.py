@@ -9,7 +9,7 @@ from importlib.resources import as_file
 from importlib.resources.abc import Traversable
 from typing import Protocol
 
-from aria_et.calibration import build_pikachu_calibration_sequence
+from aria_et.calibration import build_gap_overlap_reward_calibration_sequence
 from aria_et.calibration import CalibrationPoint, CalibrationSequence, NormalizedPoint
 from aria_et.runtime import (
     CalibrationRunResult,
@@ -324,7 +324,7 @@ class StatusLoggingEventSink:
             )
 
 
-def run_pikachu_calibration_demo(
+def run_gap_overlap_reward_calibration_demo(
     *,
     fullscreen: bool = True,
     window_size: tuple[int, int] = (1024, 768),
@@ -358,9 +358,12 @@ def run_pikachu_calibration_demo(
     )
     try:
         if advance_on_space:
-            status("Running Pikachu calibration. Press Space for each point; Escape stops.")
+            status(
+                "Running Gap-Overlap reward calibration. "
+                "Press Space for each point; Escape stops."
+            )
         else:
-            status("Running Pikachu calibration. Press Escape to stop.")
+            status("Running Gap-Overlap reward calibration. Press Escape to stop.")
 
         event.clearEvents()
         abort_requested = lambda: bool(event.getKeys(keyList=["escape"]))
@@ -377,7 +380,7 @@ def run_pikachu_calibration_demo(
             render_status=status if debug_render else None,
         )
         presenter.present(
-            build_pikachu_calibration_sequence(),
+            build_gap_overlap_reward_calibration_sequence(),
             PsychoPyClock(core.Clock()),
             StatusLoggingEventSink(RecordingEventSink(), status),
         )

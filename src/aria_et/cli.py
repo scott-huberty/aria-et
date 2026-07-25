@@ -27,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     demo_calibration = subparsers.add_parser(
         "demo-calibration",
-        help="Run the bundled Pikachu calibration sequence in PsychoPy.",
+        help="Run the bundled Gap-Overlap reward calibration sequence in PsychoPy.",
     )
     display_mode = demo_calibration.add_mutually_exclusive_group()
     display_mode.add_argument(
@@ -246,9 +246,11 @@ def main(
     if args.command == "demo-calibration":
         runner = demo_calibration_runner
         if runner is None:
-            from aria_et.psychopy.calibration import run_pikachu_calibration_demo
+            from aria_et.psychopy.calibration import (
+                run_gap_overlap_reward_calibration_demo,
+            )
 
-            runner = run_pikachu_calibration_demo
+            runner = run_gap_overlap_reward_calibration_demo
 
         return runner(
             fullscreen=args.fullscreen,

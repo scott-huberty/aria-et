@@ -1,43 +1,10 @@
 from aria_et.assets import (
-    abcct_asset,
     activity_monitoring_assets,
     gap_overlap_reward_calibration_assets,
-    pikachu_calibration_assets,
     pupillary_light_reflex_assets,
     social_interactive_assets,
     static_social_scenes_assets,
 )
-
-
-def test_can_resolve_bundled_abcct_asset():
-    asset = abcct_asset("calibration/pikachu/sounds/pikachu.wav")
-
-    assert asset.is_file()
-
-
-def test_pikachu_calibration_assets_include_ordered_animation_frames():
-    assets = pikachu_calibration_assets()
-
-    assert [frame.name for frame in assets.animation_frames] == [
-        "imrewspn_001.bmp",
-        "imrewspn_002.bmp",
-        "imrewspn_003.bmp",
-        "imrewspn_004.bmp",
-        "imrewspn_005.bmp",
-        "imrewspn_006.bmp",
-        "imrewspn_007.bmp",
-        "imrewspn_008.bmp",
-        "imrewspn_009.bmp",
-        "imrewspn_010.bmp",
-    ]
-    assert all(frame.is_file() for frame in assets.animation_frames)
-
-
-def test_pikachu_calibration_assets_include_sound():
-    assets = pikachu_calibration_assets()
-
-    assert assets.sound.name == "pikachu.wav"
-    assert assets.sound.is_file()
 
 
 def test_gap_overlap_reward_calibration_assets_include_ordered_frame_animations():
@@ -46,11 +13,10 @@ def test_gap_overlap_reward_calibration_assets_include_ordered_frame_animations(
     assert [animation.name for animation in assets.animations] == [
         "Bear_Animation",
         "Face_Animation",
-        "Mini_Animation",
         "Pig_Rotate_Animation",
         "Star_Rotate_Animation",
     ]
-    assert [len(animation.frames) for animation in assets.animations] == [36, 37, 36, 37, 36]
+    assert [len(animation.frames) for animation in assets.animations] == [36, 37, 37, 36]
     assert all(animation.frames[0].name == "frame_001.png" for animation in assets.animations)
     assert all(
         frame.is_file()

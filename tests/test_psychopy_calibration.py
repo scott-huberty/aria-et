@@ -2,10 +2,7 @@ import sys
 from dataclasses import dataclass, field
 from random import Random
 
-from aria_et.calibration import (
-    build_gap_overlap_reward_calibration_sequence,
-    build_pikachu_calibration_sequence,
-)
+from aria_et.calibration import build_gap_overlap_reward_calibration_sequence
 from aria_et.psychopy.calibration import PsychoPyCalibrationPresenter, StatusLoggingEventSink
 from aria_et.runtime import ManualClock, RecordingEventSink
 
@@ -77,7 +74,7 @@ def make_presenter(window, factories, **overrides):
 
 
 def test_psychopy_presenter_presents_calibration_points_in_order():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow()
     factories = FakePsychoPyFactories()
     event_sink = RecordingEventSink()
@@ -101,7 +98,7 @@ def test_psychopy_presenter_presents_calibration_points_in_order():
 
 
 def test_psychopy_presenter_maps_normalized_positions_to_pixel_positions():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow(size=(1000, 800))
     factories = FakePsychoPyFactories()
 
@@ -122,7 +119,7 @@ def test_psychopy_presenter_maps_normalized_positions_to_pixel_positions():
 
 
 def test_psychopy_presenter_uses_client_size_for_retina_window_positions():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow(size=(2000, 1600), clientSize=(1000, 800))
     factories = FakePsychoPyFactories()
 
@@ -143,7 +140,7 @@ def test_psychopy_presenter_uses_client_size_for_retina_window_positions():
 
 
 def test_psychopy_presenter_emits_window_positions_with_point_start_events():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow(size=(1000, 800))
     factories = FakePsychoPyFactories()
     event_sink = RecordingEventSink()
@@ -220,7 +217,7 @@ def test_psychopy_presenter_can_log_frame_level_render_progress():
 
 
 def test_psychopy_presenter_does_not_play_sound_for_reward_animations():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow()
     factories = FakePsychoPyFactories()
 
@@ -231,7 +228,7 @@ def test_psychopy_presenter_does_not_play_sound_for_reward_animations():
 
 
 def test_psychopy_presenter_can_disable_sound():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow()
     factories = FakePsychoPyFactories()
 
@@ -246,7 +243,7 @@ def test_psychopy_presenter_can_disable_sound():
 
 
 def test_psychopy_presenter_can_abort_between_animation_frames():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow()
     factories = FakePsychoPyFactories()
     event_sink = RecordingEventSink()
@@ -274,7 +271,7 @@ def test_psychopy_presenter_can_abort_between_animation_frames():
 
 
 def test_psychopy_presenter_can_wait_for_advance_between_points():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow()
     factories = FakePsychoPyFactories()
     checks = 0
@@ -303,7 +300,7 @@ def test_psychopy_presenter_can_wait_for_advance_between_points():
 
 
 def test_psychopy_presenter_can_abort_while_waiting_for_advance():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow()
     factories = FakePsychoPyFactories()
     event_sink = RecordingEventSink()

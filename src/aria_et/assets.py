@@ -12,12 +12,6 @@ ASSET_ROOT = "assets/abcct"
 
 
 @dataclass(frozen=True)
-class CalibrationAssets:
-    animation_frames: tuple[Traversable, ...]
-    sound: Traversable | None = None
-
-
-@dataclass(frozen=True)
 class CalibrationRewardAssets:
     animations: tuple["CalibrationRewardAnimation", ...]
 
@@ -62,19 +56,6 @@ class PupillaryLightReflexAssets:
 
 def abcct_asset(relative_path: str) -> Traversable:
     return files(ASSET_PACKAGE).joinpath(ASSET_ROOT, relative_path)
-
-
-def pikachu_calibration_assets() -> CalibrationAssets:
-    frame_dir = abcct_asset("calibration/pikachu/frames")
-    frames = tuple(
-        sorted(
-            (path for path in frame_dir.iterdir() if path.name.endswith(".bmp")),
-            key=lambda path: path.name,
-        )
-    )
-    sound = abcct_asset("calibration/pikachu/sounds/pikachu.wav")
-
-    return CalibrationAssets(animation_frames=frames, sound=sound)
 
 
 def gap_overlap_reward_calibration_assets() -> CalibrationRewardAssets:

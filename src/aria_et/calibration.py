@@ -7,7 +7,6 @@ from importlib.resources.abc import Traversable
 from random import Random
 
 from aria_et.assets import (
-    CalibrationAssets,
     CalibrationRewardAssets,
     gap_overlap_reward_calibration_assets,
 )
@@ -65,16 +64,6 @@ def five_point_targets(inset: float = DEFAULT_CALIBRATION_INSET) -> tuple[Calibr
     )
 
 
-def calibration_stimulus_from_assets(assets: CalibrationAssets) -> CalibrationStimulus:
-    if not assets.animation_frames:
-        raise ValueError("Calibration animation must include at least one frame.")
-
-    return CalibrationStimulus(
-        animation_frames=assets.animation_frames,
-        sound=assets.sound,
-    )
-
-
 def calibration_stimuli_from_reward_assets(
     assets: CalibrationRewardAssets,
 ) -> tuple[CalibrationStimulus, ...]:
@@ -104,9 +93,3 @@ def build_gap_overlap_reward_calibration_sequence(
             for target in five_point_targets(inset)
         ),
     )
-
-
-def build_pikachu_calibration_sequence(
-    inset: float = DEFAULT_CALIBRATION_INSET,
-) -> CalibrationSequence:
-    return build_gap_overlap_reward_calibration_sequence(inset)
