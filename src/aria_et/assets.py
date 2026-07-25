@@ -14,7 +14,18 @@ ASSET_ROOT = "assets/abcct"
 @dataclass(frozen=True)
 class CalibrationAssets:
     animation_frames: tuple[Traversable, ...]
-    sound: Traversable
+    sound: Traversable | None = None
+
+
+@dataclass(frozen=True)
+class CalibrationRewardAssets:
+    animations: tuple["CalibrationRewardAnimation", ...]
+
+
+@dataclass(frozen=True)
+class CalibrationRewardAnimation:
+    name: str
+    frames: tuple[Traversable, ...]
 
 
 @dataclass(frozen=True)
@@ -64,6 +75,27 @@ def pikachu_calibration_assets() -> CalibrationAssets:
     sound = abcct_asset("calibration/pikachu/sounds/pikachu.wav")
 
     return CalibrationAssets(animation_frames=frames, sound=sound)
+
+
+def gap_overlap_reward_calibration_assets() -> CalibrationRewardAssets:
+    animation_dir = abcct_asset("calibration/Gap-Overlap/Frames/Reward")
+    animations = tuple(
+        CalibrationRewardAnimation(
+            name=animation.name,
+            frames=tuple(
+                sorted(
+                    (path for path in animation.iterdir() if path.name.endswith(".png")),
+                    key=lambda path: path.name,
+                )
+            ),
+        )
+        for animation in sorted(
+            (path for path in animation_dir.iterdir() if path.is_dir()),
+            key=lambda path: path.name,
+        )
+    )
+
+    return CalibrationRewardAssets(animations=animations)
 
 
 def activity_monitoring_assets() -> ActivityMonitoringAssets:

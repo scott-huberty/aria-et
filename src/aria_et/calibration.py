@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib.resources.abc import Traversable
+from random import Random
 
-from aria_et.assets import CalibrationAssets, pikachu_calibration_assets
+from aria_et.assets import (
+    CalibrationAssets,
+    CalibrationRewardAssets,
+    gap_overlap_reward_calibration_assets,
+)
 
 
 DEFAULT_CALIBRATION_INSET = 0.1
@@ -32,7 +37,7 @@ class CalibrationTarget:
 @dataclass(frozen=True)
 class CalibrationStimulus:
     animation_frames: tuple[Traversable, ...]
-    sound: Traversable
+    sound: Traversable | None = None
 
 
 @dataclass(frozen=True)
@@ -70,15 +75,38 @@ def calibration_stimulus_from_assets(assets: CalibrationAssets) -> CalibrationSt
     )
 
 
-def build_pikachu_calibration_sequence(
+def calibration_stimuli_from_reward_assets(
+    assets: CalibrationRewardAssets,
+) -> tuple[CalibrationStimulus, ...]:
+    if not assets.animations:
+        raise ValueError("Calibration reward assets must include at least one animation.")
+
+    if any(not animation.frames for animation in assets.animations):
+        raise ValueError("Calibration reward animations must include at least one frame.")
+
+    return tuple(
+        CalibrationStimulus(animation_frames=animation.frames)
+        for animation in assets.animations
+    )
+
+
+def build_gap_overlap_reward_calibration_sequence(
     inset: float = DEFAULT_CALIBRATION_INSET,
+    rng: Random | None = None,
 ) -> CalibrationSequence:
-    stimulus = calibration_stimulus_from_assets(pikachu_calibration_assets())
+    randomizer = rng or Random()
+    stimuli = calibration_stimuli_from_reward_assets(gap_overlap_reward_calibration_assets())
 
     return CalibrationSequence(
-        sequence_id="pikachu-5-point",
+        sequence_id="gap-overlap-reward-5-point",
         points=tuple(
-            CalibrationPoint(target=target, stimulus=stimulus)
+            CalibrationPoint(target=target, stimulus=randomizer.choice(stimuli))
             for target in five_point_targets(inset)
         ),
     )
+
+
+def build_pikachu_calibration_sequence(
+    inset: float = DEFAULT_CALIBRATION_INSET,
+) -> CalibrationSequence:
+    return build_gap_overlap_reward_calibration_sequence(inset)

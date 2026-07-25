@@ -1,6 +1,7 @@
 from aria_et.assets import (
     abcct_asset,
     activity_monitoring_assets,
+    gap_overlap_reward_calibration_assets,
     pikachu_calibration_assets,
     pupillary_light_reflex_assets,
     social_interactive_assets,
@@ -37,6 +38,25 @@ def test_pikachu_calibration_assets_include_sound():
 
     assert assets.sound.name == "pikachu.wav"
     assert assets.sound.is_file()
+
+
+def test_gap_overlap_reward_calibration_assets_include_ordered_frame_animations():
+    assets = gap_overlap_reward_calibration_assets()
+
+    assert [animation.name for animation in assets.animations] == [
+        "Bear_Animation",
+        "Face_Animation",
+        "Mini_Animation",
+        "Pig_Rotate_Animation",
+        "Star_Rotate_Animation",
+    ]
+    assert [len(animation.frames) for animation in assets.animations] == [36, 37, 36, 37, 36]
+    assert all(animation.frames[0].name == "frame_001.png" for animation in assets.animations)
+    assert all(
+        frame.is_file()
+        for animation in assets.animations
+        for frame in animation.frames
+    )
 
 
 def test_activity_monitoring_assets_resolve_bundled_media_and_soundtrack():

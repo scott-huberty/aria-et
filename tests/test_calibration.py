@@ -1,14 +1,18 @@
 import sys
+from random import Random
 
 import pytest
 
 from aria_et.calibration import (
     CalibrationAssets,
     NormalizedPoint,
+    build_gap_overlap_reward_calibration_sequence,
     build_pikachu_calibration_sequence,
     calibration_stimulus_from_assets,
+    calibration_stimuli_from_reward_assets,
     five_point_targets,
 )
+from aria_et.assets import CalibrationRewardAnimation, CalibrationRewardAssets
 
 
 def test_five_point_targets_have_deterministic_order():
@@ -62,10 +66,10 @@ def test_normalized_points_must_stay_in_bounds(x, y):
         NormalizedPoint(x, y)
 
 
-def test_pikachu_calibration_sequence_has_five_bundled_asset_points():
-    sequence = build_pikachu_calibration_sequence()
+def test_gap_overlap_reward_calibration_sequence_has_five_bundled_asset_points():
+    sequence = build_gap_overlap_reward_calibration_sequence(rng=Random(1))
 
-    assert sequence.sequence_id == "pikachu-5-point"
+    assert sequence.sequence_id == "gap-overlap-reward-5-point"
     assert len(sequence.points) == 5
     assert [point.target.label for point in sequence.points] == [
         "center",
@@ -74,26 +78,50 @@ def test_pikachu_calibration_sequence_has_five_bundled_asset_points():
         "bottom-right",
         "bottom-left",
     ]
-    assert all(len(point.stimulus.animation_frames) == 10 for point in sequence.points)
-    assert all(point.stimulus.sound.name == "pikachu.wav" for point in sequence.points)
+    assert all(point.stimulus.sound is None for point in sequence.points)
     assert all(
-        frame.name.endswith(".bmp")
+        point.stimulus.animation_frames[0].name == "frame_001.png"
         for point in sequence.points
-        for frame in point.stimulus.animation_frames
     )
+    assert all(len(point.stimulus.animation_frames) in {36, 37} for point in sequence.points)
 
 
-def test_pikachu_calibration_sequence_reuses_one_stimulus_definition():
+def test_gap_overlap_reward_calibration_sequence_selects_per_point_with_rng():
+    sequence = build_gap_overlap_reward_calibration_sequence(rng=Random(4))
+
+    assert [point.stimulus.animation_frames[0].parent.name for point in sequence.points] == [
+        "Face_Animation",
+        "Mini_Animation",
+        "Bear_Animation",
+        "Pig_Rotate_Animation",
+        "Pig_Rotate_Animation",
+    ]
+
+
+def test_pikachu_calibration_sequence_name_is_a_compatibility_wrapper():
     sequence = build_pikachu_calibration_sequence()
-    first_stimulus = sequence.points[0].stimulus
 
-    assert all(point.stimulus is first_stimulus for point in sequence.points)
+    assert sequence.sequence_id == "gap-overlap-reward-5-point"
 
 
 def test_calibration_stimulus_requires_animation_frames():
     with pytest.raises(ValueError, match="at least one frame"):
         calibration_stimulus_from_assets(
             CalibrationAssets(animation_frames=(), sound="pikachu.wav")
+        )
+
+
+def test_calibration_reward_stimuli_require_animations():
+    with pytest.raises(ValueError, match="at least one animation"):
+        calibration_stimuli_from_reward_assets(CalibrationRewardAssets(animations=()))
+
+
+def test_calibration_reward_stimuli_require_animation_frames():
+    with pytest.raises(ValueError, match="at least one frame"):
+        calibration_stimuli_from_reward_assets(
+            CalibrationRewardAssets(
+                animations=(CalibrationRewardAnimation(name="empty", frames=()),)
+            )
         )
 
 

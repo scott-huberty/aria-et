@@ -144,7 +144,7 @@ class PsychoPyCalibrationPresenter:
         )
 
         self._play_sound(point.stimulus.sound)
-        if not self._draw_animation(point):
+        if not self._present_stimulus(point):
             return None
         if not self._wait_for_advance():
             return None
@@ -165,9 +165,14 @@ class PsychoPyCalibrationPresenter:
             ended_at=ended_at,
         )
 
-    def _draw_animation(self, point: CalibrationPoint) -> bool:
+    def _present_stimulus(self, point: CalibrationPoint) -> bool:
+        return self._draw_frame_animation(point)
+
+    def _draw_frame_animation(self, point: CalibrationPoint) -> bool:
         position = self._to_window_position(point.target.position)
         frames = point.stimulus.animation_frames
+        if not frames:
+            raise ValueError("Calibration stimulus must include frames or a movie.")
         frame_count = max(1, round(self.point_duration_seconds / self.frame_duration_seconds))
         self._render_status(
             f"Animation started: {point.target.label} "
@@ -212,8 +217,8 @@ class PsychoPyCalibrationPresenter:
         self._render_status(f"Animation ended: {point.target.label}")
         return True
 
-    def _play_sound(self, sound: Traversable) -> None:
-        if not self.play_sound:
+    def _play_sound(self, sound: Traversable | None) -> None:
+        if not self.play_sound or sound is None:
             return
 
         with as_file(sound) as sound_path:

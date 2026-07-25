@@ -21,7 +21,7 @@ def test_fake_calibration_presenter_presents_all_points_in_order():
         event_sink,
     )
 
-    assert result.sequence_id == "pikachu-5-point"
+    assert result.sequence_id == "gap-overlap-reward-5-point"
     assert [point.label for point in result.presented_points] == [
         "center",
         "top-left",
@@ -74,9 +74,9 @@ def test_fake_calibration_presenter_emits_lifecycle_events():
     ]
     assert result.started_at == 10
     assert result.ended_at == 12.5
-    assert event_sink.events[0].payload == {"sequence_id": "pikachu-5-point"}
+    assert event_sink.events[0].payload == {"sequence_id": "gap-overlap-reward-5-point"}
     assert event_sink.events[-1].payload == {
-        "sequence_id": "pikachu-5-point",
+        "sequence_id": "gap-overlap-reward-5-point",
         "point_count": 5,
     }
 

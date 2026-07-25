@@ -1,7 +1,11 @@
 import sys
 from dataclasses import dataclass, field
+from random import Random
 
-from aria_et.calibration import build_pikachu_calibration_sequence
+from aria_et.calibration import (
+    build_gap_overlap_reward_calibration_sequence,
+    build_pikachu_calibration_sequence,
+)
 from aria_et.psychopy.calibration import PsychoPyCalibrationPresenter, StatusLoggingEventSink
 from aria_et.runtime import ManualClock, RecordingEventSink
 
@@ -166,8 +170,8 @@ def test_psychopy_presenter_emits_window_positions_with_point_start_events():
     ]
 
 
-def test_psychopy_presenter_draws_animation_frames_and_flips_window():
-    sequence = build_pikachu_calibration_sequence()
+def test_psychopy_presenter_draws_reward_animation_frames_and_flips_window():
+    sequence = build_gap_overlap_reward_calibration_sequence(rng=Random(1))
     window = FakeWindow()
     factories = FakePsychoPyFactories()
 
@@ -182,13 +186,15 @@ def test_psychopy_presenter_draws_animation_frames_and_flips_window():
     assert len(factories.draws) == 15
     assert window.flips == 15
     assert factories.waits == [0.1] * 15
-    assert factories.images[0].path.endswith("imrewspn_001.bmp")
-    assert factories.images[1].path.endswith("imrewspn_002.bmp")
-    assert factories.images[2].path.endswith("imrewspn_003.bmp")
+    assert factories.images[0].path.endswith("frame_001.png")
+    assert factories.images[1].path.endswith("frame_002.png")
+    assert factories.images[2].path.endswith("frame_003.png")
+    assert factories.images[0].pos == (0.0, 0.0)
+    assert factories.images[0].size == (120, 120)
 
 
 def test_psychopy_presenter_can_log_frame_level_render_progress():
-    sequence = build_pikachu_calibration_sequence()
+    sequence = build_gap_overlap_reward_calibration_sequence(rng=Random(0))
     window = FakeWindow()
     factories = FakePsychoPyFactories()
     statuses = []
@@ -213,15 +219,15 @@ def test_psychopy_presenter_can_log_frame_level_render_progress():
     assert "Waiting for advance" not in statuses
 
 
-def test_psychopy_presenter_plays_sound_for_each_point():
+def test_psychopy_presenter_does_not_play_sound_for_reward_animations():
     sequence = build_pikachu_calibration_sequence()
     window = FakeWindow()
     factories = FakePsychoPyFactories()
 
     make_presenter(window, factories).present(sequence, ManualClock(), RecordingEventSink())
 
-    assert len(factories.sounds) == 5
-    assert all(path.endswith("pikachu.wav") for path in factories.played)
+    assert factories.sounds == []
+    assert factories.played == []
 
 
 def test_psychopy_presenter_can_disable_sound():
