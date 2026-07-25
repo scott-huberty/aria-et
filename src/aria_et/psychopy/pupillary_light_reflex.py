@@ -7,8 +7,10 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from importlib.resources import as_file
 from importlib.resources.abc import Traversable
+from random import Random
 from typing import Protocol
 
+from aria_et.assets import gap_overlap_reward_calibration_assets
 from aria_et.pupillary_light_reflex import (
     PupillaryLightReflexSequence,
     PupillaryLightReflexTrial,
@@ -66,6 +68,7 @@ class PsychoPyPupillaryLightReflexPresenter:
     play_sound: bool = True
     trial_limit: int | None = None
     frame_duration_seconds: float = 1 / 30
+    inter_trial_attention_seconds: float = 1.0
     render_status: StatusSink | None = None
     _active_sounds: list[SoundLike] = field(default_factory=list, init=False, repr=False)
 
@@ -77,6 +80,7 @@ class PsychoPyPupillaryLightReflexPresenter:
     ) -> PupillaryLightReflexRunResult:
         selected_blocks = self._selected_blocks(sequence)
         image_cache = self._prepare_image_cache(selected_blocks)
+        attention_cues = self._prepare_attention_cues(max(0, len(selected_blocks) - 1))
         started_at = clock.now()
         event_sink.emit(
             RuntimeEvent(
@@ -86,11 +90,24 @@ class PsychoPyPupillaryLightReflexPresenter:
             )
         )
 
-        presented_trials = tuple(
-            self._present_trial(block.block_id, trial, image_cache, clock, event_sink)
-            for block in selected_blocks
-            for trial in block.trials
-        )
+        presented_trials = []
+        for block_index, block in enumerate(selected_blocks):
+            if block_index > 0 and attention_cues:
+                self._present_attention_cue(
+                    attention_cues[block_index - 1],
+                    clock,
+                    event_sink,
+                )
+            for trial in block.trials:
+                presented_trials.append(
+                    self._present_trial(
+                        block.block_id,
+                        trial,
+                        image_cache,
+                        clock,
+                        event_sink,
+                    )
+                )
 
         ended_at = clock.now()
         event_sink.emit(
@@ -106,7 +123,7 @@ class PsychoPyPupillaryLightReflexPresenter:
 
         return PupillaryLightReflexRunResult(
             sequence_id=sequence.sequence_id,
-            presented_trials=presented_trials,
+            presented_trials=tuple(presented_trials),
             started_at=started_at,
             ended_at=ended_at,
         )
@@ -173,6 +190,50 @@ class PsychoPyPupillaryLightReflexPresenter:
                 cache[trial.stimulus_id] = self._prepare_images(trial.stimulus.frames)
         return cache
 
+    def _prepare_attention_cues(
+        self,
+        cue_count: int,
+    ) -> tuple[tuple[tuple[DrawableLike, ...], Traversable], ...]:
+        if cue_count == 0 or self.inter_trial_attention_seconds <= 0:
+            return ()
+
+        randomizer = Random()
+        assets = gap_overlap_reward_calibration_assets()
+        cues = []
+        for _ in range(cue_count):
+            animation = randomizer.choice(assets.animations)
+            sound = randomizer.choice(assets.sounds)
+            cues.append((self._prepare_images(animation.frames), sound))
+        return tuple(cues)
+
+    def _present_attention_cue(
+        self,
+        cue: tuple[tuple[DrawableLike, ...], Traversable],
+        clock: Clock,
+        event_sink: EventSink,
+    ) -> None:
+        frames, sound = cue
+        started_at = clock.now()
+        event_sink.emit(
+            RuntimeEvent(
+                "pupillary-light-reflex.attention-cue.started",
+                started_at,
+                {
+                    "duration_seconds": self.inter_trial_attention_seconds,
+                    "sound": sound.name,
+                },
+            )
+        )
+        self._play_sound(sound)
+        self._draw_for_duration(frames, self.inter_trial_attention_seconds)
+        event_sink.emit(
+            RuntimeEvent(
+                "pupillary-light-reflex.attention-cue.ended",
+                clock.now(),
+                {"duration_seconds": self.inter_trial_attention_seconds},
+            )
+        )
+
     def _prepare_images(self, frames: tuple[Traversable, ...]) -> tuple[DrawableLike, ...]:
         images = []
         for frame in frames:
@@ -206,6 +267,17 @@ class PsychoPyPupillaryLightReflexPresenter:
                         },
                     )
                 )
+            self._wait()(self.frame_duration_seconds)
+
+    def _draw_for_duration(
+        self,
+        images: tuple[DrawableLike, ...],
+        duration_seconds: float,
+    ) -> None:
+        frame_count = max(1, round(duration_seconds / self.frame_duration_seconds))
+        for frame_index in range(frame_count):
+            images[frame_index % len(images)].draw()
+            self.window.flip()
             self._wait()(self.frame_duration_seconds)
 
     def _play_sound(self, sound: Traversable) -> None:
@@ -300,6 +372,7 @@ def run_pupillary_light_reflex_demo(
     window_size: tuple[int, int] = (1024, 768),
     play_sound: bool = True,
     trial_limit: int | None = None,
+    inter_trial_attention_seconds: float = 1.0,
     debug_render: bool = False,
     status_sink: StatusSink | None = None,
 ) -> int:
@@ -326,6 +399,7 @@ def run_pupillary_light_reflex_demo(
             window=window,
             play_sound=play_sound,
             trial_limit=trial_limit,
+            inter_trial_attention_seconds=inter_trial_attention_seconds,
             render_status=status if debug_render else None,
         )
         presenter.present(

@@ -231,6 +231,8 @@ def test_demo_pupillary_light_reflex_invokes_injected_runner():
             "--no-sound",
             "--trial-limit",
             "2",
+            "--attention-cue-seconds",
+            "0.25",
             "--debug-render",
         ],
         demo_pupillary_light_reflex_runner=runner,
@@ -243,9 +245,26 @@ def test_demo_pupillary_light_reflex_invokes_injected_runner():
             "window_size": (800, 600),
             "play_sound": False,
             "trial_limit": 2,
+            "inter_trial_attention_seconds": 0.25,
             "debug_render": True,
         }
     ]
+
+
+def test_demo_pupillary_light_reflex_can_disable_attention_cue():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        ["demo-plr", "--attention-cue-seconds", "0"],
+        demo_pupillary_light_reflex_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls[0]["inter_trial_attention_seconds"] == 0
 
 
 def test_parse_window_size():
