@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.resources import as_file
 from importlib.resources.abc import Traversable
 from typing import Protocol
@@ -60,6 +60,7 @@ class PsychoPyCalibrationPresenter:
     abort_requested: AbortCheck | None = None
     advance_requested: AdvanceCheck | None = None
     render_status: RenderStatus | None = None
+    _active_sounds: list[SoundLike] = field(default_factory=list, init=False, repr=False)
 
     def present(
         self,
@@ -222,7 +223,9 @@ class PsychoPyCalibrationPresenter:
             return
 
         with as_file(sound) as sound_path:
-            self._sound_factory()(str(sound_path)).play()
+            sound_object = self._sound_factory()(str(sound_path))
+            sound_object.play()
+            self._active_sounds.append(sound_object)
 
     def _to_window_position(self, point: NormalizedPoint) -> tuple[float, float]:
         width, height = self._coordinate_size()

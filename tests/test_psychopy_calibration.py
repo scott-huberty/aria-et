@@ -220,12 +220,14 @@ def test_psychopy_presenter_plays_reward_sound_for_each_point():
     sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow()
     factories = FakePsychoPyFactories()
+    presenter = make_presenter(window, factories)
 
-    make_presenter(window, factories).present(sequence, ManualClock(), RecordingEventSink())
+    presenter.present(sequence, ManualClock(), RecordingEventSink())
 
     assert len(factories.sounds) == 5
     assert all(path.endswith(".wav") for path in factories.played)
     assert all("snd_gap_rew" in path for path in factories.played)
+    assert presenter._active_sounds == factories.sounds
 
 
 def test_psychopy_presenter_can_disable_sound():

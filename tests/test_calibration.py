@@ -75,7 +75,7 @@ def test_gap_overlap_reward_calibration_sequence_has_five_bundled_asset_points()
         "bottom-right",
         "bottom-left",
     ]
-    assert all(point.stimulus.sound is None for point in sequence.points)
+    assert all(point.stimulus.sound.name.startswith("snd_gap_rew") for point in sequence.points)
     assert all(
         point.stimulus.animation_frames[0].name == "frame_001.png"
         for point in sequence.points
@@ -93,18 +93,40 @@ def test_gap_overlap_reward_calibration_sequence_selects_per_point_with_rng():
         "Star_Rotate_Animation",
         "Star_Rotate_Animation",
     ]
+    assert [point.stimulus.sound.name for point in sequence.points] == [
+        "snd_gap_rew05.wav",
+        "snd_gap_rew02.wav",
+        "snd_gap_rew05.wav",
+        "snd_gap_rew01.wav",
+        "snd_gap_rew05.wav",
+    ]
 
 
 def test_calibration_reward_stimuli_require_animations():
     with pytest.raises(ValueError, match="at least one animation"):
-        calibration_stimuli_from_reward_assets(CalibrationRewardAssets(animations=()))
+        calibration_stimuli_from_reward_assets(
+            CalibrationRewardAssets(animations=(), sounds=("sound.wav",))
+        )
 
 
 def test_calibration_reward_stimuli_require_animation_frames():
     with pytest.raises(ValueError, match="at least one frame"):
         calibration_stimuli_from_reward_assets(
             CalibrationRewardAssets(
-                animations=(CalibrationRewardAnimation(name="empty", frames=()),)
+                animations=(CalibrationRewardAnimation(name="empty", frames=()),),
+                sounds=("sound.wav",),
+            )
+        )
+
+
+def test_calibration_reward_stimuli_require_sounds():
+    with pytest.raises(ValueError, match="at least one sound"):
+        calibration_stimuli_from_reward_assets(
+            CalibrationRewardAssets(
+                animations=(
+                    CalibrationRewardAnimation(name="animation", frames=("frame.png",)),
+                ),
+                sounds=(),
             )
         )
 
