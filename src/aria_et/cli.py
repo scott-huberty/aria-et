@@ -14,6 +14,7 @@ DemoActivityMonitoringRunner = Callable[..., int]
 DemoSocialInteractiveRunner = Callable[..., int]
 DemoStaticSocialScenesRunner = Callable[..., int]
 DemoPupillaryLightReflexRunner = Callable[..., int]
+CheckEyeTrackerRunner = Callable[[], int]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -23,6 +24,11 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "list-tasks",
         help="Print the configured battery order.",
+    )
+
+    subparsers.add_parser(
+        "check-eyetracker",
+        help="Check Tobii SDK availability and connected eye tracker discovery.",
     )
 
     demo_calibration = subparsers.add_parser(
@@ -241,6 +247,7 @@ def main(
     demo_social_interactive_runner: DemoSocialInteractiveRunner | None = None,
     demo_static_social_scenes_runner: DemoStaticSocialScenesRunner | None = None,
     demo_pupillary_light_reflex_runner: DemoPupillaryLightReflexRunner | None = None,
+    check_eyetracker_runner: CheckEyeTrackerRunner | None = None,
 ) -> int:
     args = build_parser().parse_args(argv)
 
@@ -248,6 +255,15 @@ def main(
         for task in BATTERY_ORDER:
             print(task.task_id)
         return 0
+
+    if args.command == "check-eyetracker":
+        runner = check_eyetracker_runner
+        if runner is None:
+            from aria_et.eyetracker import check_eyetracker
+
+            runner = check_eyetracker
+
+        return runner()
 
     if args.command == "demo-calibration":
         runner = demo_calibration_runner

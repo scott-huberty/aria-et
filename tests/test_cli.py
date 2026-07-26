@@ -16,6 +16,19 @@ def test_list_tasks_prints_battery_order(capsys):
     ]
 
 
+def test_check_eyetracker_invokes_injected_runner():
+    calls = []
+
+    def runner():
+        calls.append("called")
+        return 3
+
+    exit_code = main(["check-eyetracker"], check_eyetracker_runner=runner)
+
+    assert exit_code == 3
+    assert calls == ["called"]
+
+
 def test_demo_calibration_invokes_injected_runner():
     calls = []
 
