@@ -4,6 +4,41 @@ from aria_et.runtime import RuntimeEvent
 from aria_et.session import run_recording_session
 
 
+class FakeRecorder:
+    def __init__(self, gaze_path, tracker_metadata_path):
+        self.gaze_path = gaze_path
+        self.tracker_metadata_path = tracker_metadata_path
+        self.entered = False
+        self.exited = False
+
+    def __enter__(self):
+        self.entered = True
+        self.tracker_metadata_path.write_text(
+            json.dumps(
+                {
+                    "address": "tobii-prp://169.254.10.180",
+                    "model": "Tobii Pro Spectrum",
+                    "serial_number": "TPSP1-010214213025",
+                    "firmware_version": "2.6.2-orbicularis-0",
+                }
+            )
+            + "\n"
+        )
+        self.gaze_path.write_text(
+            json.dumps(
+                {
+                    "received_at": 10.0,
+                    "sample": {"system_time_stamp": 123},
+                }
+            )
+            + "\n"
+        )
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.exited = True
+
+
 def test_run_recording_session_writes_metadata_and_events_for_no_tracker(tmp_path):
     output_dir = tmp_path / "run-am"
 
@@ -56,22 +91,53 @@ def test_run_recording_session_rejects_existing_output_directory(tmp_path, capsy
     assert "already exists" in capsys.readouterr().err
 
 
-def test_run_recording_session_fails_fast_for_tobii_until_backend_is_wired(tmp_path, capsys):
-    calls = []
+def test_run_recording_session_records_events_and_gaze_for_tobii(tmp_path):
+    check_calls = []
+    recorder_calls = []
+    recorders = []
 
     def check_eyetracker(**kwargs):
-        calls.append(kwargs)
+        check_calls.append(kwargs)
         return 0
+
+    def recorder_factory(**kwargs):
+        recorder_calls.append(kwargs)
+        recorder = FakeRecorder(kwargs["gaze_path"], kwargs["tracker_metadata_path"])
+        recorders.append(recorder)
+        return recorder
+
+    def present(event_sink):
+        event_sink.emit(RuntimeEvent("task.started", 1.0, {}))
+
+    output_dir = tmp_path / "run-am"
 
     exit_code = run_recording_session(
         task_id="activity-monitoring",
         tracker="tobii",
         tracker_address="tobii-prp://169.254.10.180",
-        output_dir=tmp_path / "run-am",
-        present=lambda event_sink: None,
+        output_dir=output_dir,
+        present=present,
         check_eyetracker=check_eyetracker,
+        recorder_factory=recorder_factory,
     )
 
-    assert exit_code != 0
-    assert calls == [{"address": "tobii-prp://169.254.10.180"}]
-    assert "not implemented yet" in capsys.readouterr().err
+    assert exit_code == 0
+    assert check_calls == [{"address": "tobii-prp://169.254.10.180"}]
+    assert recorder_calls == [
+        {
+            "gaze_path": output_dir / "gaze.jsonl",
+            "tracker_metadata_path": output_dir / "tracker.json",
+            "address": "tobii-prp://169.254.10.180",
+        }
+    ]
+    assert recorders[0].entered is True
+    assert recorders[0].exited is True
+    assert json.loads((output_dir / "tracker.json").read_text())[
+        "serial_number"
+    ] == "TPSP1-010214213025"
+    assert json.loads((output_dir / "gaze.jsonl").read_text())["sample"] == {
+        "system_time_stamp": 123
+    }
+    assert json.loads((output_dir / "events.jsonl").read_text())["name"] == (
+        "task.started"
+    )

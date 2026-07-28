@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Literal
 
 from aria_et.eyetracker import check_eyetracker as default_check_eyetracker
+from aria_et.eyetracker import create_tobii_gaze_recorder
+from aria_et.eyetracker import TobiiSdkUnavailableError, TobiiTrackerUnavailableError
 from aria_et.runtime import EventSink, RuntimeEvent
 
 
@@ -17,6 +19,7 @@ TrackerName = Literal["none", "tobii"]
 StatusSink = Callable[[str], None]
 PresenterRunner = Callable[[EventSink], None]
 EyeTrackerCheck = Callable[..., int]
+RecorderFactory = Callable[..., object]
 
 
 class JsonLinesEventSink:
@@ -49,27 +52,43 @@ def run_recording_session(
     present: PresenterRunner,
     tracker_address: str | None = None,
     check_eyetracker: EyeTrackerCheck = default_check_eyetracker,
+    recorder_factory: RecorderFactory = create_tobii_gaze_recorder,
     error_sink: StatusSink | None = None,
 ) -> int:
     error = error_sink or (lambda message: print(message, file=sys.stderr))
-
-    if tracker == "tobii":
-        check_exit_code = check_eyetracker(address=tracker_address)
-        if check_exit_code != 0:
-            return check_exit_code
-        error("Tobii-backed run sessions are not implemented yet.")
-        return 4
 
     output_path = Path(output_dir)
     if output_path.exists():
         error(f"Output directory already exists: {output_path}")
         return 5
 
+    if tracker == "tobii":
+        check_exit_code = check_eyetracker(address=tracker_address)
+        if check_exit_code != 0:
+            return check_exit_code
+
     output_path.mkdir(parents=True)
     _write_session_metadata(output_path / "session.json", task_id, tracker)
     event_sink = JsonLinesEventSink(output_path / "events.jsonl")
     try:
-        present(event_sink)
+        if tracker == "tobii":
+            try:
+                recorder = recorder_factory(
+                    gaze_path=output_path / "gaze.jsonl",
+                    tracker_metadata_path=output_path / "tracker.json",
+                    address=tracker_address,
+                )
+            except TobiiSdkUnavailableError as error_message:
+                error(str(error_message))
+                return 2
+            except TobiiTrackerUnavailableError as error_message:
+                error(str(error_message))
+                return 3
+
+            with recorder:
+                present(event_sink)
+        else:
+            present(event_sink)
     finally:
         event_sink.close()
 
