@@ -3,8 +3,15 @@ name = "aria-et"
 version = "0.1.0"
 description = "Eye-tracking paradigms for the ARIA ABCCT battery recreation."
 readme = "README.md"
-requires-python = ">=3.10,<3.12"
+requires-python = ">=3.10,<3.11"
 dependencies = [
+    "psychopy",
+    "tobii-research",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
 ]
 
 [project.scripts]

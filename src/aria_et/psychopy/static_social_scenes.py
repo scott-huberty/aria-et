@@ -305,5 +305,62 @@ def run_static_social_scenes_demo(
     return 0
 
 
+def run_static_social_scenes_session(
+    *,
+    tracker: str,
+    tracker_address: str | None = None,
+    output_dir: str,
+    fullscreen: bool = False,
+    window_size: tuple[int, int] = (1024, 768),
+    play_sound: bool = True,
+    trial_limit: int | None = None,
+    debug_render: bool = False,
+    status_sink: StatusSink | None = None,
+) -> int:
+    from aria_et.session import run_recording_session
+
+    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+
+    def present(event_sink: EventSink) -> None:
+        status("Importing PsychoPy...")
+        from psychopy import core, visual
+
+        status(
+            "Opening PsychoPy window "
+            f"({window_size[0]}x{window_size[1]}, fullscreen={fullscreen})..."
+        )
+        window = visual.Window(
+            size=window_size,
+            fullscr=fullscreen,
+            units="pix",
+            color="black",
+        )
+        try:
+            status("Running Static Social Scenes session.")
+            presenter = PsychoPyStaticSocialScenesPresenter(
+                window=window,
+                play_sound=play_sound,
+                trial_limit=trial_limit,
+                render_status=status if debug_render else None,
+            )
+            presenter.present(
+                build_static_social_scenes_sequence(),
+                PsychoPyClock(core.Clock()),
+                StatusLoggingEventSink(event_sink, status),
+            )
+            status("Static Social Scenes session finished.")
+        finally:
+            status("Closing PsychoPy window...")
+            window.close()
+
+    return run_recording_session(
+        task_id="static-social-scenes",
+        tracker=tracker,
+        tracker_address=tracker_address,
+        output_dir=output_dir,
+        present=present,
+    )
+
+
 def _psychopy_rgb(rgb: tuple[int, int, int]) -> tuple[float, float, float]:
     return tuple((channel / 127.5) - 1 for channel in rgb)

@@ -369,3 +369,60 @@ def run_activity_monitoring_demo(
         window.close()
 
     return 0
+
+
+def run_activity_monitoring_session(
+    *,
+    tracker: str,
+    tracker_address: str | None = None,
+    output_dir: str,
+    fullscreen: bool = False,
+    window_size: tuple[int, int] = (1024, 768),
+    play_sound: bool = True,
+    trial_limit: int | None = None,
+    debug_render: bool = False,
+    status_sink: StatusSink | None = None,
+) -> int:
+    from aria_et.session import run_recording_session
+
+    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+
+    def present(event_sink: EventSink) -> None:
+        status("Importing PsychoPy...")
+        from psychopy import core, visual
+
+        status(
+            "Opening PsychoPy window "
+            f"({window_size[0]}x{window_size[1]}, fullscreen={fullscreen})..."
+        )
+        window = visual.Window(
+            size=window_size,
+            fullscr=fullscreen,
+            units="pix",
+            color="black",
+        )
+        try:
+            status("Running Activity Monitoring session.")
+            presenter = PsychoPyActivityMonitoringPresenter(
+                window=window,
+                play_sound=play_sound,
+                trial_limit=trial_limit,
+                render_status=status if debug_render else None,
+            )
+            presenter.present(
+                build_activity_monitoring_sequence(),
+                PsychoPyClock(core.Clock()),
+                StatusLoggingEventSink(event_sink, status),
+            )
+            status("Activity Monitoring session finished.")
+        finally:
+            status("Closing PsychoPy window...")
+            window.close()
+
+    return run_recording_session(
+        task_id="activity-monitoring",
+        tracker=tracker,
+        tracker_address=tracker_address,
+        output_dir=output_dir,
+        present=present,
+    )

@@ -2,8 +2,11 @@ name: aria-et
 channels:
   - conda-forge
 dependencies:
-  - python>=3.10,<3.12
+  - python=3.10
   - pip
-  - pytest>=9
+  - psychopy
+  - pytest
   - setuptools>=64
   - wheel
+  - pip:
+      - tobii-research

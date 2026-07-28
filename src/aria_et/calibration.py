@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib.resources.abc import Traversable
+from importlib.abc import Traversable
 from random import Random
 
 from aria_et.assets import (

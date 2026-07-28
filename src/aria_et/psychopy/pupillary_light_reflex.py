@@ -6,7 +6,7 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from importlib.resources import as_file
-from importlib.resources.abc import Traversable
+from importlib.abc import Traversable
 from random import Random
 from typing import Protocol
 
@@ -413,3 +413,62 @@ def run_pupillary_light_reflex_demo(
         window.close()
 
     return 0
+
+
+def run_pupillary_light_reflex_session(
+    *,
+    tracker: str,
+    tracker_address: str | None = None,
+    output_dir: str,
+    fullscreen: bool = False,
+    window_size: tuple[int, int] = (1024, 768),
+    play_sound: bool = True,
+    trial_limit: int | None = None,
+    inter_trial_attention_seconds: float = 1.0,
+    debug_render: bool = False,
+    status_sink: StatusSink | None = None,
+) -> int:
+    from aria_et.session import run_recording_session
+
+    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+
+    def present(event_sink: EventSink) -> None:
+        status("Importing PsychoPy...")
+        from psychopy import core, visual
+
+        status(
+            "Opening PsychoPy window "
+            f"({window_size[0]}x{window_size[1]}, fullscreen={fullscreen})..."
+        )
+        window = visual.Window(
+            size=window_size,
+            fullscr=fullscreen,
+            units="pix",
+            color="black",
+        )
+        try:
+            status("Running Pupillary Light Reflex session.")
+            presenter = PsychoPyPupillaryLightReflexPresenter(
+                window=window,
+                play_sound=play_sound,
+                trial_limit=trial_limit,
+                inter_trial_attention_seconds=inter_trial_attention_seconds,
+                render_status=status if debug_render else None,
+            )
+            presenter.present(
+                build_pupillary_light_reflex_sequence(),
+                PsychoPyClock(core.Clock()),
+                StatusLoggingEventSink(event_sink, status),
+            )
+            status("Pupillary Light Reflex session finished.")
+        finally:
+            status("Closing PsychoPy window...")
+            window.close()
+
+    return run_recording_session(
+        task_id="pupillary-light-reflex",
+        tracker=tracker,
+        tracker_address=tracker_address,
+        output_dir=output_dir,
+        present=present,
+    )

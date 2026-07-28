@@ -6,7 +6,7 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from importlib.resources import as_file
-from importlib.resources.abc import Traversable
+from importlib.abc import Traversable
 from typing import Protocol
 
 from aria_et.calibration import build_gap_overlap_reward_calibration_sequence

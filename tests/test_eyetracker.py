@@ -6,9 +6,18 @@ class FakeTobiiResearch:
 
     def __init__(self, eyetrackers):
         self._eyetrackers = eyetrackers
+        self.opened_addresses = []
 
     def find_all_eyetrackers(self):
         return self._eyetrackers
+
+    def EyeTracker(self, address):
+        self.opened_addresses.append(address)
+        if address == "tobii-prp://missing":
+            raise RuntimeError("connection failed")
+        tracker = FakeEyeTracker()
+        tracker.address = address
+        return tracker
 
 
 class FakeEyeTracker:
@@ -54,3 +63,35 @@ def test_check_eyetracker_reports_connected_tobii_tracker(capsys):
     assert "Found 1 Tobii eye tracker" in captured.out
     assert "Tobii Pro Spectrum" in captured.out
     assert "TPS-123" in captured.out
+
+
+def test_check_eyetracker_can_connect_to_explicit_address(capsys):
+    sdk = FakeTobiiResearch(())
+
+    def installed_sdk(name):
+        return sdk
+
+    exit_code = check_eyetracker(
+        address="tobii-prp://169.254.10.180",
+        import_module=installed_sdk,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert sdk.opened_addresses == ["tobii-prp://169.254.10.180"]
+    assert "Connected to Tobii eye tracker at tobii-prp://169.254.10.180" in captured.out
+    assert "Found 1 Tobii eye tracker" in captured.out
+
+
+def test_check_eyetracker_reports_explicit_address_connection_failure(capsys):
+    def installed_sdk(name):
+        return FakeTobiiResearch(())
+
+    exit_code = check_eyetracker(
+        address="tobii-prp://missing",
+        import_module=installed_sdk,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 3
+    assert "No Tobii eye tracker could be opened at tobii-prp://missing" in captured.err

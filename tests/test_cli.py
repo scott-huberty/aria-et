@@ -19,14 +19,30 @@ def test_list_tasks_prints_battery_order(capsys):
 def test_check_eyetracker_invokes_injected_runner():
     calls = []
 
-    def runner():
-        calls.append("called")
+    def runner(**kwargs):
+        calls.append(kwargs)
         return 3
 
     exit_code = main(["check-eyetracker"], check_eyetracker_runner=runner)
 
     assert exit_code == 3
-    assert calls == ["called"]
+    assert calls == [{"address": None}]
+
+
+def test_check_eyetracker_passes_explicit_address_to_injected_runner():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        ["check-eyetracker", "--address", "tobii-prp://169.254.10.180"],
+        check_eyetracker_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls == [{"address": "tobii-prp://169.254.10.180"}]
 
 
 def test_demo_calibration_invokes_injected_runner():
@@ -162,6 +178,46 @@ def test_demo_activity_monitoring_invokes_injected_runner():
     ]
 
 
+def test_run_activity_monitoring_invokes_injected_runner():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        [
+            "run-am",
+            "--tracker",
+            "none",
+            "--output",
+            "runs/test-am",
+            "--fullscreen",
+            "--size",
+            "800x600",
+            "--no-sound",
+            "--trial-limit",
+            "2",
+            "--debug-render",
+        ],
+        run_activity_monitoring_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "tracker": "none",
+            "tracker_address": None,
+            "output_dir": "runs/test-am",
+            "fullscreen": True,
+            "window_size": (800, 600),
+            "play_sound": False,
+            "trial_limit": 2,
+            "debug_render": True,
+        }
+    ]
+
+
 def test_demo_social_interactive_invokes_injected_runner():
     calls = []
 
@@ -228,6 +284,39 @@ def test_demo_static_social_scenes_invokes_injected_runner():
     ]
 
 
+def test_run_static_social_scenes_invokes_injected_runner():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        [
+            "run-ss",
+            "--tracker",
+            "none",
+            "--output",
+            "runs/test-ss",
+        ],
+        run_static_social_scenes_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "tracker": "none",
+            "tracker_address": None,
+            "output_dir": "runs/test-ss",
+            "fullscreen": False,
+            "window_size": (1024, 768),
+            "play_sound": True,
+            "trial_limit": None,
+            "debug_render": False,
+        }
+    ]
+
+
 def test_demo_pupillary_light_reflex_invokes_injected_runner():
     calls = []
 
@@ -262,6 +351,67 @@ def test_demo_pupillary_light_reflex_invokes_injected_runner():
             "debug_render": True,
         }
     ]
+
+
+def test_run_pupillary_light_reflex_invokes_injected_runner():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        [
+            "run-plr",
+            "--tracker",
+            "none",
+            "--output",
+            "runs/test-plr",
+            "--attention-cue-seconds",
+            "0",
+        ],
+        run_pupillary_light_reflex_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "tracker": "none",
+            "tracker_address": None,
+            "output_dir": "runs/test-plr",
+            "fullscreen": False,
+            "window_size": (1024, 768),
+            "play_sound": True,
+            "trial_limit": None,
+            "inter_trial_attention_seconds": 0,
+            "debug_render": False,
+        }
+    ]
+
+
+def test_run_pupillary_light_reflex_passes_explicit_tracker_address():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        [
+            "run-plr",
+            "--tracker",
+            "tobii",
+            "--address",
+            "tobii-prp://169.254.10.180",
+            "--output",
+            "runs/test-plr",
+        ],
+        run_pupillary_light_reflex_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls[0]["tracker"] == "tobii"
+    assert calls[0]["tracker_address"] == "tobii-prp://169.254.10.180"
 
 
 def test_demo_pupillary_light_reflex_can_disable_attention_cue():
