@@ -3,3 +3,12 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .venv/
+
+# Offline mirror of the Tobii Pro SDK 2.1 Python API reference (vendor HTML).
+# Re-fetch from developer.tobiipro.com rather than committing ~1.2 MB of it.
+docs/tobii-sdk-2.1/
+docs/
+
+# Output
+runs/
+calibrations/

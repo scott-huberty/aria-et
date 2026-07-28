@@ -330,6 +330,7 @@ class StatusLoggingEventSink:
 def run_gap_overlap_reward_calibration_demo(
     *,
     fullscreen: bool = True,
+    screen: int = 1,
     window_size: tuple[int, int] = (1024, 768),
     play_sound: bool = True,
     point_duration_seconds: float = 1.0,
@@ -346,11 +347,12 @@ def run_gap_overlap_reward_calibration_demo(
 
     status(
         "Opening PsychoPy window "
-        f"({window_size[0]}x{window_size[1]}, fullscreen={fullscreen})..."
+        f"({window_size[0]}x{window_size[1]}, fullscreen={fullscreen}, screen={screen})..."
     )
     window = visual.Window(
         size=window_size,
         fullscr=fullscreen,
+        screen=screen,
         units="pix",
         color="black",
     )

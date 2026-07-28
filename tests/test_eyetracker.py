@@ -1,6 +1,14 @@
 import json
+import math
+import subprocess
+from datetime import datetime, timezone
 
-from aria_et.eyetracker import TobiiGazeRecorder, check_eyetracker
+from aria_et.eyetracker import (
+    TobiiGazeRecorder,
+    check_eyetracker,
+    run_eyetracker_manager_calibration,
+    save_current_calibration,
+)
 
 
 class FakeTobiiResearch:
@@ -32,6 +40,7 @@ class FakeEyeTracker:
     def __init__(self):
         self.subscriptions = []
         self.unsubscriptions = []
+        self.calibration_data = b"fake-calibration-data"
 
     def subscribe_to(self, subscription_type, callback, as_dictionary=False):
         self.subscriptions.append(
@@ -49,6 +58,9 @@ class FakeEyeTracker:
                 "callback": callback,
             }
         )
+
+    def retrieve_calibration_data(self):
+        return self.calibration_data
 
 
 class FakeTobiiModule:
@@ -140,6 +152,7 @@ def test_tobii_gaze_recorder_writes_tracker_metadata_and_gaze_samples(tmp_path):
         callback(
             {
                 "system_time_stamp": 123,
+                "left_pupil_diameter": math.nan,
                 "left_gaze_point_on_display_area": (0.25, 0.75),
             }
         )
@@ -169,6 +182,192 @@ def test_tobii_gaze_recorder_writes_tracker_metadata_and_gaze_samples(tmp_path):
         "received_at": 12.5,
         "sample": {
             "left_gaze_point_on_display_area": [0.25, 0.75],
+            "left_pupil_diameter": None,
             "system_time_stamp": 123,
         },
     }
+
+
+def test_save_current_calibration_writes_metadata_and_sdk_payload(tmp_path):
+    tracker = FakeEyeTracker()
+    artifact_dir = save_current_calibration(
+        eyetracker=tracker,
+        output_dir=tmp_path / "calibrations",
+        method="tobii-pro-eye-tracker-manager",
+        screen=1,
+        manager_executable="/Applications/Tobii",
+        manager_return_code=0,
+        now=datetime(2026, 7, 28, 16, 30, 5, tzinfo=timezone.utc),
+    )
+
+    assert artifact_dir == tmp_path / "calibrations" / "calibration-20260728T163005Z"
+    assert (artifact_dir / "calibration.bin").read_bytes() == b"fake-calibration-data"
+    metadata = json.loads((artifact_dir / "calibration.json").read_text())
+    assert metadata == {
+        "schema_version": 1,
+        "calibration_id": "calibration-20260728T163005Z",
+        "created_at": "2026-07-28T16:30:05Z",
+        "method": "tobii-pro-eye-tracker-manager",
+        "screen": 1,
+        "tracker": {
+            "address": "tet-tcp://169.254.0.1",
+            "firmware_version": "2.6.2",
+            "model": "Spectrum",
+            "serial_number": "TPS-123",
+        },
+        "calibration_data_file": "calibration.bin",
+        "manager_executable": "/Applications/Tobii",
+        "manager_return_code": 0,
+    }
+
+
+def test_save_current_calibration_avoids_overwriting_same_second_artifact(tmp_path):
+    timestamp = datetime(2026, 7, 28, 16, 30, 5, tzinfo=timezone.utc)
+    first = save_current_calibration(
+        eyetracker=FakeEyeTracker(),
+        output_dir=tmp_path / "calibrations",
+        method="tobii-pro-eye-tracker-manager",
+        screen=1,
+        manager_executable="/Applications/Tobii",
+        manager_return_code=0,
+        now=timestamp,
+    )
+    second = save_current_calibration(
+        eyetracker=FakeEyeTracker(),
+        output_dir=tmp_path / "calibrations",
+        method="tobii-pro-eye-tracker-manager",
+        screen=1,
+        manager_executable="/Applications/Tobii",
+        manager_return_code=0,
+        now=timestamp,
+    )
+
+    assert first.name == "calibration-20260728T163005Z"
+    assert second.name == "calibration-20260728T163005Z-2"
+
+
+def test_run_eyetracker_manager_calibration_discovers_tracker_and_launches_manager(capsys):
+    commands = []
+
+    def installed_sdk(name):
+        return FakeTobiiResearch((FakeEyeTracker(),))
+
+    def run_command(command, check):
+        commands.append({"command": command, "check": check})
+        return subprocess.CompletedProcess(command, 0)
+
+    exit_code = run_eyetracker_manager_calibration(
+        screen=1,
+        executable="/Applications/Tobii",
+        calibration_output_dir=None,
+        import_module=installed_sdk,
+        run_command=run_command,
+    )
+
+    assert exit_code == 0
+    assert commands == [
+        {
+            "command": [
+                "/Applications/Tobii",
+                "--mode=usercalibration",
+                "--screen=1",
+                "--device-address=tet-tcp://169.254.0.1",
+            ],
+            "check": False,
+        }
+    ]
+    assert "calibration completed" in capsys.readouterr().out
+
+
+def test_run_eyetracker_manager_calibration_saves_successful_calibration(tmp_path, capsys):
+    def installed_sdk(name):
+        return FakeTobiiResearch((FakeEyeTracker(),))
+
+    def run_command(command, check):
+        return subprocess.CompletedProcess(command, 0)
+
+    exit_code = run_eyetracker_manager_calibration(
+        screen=1,
+        executable="/Applications/Tobii",
+        calibration_output_dir=tmp_path / "calibrations",
+        import_module=installed_sdk,
+        run_command=run_command,
+        now=lambda: datetime(2026, 7, 28, 16, 30, 5, tzinfo=timezone.utc),
+    )
+
+    assert exit_code == 0
+    artifact_dir = tmp_path / "calibrations" / "calibration-20260728T163005Z"
+    assert (artifact_dir / "calibration.bin").read_bytes() == b"fake-calibration-data"
+    assert "Saved calibration data to" in capsys.readouterr().out
+
+
+def test_run_eyetracker_manager_calibration_captures_manager_output(tmp_path, capsys):
+    def installed_sdk(name):
+        return FakeTobiiResearch((FakeEyeTracker(),))
+
+    manager = tmp_path / "fake-etm"
+    manager.write_text(
+        "#!/bin/sh\n"
+        "echo 'etm stdout line'\n"
+        "echo 'etm stderr line' >&2\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    manager.chmod(0o755)
+
+    exit_code = run_eyetracker_manager_calibration(
+        address="tobii-prp://169.254.10.180",
+        screen=1,
+        executable=str(manager),
+        calibration_output_dir=tmp_path / "calibrations",
+        import_module=installed_sdk,
+        now=lambda: datetime(2026, 7, 28, 16, 30, 5, tzinfo=timezone.utc),
+    )
+
+    assert exit_code == 0
+    artifact_dir = tmp_path / "calibrations" / "calibration-20260728T163005Z"
+    log_path = artifact_dir / "etm.log"
+    assert log_path.read_text(encoding="utf-8") == (
+        "etm stdout line\netm stderr line\n"
+    )
+    metadata = json.loads((artifact_dir / "calibration.json").read_text())
+    assert metadata["etm_log_file"] == "etm.log"
+    captured = capsys.readouterr()
+    assert "etm stdout line" in captured.out
+    assert "etm stderr line" in captured.out
+
+
+def test_run_eyetracker_manager_calibration_can_target_serial_number():
+    commands = []
+
+    def run_command(command, check):
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 31)
+
+    exit_code = run_eyetracker_manager_calibration(
+        serial_number="TPSP1-010214213025",
+        screen=2,
+        executable="/Applications/Tobii",
+        calibration_output_dir=None,
+        run_command=run_command,
+    )
+
+    assert exit_code == 31
+    assert commands == [
+        [
+            "/Applications/Tobii",
+            "--mode=usercalibration",
+            "--screen=2",
+            "--device-sn=TPSP1-010214213025",
+        ]
+    ]
+
+
+def test_run_eyetracker_manager_calibration_rejects_address_and_serial(capsys):
+    exit_code = run_eyetracker_manager_calibration(
+        address="tobii-prp://169.254.10.180",
+        serial_number="TPSP1-010214213025",
+    )
+
+    assert exit_code == 51
+    assert "either --address or --serial-number" in capsys.readouterr().err

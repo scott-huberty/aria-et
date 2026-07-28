@@ -45,6 +45,88 @@ def test_check_eyetracker_passes_explicit_address_to_injected_runner():
     assert calls == [{"address": "tobii-prp://169.254.10.180"}]
 
 
+def test_calibrate_eyetracker_invokes_manager_runner_with_production_defaults():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        ["calibrate-eyetracker"],
+        calibrate_eyetracker_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "address": None,
+            "calibration_output_dir": "calibrations",
+            "serial_number": None,
+            "screen": 1,
+        }
+    ]
+
+
+def test_calibrate_eyetracker_can_target_address_serial_screen_and_manager():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 31
+
+    exit_code = main(
+        [
+            "calibrate-eyetracker",
+            "--address",
+            "tobii-prp://169.254.10.180",
+            "--screen",
+            "2",
+            "--manager",
+            "/tmp/TobiiProEyeTrackerManager",
+        ],
+        calibrate_eyetracker_runner=runner,
+    )
+
+    assert exit_code == 31
+    assert calls == [
+        {
+            "address": "tobii-prp://169.254.10.180",
+            "calibration_output_dir": "calibrations",
+            "serial_number": None,
+            "screen": 2,
+            "executable": "/tmp/TobiiProEyeTrackerManager",
+        }
+    ]
+
+
+def test_calibrate_eyetracker_can_set_output_directory():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        [
+            "calibrate-eyetracker",
+            "--output",
+            "runs/calibrations",
+        ],
+        calibrate_eyetracker_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "address": None,
+            "calibration_output_dir": "runs/calibrations",
+            "serial_number": None,
+            "screen": 1,
+        }
+    ]
+
+
 def test_demo_calibration_invokes_injected_runner():
     calls = []
 
@@ -69,6 +151,7 @@ def test_demo_calibration_invokes_injected_runner():
     assert calls == [
         {
             "fullscreen": False,
+            "screen": 1,
             "window_size": (800, 600),
             "play_sound": False,
             "point_duration_seconds": 0.25,
@@ -78,7 +161,7 @@ def test_demo_calibration_invokes_injected_runner():
     ]
 
 
-def test_demo_calibration_defaults_to_windowed_runner_options():
+def test_demo_calibration_defaults_to_eizo_fullscreen_runner_options():
     calls = []
 
     def runner(**kwargs):
@@ -90,7 +173,8 @@ def test_demo_calibration_defaults_to_windowed_runner_options():
     assert exit_code == 0
     assert calls == [
         {
-            "fullscreen": False,
+            "fullscreen": True,
+            "screen": 1,
             "window_size": (1024, 768),
             "play_sound": True,
             "point_duration_seconds": 3.0,

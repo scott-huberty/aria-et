@@ -10,6 +10,7 @@ from aria_et.tasks import BATTERY_ORDER
 
 
 DemoCalibrationRunner = Callable[..., int]
+CalibrateEyeTrackerRunner = Callable[..., int]
 DemoActivityMonitoringRunner = Callable[..., int]
 DemoSocialInteractiveRunner = Callable[..., int]
 DemoStaticSocialScenesRunner = Callable[..., int]
@@ -39,6 +40,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional Tobii tracker URI to connect to directly, bypassing discovery.",
     )
 
+    calibrate_eyetracker = subparsers.add_parser(
+        "calibrate-eyetracker",
+        help="Launch Tobii Pro Eye Tracker Manager user calibration.",
+    )
+    calibrate_eyetracker.add_argument(
+        "--address",
+        default=None,
+        help="Optional Tobii tracker URI to calibrate directly.",
+    )
+    calibrate_eyetracker.add_argument(
+        "--serial-number",
+        default=None,
+        help="Optional Tobii tracker serial number to calibrate directly.",
+    )
+    calibrate_eyetracker.add_argument(
+        "--screen",
+        type=int,
+        default=1,
+        help="Display index for calibration. Default 1 targets the second screen.",
+    )
+    calibrate_eyetracker.add_argument(
+        "--manager",
+        default=None,
+        help="Path to Tobii Pro Eye Tracker Manager executable.",
+    )
+    calibrate_eyetracker.add_argument(
+        "--output",
+        default="calibrations",
+        help="Directory where calibration artifacts are saved.",
+    )
+
     demo_calibration = subparsers.add_parser(
         "demo-calibration",
         help="Run the bundled Gap-Overlap reward calibration sequence in PsychoPy.",
@@ -53,9 +85,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--windowed",
         action="store_false",
         dest="fullscreen",
-        help="Run in a window. This is the default.",
+        help="Run in a window.",
     )
-    demo_calibration.set_defaults(fullscreen=False)
+    demo_calibration.set_defaults(fullscreen=True)
+    demo_calibration.add_argument(
+        "--screen",
+        type=int,
+        default=1,
+        help="Display index for calibration. Default 1 targets the second screen.",
+    )
     demo_calibration.add_argument(
         "--size",
         default="1024x768",
@@ -290,6 +328,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(
     argv: Sequence[str] | None = None,
     demo_calibration_runner: DemoCalibrationRunner | None = None,
+    calibrate_eyetracker_runner: CalibrateEyeTrackerRunner | None = None,
     demo_activity_monitoring_runner: DemoActivityMonitoringRunner | None = None,
     demo_social_interactive_runner: DemoSocialInteractiveRunner | None = None,
     demo_static_social_scenes_runner: DemoStaticSocialScenesRunner | None = None,
@@ -315,6 +354,24 @@ def main(
 
         return runner(address=args.address)
 
+    if args.command == "calibrate-eyetracker":
+        runner = calibrate_eyetracker_runner
+        if runner is None:
+            from aria_et.eyetracker import run_eyetracker_manager_calibration
+
+            runner = run_eyetracker_manager_calibration
+
+        kwargs = {
+            "address": args.address,
+            "serial_number": args.serial_number,
+            "screen": args.screen,
+            "calibration_output_dir": args.output,
+        }
+        if args.manager is not None:
+            kwargs["executable"] = args.manager
+
+        return runner(**kwargs)
+
     if args.command == "demo-calibration":
         runner = demo_calibration_runner
         if runner is None:
@@ -326,6 +383,7 @@ def main(
 
         return runner(
             fullscreen=args.fullscreen,
+            screen=args.screen,
             window_size=parse_window_size(args.size),
             play_sound=not args.no_sound,
             point_duration_seconds=args.point_duration,
