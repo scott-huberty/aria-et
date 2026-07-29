@@ -312,9 +312,15 @@ def run_static_social_scenes_session(
     tracker: str,
     tracker_address: str | None = None,
     output_dir: str,
+    subject: str,
+    session: str | None = None,
+    run: str | None = None,
     fullscreen: bool = False,
     screen: int = 1,
     window_size: tuple[int, int] = (1024, 768),
+    screen_distance_meters: float = 0.65,
+    screen_resolution_pixels: tuple[int, int] = (1920, 1080),
+    screen_size_meters: tuple[float, float] = (0.527, 0.296),
     play_sound: bool = True,
     trial_limit: int | None = None,
     debug_render: bool = False,
@@ -362,7 +368,43 @@ def run_static_social_scenes_session(
         tracker=tracker,
         tracker_address=tracker_address,
         output_dir=output_dir,
+        bids=_bids_metadata(subject, session, run),
+        stimulus_display=_stimulus_display_metadata(
+            screen=screen,
+            fullscreen=fullscreen,
+            window_size=window_size,
+            screen_distance_meters=screen_distance_meters,
+            screen_resolution_pixels=screen_resolution_pixels,
+            screen_size_meters=screen_size_meters,
+        ),
         present=present,
+    )
+
+
+def _bids_metadata(subject: str, session: str | None, run: str | None):
+    from aria_et.session import BidsSessionMetadata
+
+    return BidsSessionMetadata(subject=subject, session=session, run=run)
+
+
+def _stimulus_display_metadata(
+    *,
+    screen: int,
+    fullscreen: bool,
+    window_size: tuple[int, int],
+    screen_distance_meters: float,
+    screen_resolution_pixels: tuple[int, int],
+    screen_size_meters: tuple[float, float],
+):
+    from aria_et.session import StimulusDisplayMetadata
+
+    return StimulusDisplayMetadata(
+        screen_distance_meters=screen_distance_meters,
+        screen_resolution_pixels=screen_resolution_pixels,
+        screen_size_meters=screen_size_meters,
+        psychopy_screen=screen,
+        fullscreen=fullscreen,
+        window_size_pixels=window_size,
     )
 
 

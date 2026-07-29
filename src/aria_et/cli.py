@@ -11,6 +11,9 @@ from aria_et.tasks import BATTERY_ORDER
 
 DEFAULT_ETM_SCREEN = 2
 DEFAULT_PSYCHOPY_SCREEN = 1
+DEFAULT_EIZO_SCREEN_DISTANCE_METERS = 0.65
+DEFAULT_EIZO_SCREEN_RESOLUTION = "1920x1080"
+DEFAULT_EIZO_SCREEN_SIZE_METERS = "0.527x0.296"
 
 DemoCalibrationRunner = Callable[..., int]
 CalibrateEyeTrackerRunner = Callable[..., int]
@@ -22,6 +25,7 @@ CheckEyeTrackerRunner = Callable[..., int]
 RunActivityMonitoringRunner = Callable[..., int]
 RunStaticSocialScenesRunner = Callable[..., int]
 RunPupillaryLightReflexRunner = Callable[..., int]
+ExportBidsRunner = Callable[..., object]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -31,6 +35,25 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "list-tasks",
         help="Print the configured battery order.",
+    )
+
+    export_bids = subparsers.add_parser(
+        "export-bids",
+        help="Export an ARIA acquisition run directory to BIDS eyetracking files.",
+    )
+    export_bids.add_argument(
+        "--input",
+        "--run-dir",
+        dest="run_dir",
+        required=True,
+        help="ARIA run directory containing session.json, events.jsonl, and gaze.jsonl.",
+    )
+    export_bids.add_argument(
+        "--output",
+        "--bids-root",
+        dest="bids_root",
+        required=True,
+        help="BIDS dataset root directory to write.",
     )
 
     check_eyetracker = subparsers.add_parser(
@@ -350,12 +373,27 @@ def main(
     run_activity_monitoring_runner: RunActivityMonitoringRunner | None = None,
     run_static_social_scenes_runner: RunStaticSocialScenesRunner | None = None,
     run_pupillary_light_reflex_runner: RunPupillaryLightReflexRunner | None = None,
+    export_bids_runner: ExportBidsRunner | None = None,
 ) -> int:
     args = build_parser().parse_args(argv)
 
     if args.command == "list-tasks":
         for task in BATTERY_ORDER:
             print(task.task_id)
+        return 0
+
+    if args.command == "export-bids":
+        runner = export_bids_runner
+        if runner is None:
+            from aria_et.bids import export_run_to_bids
+
+            runner = export_run_to_bids
+
+        result = runner(run_dir=args.run_dir, bids_root=args.bids_root)
+        written_files = getattr(result, "written_files", ())
+        print(f"Exported BIDS eyetracking files to {result.bids_root}.")
+        for path in written_files:
+            print(path)
         return 0
 
     if args.command == "check-eyetracker":
@@ -433,9 +471,15 @@ def main(
             tracker=args.tracker,
             tracker_address=args.address,
             output_dir=args.output,
+            subject=args.subject,
+            session=args.session,
+            run=args.run,
             fullscreen=args.fullscreen,
             screen=args.screen,
             window_size=parse_window_size(args.size),
+            screen_distance_meters=args.screen_distance_meters,
+            screen_resolution_pixels=parse_window_size(args.screen_resolution),
+            screen_size_meters=parse_float_pair(args.screen_size_meters),
             play_sound=not args.no_sound,
             trial_limit=args.trial_limit,
             debug_render=args.debug_render,
@@ -486,9 +530,15 @@ def main(
             tracker=args.tracker,
             tracker_address=args.address,
             output_dir=args.output,
+            subject=args.subject,
+            session=args.session,
+            run=args.run,
             fullscreen=args.fullscreen,
             screen=args.screen,
             window_size=parse_window_size(args.size),
+            screen_distance_meters=args.screen_distance_meters,
+            screen_resolution_pixels=parse_window_size(args.screen_resolution),
+            screen_size_meters=parse_float_pair(args.screen_size_meters),
             play_sound=not args.no_sound,
             trial_limit=args.trial_limit,
             debug_render=args.debug_render,
@@ -526,9 +576,15 @@ def main(
             tracker=args.tracker,
             tracker_address=args.address,
             output_dir=args.output,
+            subject=args.subject,
+            session=args.session,
+            run=args.run,
             fullscreen=args.fullscreen,
             screen=args.screen,
             window_size=parse_window_size(args.size),
+            screen_distance_meters=args.screen_distance_meters,
+            screen_resolution_pixels=parse_window_size(args.screen_resolution),
+            screen_size_meters=parse_float_pair(args.screen_size_meters),
             play_sound=not args.no_sound,
             trial_limit=args.trial_limit,
             inter_trial_attention_seconds=args.attention_cue_seconds,
@@ -558,8 +614,25 @@ def _add_run_presentation_arguments(
     )
     parser.add_argument(
         "--output",
+        "--output-dir",
+        dest="output",
         required=True,
         help="Directory where session artifacts will be written.",
+    )
+    parser.add_argument(
+        "--subject",
+        required=True,
+        help="BIDS subject label without the sub- prefix.",
+    )
+    parser.add_argument(
+        "--session",
+        default=None,
+        help="Optional BIDS session label without the ses- prefix.",
+    )
+    parser.add_argument(
+        "--run",
+        default="01",
+        help="BIDS run label. Default: 01.",
     )
     display_mode = parser.add_mutually_exclusive_group()
     display_mode.add_argument(
@@ -579,6 +652,22 @@ def _add_run_presentation_arguments(
         "--size",
         default="1024x768",
         help="Window size for --windowed mode, formatted as WIDTHxHEIGHT.",
+    )
+    parser.add_argument(
+        "--screen-distance-meters",
+        type=float,
+        default=DEFAULT_EIZO_SCREEN_DISTANCE_METERS,
+        help="Participant eye-to-screen distance in meters for BIDS metadata.",
+    )
+    parser.add_argument(
+        "--screen-resolution",
+        default=DEFAULT_EIZO_SCREEN_RESOLUTION,
+        help="Stimulus screen resolution in pixels, formatted as WIDTHxHEIGHT.",
+    )
+    parser.add_argument(
+        "--screen-size-meters",
+        default=DEFAULT_EIZO_SCREEN_SIZE_METERS,
+        help="Stimulus screen physical size in meters, formatted as WIDTHxHEIGHT.",
     )
     parser.add_argument(
         "--no-sound",
@@ -617,6 +706,16 @@ def parse_window_size(value: str) -> tuple[int, int]:
     except ValueError as error:
         raise argparse.ArgumentTypeError(
             f"Expected size formatted as WIDTHxHEIGHT: {value}"
+        ) from error
+
+
+def parse_float_pair(value: str) -> tuple[float, float]:
+    try:
+        width, height = value.lower().split("x", maxsplit=1)
+        return float(width), float(height)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            f"Expected pair formatted as WIDTHxHEIGHT: {value}"
         ) from error
 
 

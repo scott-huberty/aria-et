@@ -1,7 +1,11 @@
 import json
 
 from aria_et.runtime import RuntimeEvent
-from aria_et.session import run_recording_session
+from aria_et.session import (
+    BidsSessionMetadata,
+    StimulusDisplayMetadata,
+    run_recording_session,
+)
 
 
 class FakeRecorder:
@@ -141,3 +145,41 @@ def test_run_recording_session_records_events_and_gaze_for_tobii(tmp_path):
     assert json.loads((output_dir / "events.jsonl").read_text())["name"] == (
         "task.started"
     )
+
+
+def test_run_recording_session_writes_bids_and_display_metadata(tmp_path):
+    output_dir = tmp_path / "run-plr"
+
+    exit_code = run_recording_session(
+        task_id="pupillary-light-reflex",
+        tracker="none",
+        output_dir=output_dir,
+        present=lambda event_sink: None,
+        bids=BidsSessionMetadata(subject="01", session="baseline", run="02"),
+        stimulus_display=StimulusDisplayMetadata(
+            screen_distance_meters=0.6,
+            screen_origin=("top", "left"),
+            screen_resolution_pixels=(1920, 1080),
+            screen_size_meters=(0.527, 0.296),
+            psychopy_screen=1,
+            fullscreen=True,
+            window_size_pixels=(1024, 768),
+        ),
+    )
+
+    assert exit_code == 0
+    metadata = json.loads((output_dir / "session.json").read_text())
+    assert metadata["bids"] == {
+        "subject": "01",
+        "session": "baseline",
+        "run": "02",
+    }
+    assert metadata["stimulus_display"] == {
+        "screen_distance_meters": 0.6,
+        "screen_origin": ["top", "left"],
+        "screen_resolution_pixels": [1920, 1080],
+        "screen_size_meters": [0.527, 0.296],
+        "psychopy_screen": 1,
+        "fullscreen": True,
+        "window_size_pixels": [1024, 768],
+    }

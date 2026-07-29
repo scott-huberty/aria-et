@@ -1,6 +1,8 @@
 import pytest
+from pathlib import Path
+from types import SimpleNamespace
 
-from aria_et.cli import main, parse_window_size
+from aria_et.cli import main, parse_float_pair, parse_window_size
 
 
 def test_list_tasks_prints_battery_order(capsys):
@@ -43,6 +45,32 @@ def test_check_eyetracker_passes_explicit_address_to_injected_runner():
 
     assert exit_code == 0
     assert calls == [{"address": "tobii-prp://169.254.10.180"}]
+
+
+def test_export_bids_invokes_injected_runner(capsys):
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(
+            bids_root=Path("bids-out"),
+            written_files=(Path("bids-out/dataset_description.json"),),
+        )
+
+    exit_code = main(
+        [
+            "export-bids",
+            "--input",
+            "runs/plr-smoke",
+            "--output",
+            "bids-out",
+        ],
+        export_bids_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls == [{"run_dir": "runs/plr-smoke", "bids_root": "bids-out"}]
+    assert "Exported BIDS eyetracking files to bids-out" in capsys.readouterr().out
 
 
 def test_calibrate_eyetracker_invokes_manager_runner_with_production_defaults():
@@ -277,6 +305,8 @@ def test_run_activity_monitoring_invokes_injected_runner():
             "none",
             "--output",
             "runs/test-am",
+            "--subject",
+            "01",
             "--fullscreen",
             "--size",
             "800x600",
@@ -294,9 +324,15 @@ def test_run_activity_monitoring_invokes_injected_runner():
             "tracker": "none",
             "tracker_address": None,
             "output_dir": "runs/test-am",
+            "subject": "01",
+            "session": None,
+            "run": "01",
             "fullscreen": True,
             "screen": 1,
             "window_size": (800, 600),
+            "screen_distance_meters": 0.65,
+            "screen_resolution_pixels": (1920, 1080),
+            "screen_size_meters": (0.527, 0.296),
             "play_sound": False,
             "trial_limit": 2,
             "debug_render": True,
@@ -386,6 +422,8 @@ def test_run_static_social_scenes_invokes_injected_runner():
             "none",
             "--output",
             "runs/test-ss",
+            "--subject",
+            "01",
         ],
         run_static_social_scenes_runner=runner,
     )
@@ -396,9 +434,15 @@ def test_run_static_social_scenes_invokes_injected_runner():
             "tracker": "none",
             "tracker_address": None,
             "output_dir": "runs/test-ss",
+            "subject": "01",
+            "session": None,
+            "run": "01",
             "fullscreen": True,
             "screen": 1,
             "window_size": (1024, 768),
+            "screen_distance_meters": 0.65,
+            "screen_resolution_pixels": (1920, 1080),
+            "screen_size_meters": (0.527, 0.296),
             "play_sound": True,
             "trial_limit": None,
             "debug_render": False,
@@ -457,8 +501,20 @@ def test_run_pupillary_light_reflex_invokes_injected_runner():
             "none",
             "--output",
             "runs/test-plr",
+            "--subject",
+            "01",
+            "--session",
+            "baseline",
+            "--run",
+            "02",
             "--screen",
             "2",
+            "--screen-distance-meters",
+            "0.6",
+            "--screen-resolution",
+            "1280x720",
+            "--screen-size-meters",
+            "0.4x0.2",
             "--attention-cue-seconds",
             "0",
         ],
@@ -471,9 +527,15 @@ def test_run_pupillary_light_reflex_invokes_injected_runner():
             "tracker": "none",
             "tracker_address": None,
             "output_dir": "runs/test-plr",
+            "subject": "01",
+            "session": "baseline",
+            "run": "02",
             "fullscreen": True,
             "screen": 2,
             "window_size": (1024, 768),
+            "screen_distance_meters": 0.6,
+            "screen_resolution_pixels": (1280, 720),
+            "screen_size_meters": (0.4, 0.2),
             "play_sound": True,
             "trial_limit": None,
             "inter_trial_attention_seconds": 0,
@@ -498,6 +560,8 @@ def test_run_pupillary_light_reflex_passes_explicit_tracker_address():
             "tobii-prp://169.254.10.180",
             "--output",
             "runs/test-plr",
+            "--subject",
+            "01",
         ],
         run_pupillary_light_reflex_runner=runner,
     )
@@ -530,3 +594,7 @@ def test_parse_window_size():
 def test_parse_window_size_rejects_invalid_format():
     with pytest.raises(Exception, match="Expected size"):
         parse_window_size("nope")
+
+
+def test_parse_float_pair():
+    assert parse_float_pair("0.527x0.296") == (0.527, 0.296)
