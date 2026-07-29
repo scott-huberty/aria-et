@@ -5,6 +5,11 @@ from types import SimpleNamespace
 from aria_et.cli import main, parse_float_pair, parse_window_size
 
 
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+
 def test_list_tasks_prints_battery_order(capsys):
     exit_code = main(["list-tasks"])
 
@@ -182,6 +187,62 @@ def test_calibrate_eyetracker_can_set_output_directory():
             "screen": 2,
         }
     ]
+
+
+def test_cli_uses_user_config_defaults(tmp_path):
+    config_path = tmp_path / ".aria-et" / "config.toml"
+    config_path.parent.mkdir()
+    config_path.write_text(
+        """
+[data]
+root = "~/configured-data"
+
+[display]
+etm_screen = 4
+psychopy_screen = 3
+screen_distance_meters = 0.72
+screen_resolution = "2560x1440"
+screen_size_meters = "0.6x0.34"
+
+[tobii]
+eye_tracker_manager = "/Applications/ConfiguredETM"
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    calibration_calls = []
+    run_calls = []
+
+    def calibration_runner(**kwargs):
+        calibration_calls.append(kwargs)
+        return 0
+
+    def run_runner(**kwargs):
+        run_calls.append(kwargs)
+        return 0
+
+    assert (
+        main(
+            ["calibrate-eyetracker"],
+            calibrate_eyetracker_runner=calibration_runner,
+        )
+        == 0
+    )
+    assert (
+        main(
+            ["run-am", "--tracker", "none", "--subject", "1"],
+            run_activity_monitoring_runner=run_runner,
+        )
+        == 0
+    )
+
+    assert calibration_calls[0]["screen"] == 4
+    assert calibration_calls[0]["executable"] == "/Applications/ConfiguredETM"
+    assert run_calls[0]["output_dir"] == tmp_path / "configured-data" / "sourcedata"
+    assert run_calls[0]["screen"] == 3
+    assert run_calls[0]["screen_distance_meters"] == 0.72
+    assert run_calls[0]["screen_resolution_pixels"] == (2560, 1440)
+    assert run_calls[0]["screen_size_meters"] == (0.6, 0.34)
 
 
 def test_demo_calibration_invokes_injected_runner():

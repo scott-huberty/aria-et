@@ -7,15 +7,9 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from aria_et.config import AriaEtConfig, load_config
 from aria_et.tasks import BATTERY_ORDER
 
-
-DEFAULT_ETM_SCREEN = 2
-DEFAULT_PSYCHOPY_SCREEN = 1
-DEFAULT_EIZO_SCREEN_DISTANCE_METERS = 0.65
-DEFAULT_EIZO_SCREEN_RESOLUTION = "1920x1080"
-DEFAULT_EIZO_SCREEN_SIZE_METERS = "0.527x0.296"
-DEFAULT_DATA_DIR_NAME = "aria-et-data"
 
 DemoCalibrationRunner = Callable[..., int]
 CalibrateEyeTrackerRunner = Callable[..., int]
@@ -30,7 +24,8 @@ RunPupillaryLightReflexRunner = Callable[..., int]
 ExportBidsRunner = Callable[..., object]
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
+    config = config or load_config()
     parser = argparse.ArgumentParser(prog="aria-et")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -55,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--bids-root",
         dest="bids_root",
         default=None,
-        help="BIDS dataset root directory to write. Defaults to ~/aria-et-data/bids.",
+        help=f"BIDS dataset root directory to write. Defaults to {config.data_root / 'bids'}.",
     )
 
     check_eyetracker = subparsers.add_parser(
@@ -85,15 +80,15 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate_eyetracker.add_argument(
         "--screen",
         type=int,
-        default=DEFAULT_ETM_SCREEN,
+        default=config.etm_screen,
         help=(
-            "ETM display number for calibration. Default 2 targets the EIZO "
-            "stimulus display in the lab setup."
+            "ETM display number for calibration. Defaults to the configured "
+            "EIZO stimulus display."
         ),
     )
     calibrate_eyetracker.add_argument(
         "--manager",
-        default=None,
+        default=config.eye_tracker_manager,
         help="Path to Tobii Pro Eye Tracker Manager executable.",
     )
     calibrate_eyetracker.add_argument(
@@ -122,10 +117,10 @@ def build_parser() -> argparse.ArgumentParser:
     demo_calibration.add_argument(
         "--screen",
         type=int,
-        default=DEFAULT_PSYCHOPY_SCREEN,
+        default=config.psychopy_screen,
         help=(
-            "PsychoPy display index. Default 1 targets the EIZO stimulus "
-            "display in the lab setup."
+            "PsychoPy display index. Defaults to the configured EIZO "
+            "stimulus display."
         ),
     )
     demo_calibration.add_argument(
@@ -172,7 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run in a window. This is the default.",
     )
     demo_am.set_defaults(fullscreen=False)
-    _add_screen_argument(demo_am)
+    _add_screen_argument(demo_am, config)
     demo_am.add_argument(
         "--size",
         default="1024x768",
@@ -201,6 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_presentation_arguments(
         run_am,
+        config,
         no_sound_help="Disable static-trial soundtrack playback.",
         trial_limit_help="Limit the number of AM trials.",
         debug_help="Print AM rendering diagnostics.",
@@ -223,7 +219,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run in a window. This is the default.",
     )
     demo_si.set_defaults(fullscreen=False)
-    _add_screen_argument(demo_si)
+    _add_screen_argument(demo_si, config)
     demo_si.add_argument(
         "--size",
         default="1024x768",
@@ -263,7 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run in a window. This is the default.",
     )
     demo_ss.set_defaults(fullscreen=False)
-    _add_screen_argument(demo_ss)
+    _add_screen_argument(demo_ss, config)
     demo_ss.add_argument(
         "--size",
         default="1024x768",
@@ -292,6 +288,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_presentation_arguments(
         run_ss,
+        config,
         no_sound_help="Disable per-trial soundtrack playback.",
         trial_limit_help="Limit the number of SS trials.",
         debug_help="Print SS rendering diagnostics.",
@@ -314,7 +311,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run in a window. This is the default.",
     )
     demo_plr.set_defaults(fullscreen=False)
-    _add_screen_argument(demo_plr)
+    _add_screen_argument(demo_plr, config)
     demo_plr.add_argument(
         "--size",
         default="1024x768",
@@ -343,6 +340,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_presentation_arguments(
         run_plr,
+        config,
         no_sound_help="Disable movie audio playback.",
         trial_limit_help="Limit the number of PLR trials.",
         debug_help="Print PLR rendering diagnostics.",
@@ -364,7 +362,8 @@ def main(
     run_pupillary_light_reflex_runner: RunPupillaryLightReflexRunner | None = None,
     export_bids_runner: ExportBidsRunner | None = None,
 ) -> int:
-    args = build_parser().parse_args(argv)
+    config = load_config()
+    args = build_parser(config).parse_args(argv)
 
     if args.command == "list-tasks":
         for task in BATTERY_ORDER:
@@ -378,7 +377,10 @@ def main(
 
             runner = export_run_to_bids
 
-        result = runner(run_dir=args.run_dir, bids_root=args.bids_root or default_bids_root())
+        result = runner(
+            run_dir=args.run_dir,
+            bids_root=args.bids_root or default_bids_root(config),
+        )
         written_files = getattr(result, "written_files", ())
         print(f"Exported BIDS eyetracking files to {result.bids_root}.")
         for path in written_files:
@@ -459,7 +461,7 @@ def main(
         return runner(
             tracker=args.tracker,
             tracker_address=args.address,
-            output_dir=args.output or default_sourcedata_root(),
+            output_dir=args.output or default_sourcedata_root(config),
             subject=args.subject,
             session=args.session,
             run=args.run,
@@ -518,7 +520,7 @@ def main(
         return runner(
             tracker=args.tracker,
             tracker_address=args.address,
-            output_dir=args.output or default_sourcedata_root(),
+            output_dir=args.output or default_sourcedata_root(config),
             subject=args.subject,
             session=args.session,
             run=args.run,
@@ -563,7 +565,7 @@ def main(
         return runner(
             tracker=args.tracker,
             tracker_address=args.address,
-            output_dir=args.output or default_sourcedata_root(),
+            output_dir=args.output or default_sourcedata_root(config),
             subject=args.subject,
             session=args.session,
             run=args.run,
@@ -583,6 +585,7 @@ def main(
 
 def _add_run_presentation_arguments(
     parser: argparse.ArgumentParser,
+    config: AriaEtConfig,
     *,
     no_sound_help: str,
     trial_limit_help: str,
@@ -604,7 +607,10 @@ def _add_run_presentation_arguments(
         "--output-dir",
         dest="output",
         default=None,
-        help="Root directory where session artifacts will be written. Defaults to ~/aria-et-data/sourcedata.",
+        help=(
+            "Root directory where session artifacts will be written. "
+            f"Defaults to {config.data_root / 'sourcedata'}."
+        ),
     )
     parser.add_argument(
         "--subject",
@@ -634,7 +640,7 @@ def _add_run_presentation_arguments(
         help="Run in a window.",
     )
     parser.set_defaults(fullscreen=True)
-    _add_screen_argument(parser)
+    _add_screen_argument(parser, config)
     parser.add_argument(
         "--size",
         default="1024x768",
@@ -643,17 +649,17 @@ def _add_run_presentation_arguments(
     parser.add_argument(
         "--screen-distance-meters",
         type=float,
-        default=DEFAULT_EIZO_SCREEN_DISTANCE_METERS,
+        default=config.screen_distance_meters,
         help="Participant eye-to-screen distance in meters for BIDS metadata.",
     )
     parser.add_argument(
         "--screen-resolution",
-        default=DEFAULT_EIZO_SCREEN_RESOLUTION,
+        default=config.screen_resolution,
         help="Stimulus screen resolution in pixels, formatted as WIDTHxHEIGHT.",
     )
     parser.add_argument(
         "--screen-size-meters",
-        default=DEFAULT_EIZO_SCREEN_SIZE_METERS,
+        default=config.screen_size_meters,
         help="Stimulus screen physical size in meters, formatted as WIDTHxHEIGHT.",
     )
     parser.add_argument(
@@ -674,26 +680,26 @@ def _add_run_presentation_arguments(
     )
 
 
-def default_data_root() -> Path:
-    return Path.home() / DEFAULT_DATA_DIR_NAME
+def default_data_root(config: AriaEtConfig | None = None) -> Path:
+    return (config or load_config()).data_root
 
 
-def default_sourcedata_root() -> Path:
-    return default_data_root() / "sourcedata"
+def default_sourcedata_root(config: AriaEtConfig | None = None) -> Path:
+    return default_data_root(config) / "sourcedata"
 
 
-def default_bids_root() -> Path:
-    return default_data_root() / "bids"
+def default_bids_root(config: AriaEtConfig | None = None) -> Path:
+    return default_data_root(config) / "bids"
 
 
-def _add_screen_argument(parser: argparse.ArgumentParser) -> None:
+def _add_screen_argument(parser: argparse.ArgumentParser, config: AriaEtConfig) -> None:
     parser.add_argument(
         "--screen",
         type=int,
-        default=DEFAULT_PSYCHOPY_SCREEN,
+        default=config.psychopy_screen,
         help=(
-            "PsychoPy display index. Default 1 targets the EIZO stimulus "
-            "display in the lab setup."
+            "PsychoPy display index. Defaults to the configured EIZO "
+            "stimulus display."
         ),
     )
 
