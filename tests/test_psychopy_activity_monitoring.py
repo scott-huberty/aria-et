@@ -1,5 +1,6 @@
 import sys
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 
 from aria_et.activity_monitoring import build_activity_monitoring_sequence
 from aria_et.psychopy.activity_monitoring import PsychoPyActivityMonitoringPresenter
@@ -233,6 +234,53 @@ def test_activity_monitoring_presenter_can_limit_trials_for_demos():
 
     assert [trial.trial_id for trial in result.presented_trials] == ["am-01", "am-02"]
     assert event_sink.events[-1].payload["trial_count"] == 2
+
+
+def test_activity_monitoring_default_movie_factory_uses_configured_speaker(monkeypatch):
+    calls = []
+
+    class FakeVisual:
+        @staticmethod
+        def MovieStim(*args, **kwargs):
+            calls.append((args, kwargs))
+            return "movie"
+
+    monkeypatch.setitem(sys.modules, "psychopy", SimpleNamespace(visual=FakeVisual))
+
+    presenter = PsychoPyActivityMonitoringPresenter(
+        window=FakeWindow(),
+        audio_speaker="EV2480",
+    )
+
+    movie = presenter._movie_factory()(FakeWindow(), "movie.mp4")
+
+    assert movie == "movie"
+    assert calls[0][1]["filename"] == "movie.mp4"
+    assert calls[0][1]["audioDevice"] == "EV2480"
+    assert calls[0][1]["noAudio"] is False
+
+
+def test_activity_monitoring_default_sound_factory_uses_configured_speaker(monkeypatch):
+    calls = []
+
+    class FakeSoundModule:
+        @staticmethod
+        def Sound(*args, **kwargs):
+            calls.append((args, kwargs))
+            return "sound"
+
+    monkeypatch.setitem(sys.modules, "psychopy", SimpleNamespace(sound=FakeSoundModule))
+
+    presenter = PsychoPyActivityMonitoringPresenter(
+        window=FakeWindow(),
+        audio_speaker="EV2480",
+    )
+
+    sound = presenter._sound_factory()("satie.wav")
+
+    assert sound == "sound"
+    assert calls[0][0] == ("satie.wav",)
+    assert calls[0][1]["speaker"] == "EV2480"
 
 
 def test_importing_activity_monitoring_presenter_does_not_import_psychopy():

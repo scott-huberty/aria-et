@@ -80,6 +80,7 @@ class PsychoPyActivityMonitoringPresenter:
     sound_factory: SoundFactory | None = None
     wait: Wait | None = None
     play_sound: bool = True
+    audio_speaker: str | None = None
     trial_limit: int | None = None
     frame_duration_seconds: float = 1 / 30
     inter_trial_interval_seconds: float = 1.0
@@ -267,6 +268,8 @@ class PsychoPyActivityMonitoringPresenter:
         return lambda window, movie: visual.MovieStim(
             window,
             filename=movie,
+            noAudio=not self.play_sound,
+            audioDevice=self.audio_speaker if self.play_sound else None,
         )
 
     def _sound_factory(self) -> SoundFactory:
@@ -275,7 +278,7 @@ class PsychoPyActivityMonitoringPresenter:
 
         from psychopy import sound
 
-        return lambda path: sound.Sound(path)
+        return lambda path: sound.Sound(path, speaker=self.audio_speaker)
 
     def _wait(self) -> Wait:
         if self.wait is not None:
@@ -374,6 +377,7 @@ def run_activity_monitoring_demo(
         presenter = PsychoPyActivityMonitoringPresenter(
             window=window,
             play_sound=play_sound,
+            audio_speaker=audio_speaker,
             trial_limit=trial_limit,
             render_status=status if debug_render else None,
         )
@@ -448,6 +452,7 @@ def run_activity_monitoring_session(
             presenter = PsychoPyActivityMonitoringPresenter(
                 window=window,
                 play_sound=play_sound,
+                audio_speaker=audio_speaker,
                 trial_limit=trial_limit,
                 render_status=status if debug_render else None,
             )
