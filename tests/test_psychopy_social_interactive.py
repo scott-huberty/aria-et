@@ -104,9 +104,9 @@ def test_social_interactive_presenter_uses_movie_factory_with_play_condition_met
         "parallel-play",
     ]
     assert len(factories.movie_plays) == 2
-    assert factories.movie_plays[0][0].endswith("sibs1_non_15s.avi")
+    assert factories.movie_plays[0][0].endswith("sibs1_non_15s.mp4")
     assert factories.movie_plays[0][1] is True
-    assert factories.movie_plays[1][0].endswith("sibs5_non_15s.avi")
+    assert factories.movie_plays[1][0].endswith("sibs5_non_15s.mp4")
     assert event_sink.events[1].payload["block_id"] == "SI-B1"
     assert event_sink.events[1].payload["play_condition"] == "parallel-play"
 

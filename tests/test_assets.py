@@ -52,8 +52,8 @@ def test_static_social_scenes_assets_resolve_bundled_images_and_soundtracks():
 def test_social_interactive_assets_resolve_bundled_videos():
     assets = social_interactive_assets()
 
-    assert assets.video("sibs1_non_15s.avi").is_file()
-    assert assets.video("sibs11_soc_15s.avi").is_file()
+    assert assets.video("sibs1_non_15s.mp4").is_file()
+    assert assets.video("sibs11_soc_15s.mp4").is_file()
 
 
 def test_pupillary_light_reflex_assets_resolve_bundled_videos():
