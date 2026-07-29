@@ -121,14 +121,19 @@ def test_export_run_to_bids_writes_binocular_physio_and_events(tmp_path):
     ) as fid:
         rows = fid.read().splitlines()
     assert rows == [
-        "timestamp\tx_coordinate\ty_coordinate\tpupil_size",
         "0.0\t480.0\t810.0\t4.1",
         "0.002\tn/a\tn/a\tn/a",
     ]
+    gzip_payload = base.with_name(
+        base.name + "_recording-eye1_physio.tsv.gz"
+    ).read_bytes()
+    assert gzip_payload[3] == 0
+    assert gzip_payload[4:8] == b"\x00\x00\x00\x00"
 
     sidecar = json.loads(
         base.with_name(base.name + "_recording-eye1_physio.json").read_text()
     )
+    assert sidecar["TaskName"] == "PupillaryLightReflex"
     assert sidecar["PhysioType"] == "eyetrack"
     assert sidecar["RecordedEye"] == "left"
     assert sidecar["SamplingFrequency"] == 500.0
@@ -137,6 +142,8 @@ def test_export_run_to_bids_writes_binocular_physio_and_events(tmp_path):
     events_sidecar = json.loads(
         (tmp_path / "bids" / "task-PupillaryLightReflex_events.json").read_text()
     )
+    assert events_sidecar["onset"]["Format"] == "number"
+    assert events_sidecar["duration"]["Format"] == "number"
     assert events_sidecar["StimulusPresentation"] == {
         "ScreenDistance": 0.6,
         "ScreenOrigin": ["top", "left"],

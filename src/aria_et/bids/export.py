@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import gzip
+import io
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,6 +55,7 @@ def export_run_to_bids(
         written.append(
             _write_physio_json(
                 beh_dir / f"{base_name}_recording-{recording}_physio.json",
+                task_label,
                 gaze_rows,
                 eye,
                 tracker,
@@ -176,11 +178,17 @@ def _write_events_json(path: Path, task_label: str, display: dict[str, Any]) -> 
             "Description": "ARIA task events exported from acquisition JSONL.",
             "OnsetSource": "timestamp",
             "onset": {
+                "Format": "number",
                 "Description": (
                     "Onset in seconds, measured from the first exported ARIA event."
-                )
+                ),
+                "Units": "s",
             },
-            "duration": {"Description": "Duration in seconds, or n/a if unknown."},
+            "duration": {
+                "Format": "number",
+                "Description": "Duration in seconds, or n/a if unknown.",
+                "Units": "s",
+            },
             "trial_type": {"Description": "ARIA runtime event name."},
             "value": {"Description": "Primary sequence, stimulus, or trial identifier."},
             "StimulusPresentation": {
@@ -220,20 +228,35 @@ def _write_physio_tsv(
             }
         )
 
-    with gzip.open(path, "wt", encoding="utf-8", newline="") as fid:
-        writer = csv.DictWriter(
-            fid,
-            fieldnames=("timestamp", "x_coordinate", "y_coordinate", "pupil_size"),
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        writer.writerows(rows)
+    with path.open("wb") as raw:
+        with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
+            fid = io.TextIOWrapper(gz, encoding="utf-8", newline="")
+            _write_headerless_tsv_rows(
+                fid,
+                ("timestamp", "x_coordinate", "y_coordinate", "pupil_size"),
+                rows,
+            )
+            fid.flush()
     return path
+
+
+def _write_headerless_tsv_rows(
+    fid: io.TextIOBase,
+    fieldnames: tuple[str, ...],
+    rows: list[dict[str, str]],
+) -> None:
+    writer = csv.DictWriter(
+        fid,
+        fieldnames=fieldnames,
+        delimiter="\t",
+        lineterminator="\n",
+    )
+    writer.writerows(rows)
 
 
 def _write_physio_json(
     path: Path,
+    task_label: str,
     gaze_rows: list[dict[str, Any]],
     eye: str,
     tracker: dict[str, Any],
@@ -245,6 +268,7 @@ def _write_physio_json(
             "ManufacturersModelName": tracker.get("model", "n/a"),
             "DeviceSerialNumber": tracker.get("serial_number", "n/a"),
             "SoftwareVersions": tracker.get("firmware_version", "n/a"),
+            "TaskName": task_label,
             "PhysioType": "eyetrack",
             "RecordedEye": eye,
             "SampleCoordinateSystem": "gaze-on-screen",
