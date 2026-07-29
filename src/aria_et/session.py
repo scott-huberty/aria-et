@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -63,6 +64,59 @@ class JsonLinesEventSink:
         self._file.close()
 
 
+class _TeeStream:
+    def __init__(self, terminal_stream, log_stream):
+        self._terminal_stream = terminal_stream
+        self._log_stream = log_stream
+
+    def write(self, text: str) -> int:
+        self._terminal_stream.write(text)
+        self._log_stream.write(text)
+        return len(text)
+
+    def flush(self) -> None:
+        self._terminal_stream.flush()
+        self._log_stream.flush()
+
+    def isatty(self) -> bool:
+        return self._terminal_stream.isatty()
+
+
+class _SessionLog:
+    def __init__(self, path: Path):
+        self.path = path
+        self._file = None
+        self._stdout = None
+        self._stderr = None
+
+    def __enter__(self):
+        self._file = self.path.open("w", encoding="utf-8")
+        self._stdout = sys.stdout
+        self._stderr = sys.stderr
+        sys.stdout = _TeeStream(sys.stdout, self._file)
+        sys.stderr = _TeeStream(sys.stderr, self._file)
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback) -> bool:
+        assert self._file is not None
+        assert self._stdout is not None
+        assert self._stderr is not None
+        if exc_type is not None:
+            self._file.write("\n")
+            traceback.print_exception(
+                exc_type,
+                exc_value,
+                exc_traceback,
+                file=self._file,
+            )
+        sys.stdout.flush()
+        sys.stderr.flush()
+        sys.stdout = self._stdout
+        sys.stderr = self._stderr
+        self._file.close()
+        return False
+
+
 def run_recording_session(
     *,
     task_id: str,
@@ -92,41 +146,43 @@ def run_recording_session(
         error(f"Output directory already exists: {output_path}")
         return 5
 
-    if tracker == "tobii":
-        check_exit_code = check_eyetracker(address=tracker_address)
-        if check_exit_code != 0:
-            return check_exit_code
-
     output_path.mkdir(parents=True)
-    _write_session_metadata(
-        output_path / "session.json",
-        task_id,
-        tracker,
-        bids=resolved_bids,
-        stimulus_display=stimulus_display,
-    )
-    event_sink = JsonLinesEventSink(output_path / "events.jsonl")
-    try:
-        if tracker == "tobii":
-            try:
-                recorder = recorder_factory(
-                    gaze_path=output_path / "gaze.jsonl",
-                    tracker_metadata_path=output_path / "tracker.json",
-                    address=tracker_address,
-                )
-            except TobiiSdkUnavailableError as error_message:
-                error(str(error_message))
-                return 2
-            except TobiiTrackerUnavailableError as error_message:
-                error(str(error_message))
-                return 3
 
-            with recorder:
+    with _SessionLog(output_path / "session.log"):
+        if tracker == "tobii":
+            check_exit_code = check_eyetracker(address=tracker_address)
+            if check_exit_code != 0:
+                return check_exit_code
+
+        _write_session_metadata(
+            output_path / "session.json",
+            task_id,
+            tracker,
+            bids=resolved_bids,
+            stimulus_display=stimulus_display,
+        )
+        event_sink = JsonLinesEventSink(output_path / "events.jsonl")
+        try:
+            if tracker == "tobii":
+                try:
+                    recorder = recorder_factory(
+                        gaze_path=output_path / "gaze.jsonl",
+                        tracker_metadata_path=output_path / "tracker.json",
+                        address=tracker_address,
+                    )
+                except TobiiSdkUnavailableError as error_message:
+                    error(str(error_message))
+                    return 2
+                except TobiiTrackerUnavailableError as error_message:
+                    error(str(error_message))
+                    return 3
+
+                with recorder:
+                    present(event_sink)
+            else:
                 present(event_sink)
-        else:
-            present(event_sink)
-    finally:
-        event_sink.close()
+        finally:
+            event_sink.close()
 
     return 0
 

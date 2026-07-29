@@ -1,4 +1,7 @@
 import json
+import sys
+
+import pytest
 
 from aria_et.runtime import RuntimeEvent
 from aria_et.session import (
@@ -80,6 +83,52 @@ def test_run_recording_session_writes_metadata_and_events_for_no_tracker(tmp_pat
     ]
 
 
+def test_run_recording_session_tees_terminal_output_to_session_log(tmp_path, capsys):
+    output_dir = tmp_path / "run-am"
+
+    def present(event_sink):
+        print("program status")
+        print("psychopy warning", file=sys.stderr)
+        event_sink.emit(RuntimeEvent("activity-monitoring.started", 1.25, {}))
+
+    exit_code = run_recording_session(
+        task_id="activity-monitoring",
+        tracker="none",
+        output_dir=output_dir,
+        present=present,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "program status" in captured.out
+    assert "psychopy warning" in captured.err
+
+    session_log = (output_dir / "session.log").read_text()
+    assert "program status" in session_log
+    assert "psychopy warning" in session_log
+
+
+def test_run_recording_session_writes_uncaught_traceback_to_session_log(tmp_path):
+    output_dir = tmp_path / "run-am"
+
+    def present(event_sink):
+        print("before crash")
+        raise RuntimeError("movie frame failed")
+
+    with pytest.raises(RuntimeError, match="movie frame failed"):
+        run_recording_session(
+            task_id="activity-monitoring",
+            tracker="none",
+            output_dir=output_dir,
+            present=present,
+        )
+
+    session_log = (output_dir / "session.log").read_text()
+    assert "before crash" in session_log
+    assert "Traceback (most recent call last)" in session_log
+    assert "RuntimeError: movie frame failed" in session_log
+
+
 def test_run_recording_session_rejects_existing_output_directory(tmp_path, capsys):
     output_dir = tmp_path / "run-am"
     output_dir.mkdir()
@@ -102,6 +151,7 @@ def test_run_recording_session_records_events_and_gaze_for_tobii(tmp_path):
 
     def check_eyetracker(**kwargs):
         check_calls.append(kwargs)
+        print("Found 1 Tobii eye tracker.")
         return 0
 
     def recorder_factory(**kwargs):
@@ -145,6 +195,7 @@ def test_run_recording_session_records_events_and_gaze_for_tobii(tmp_path):
     assert json.loads((output_dir / "events.jsonl").read_text())["name"] == (
         "task.started"
     )
+    assert "Found 1 Tobii eye tracker." in (output_dir / "session.log").read_text()
 
 
 def test_run_recording_session_writes_bids_and_display_metadata(tmp_path):
