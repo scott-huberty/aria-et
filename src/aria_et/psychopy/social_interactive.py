@@ -297,3 +297,119 @@ def run_social_interactive_demo(
         window.close()
 
     return 0
+
+
+def run_social_interactive_session(
+    *,
+    tracker: str,
+    output_dir: str,
+    subject: str,
+    tracker_address: str | None = None,
+    session: str | None = None,
+    run: str | None = None,
+    fullscreen: bool = False,
+    screen: int = 1,
+    window_size: tuple[int, int] = (1024, 768),
+    screen_distance_meters: float = 0.65,
+    screen_resolution_pixels: tuple[int, int] = (1920, 1080),
+    screen_size_meters: tuple[float, float] = (0.527, 0.296),
+    monitor_name: str = "EIZO_EV2480",
+    audio_speaker: str | None = None,
+    play_sound: bool = True,
+    trial_limit: int | None = None,
+    debug_render: bool = False,
+    status_sink: StatusSink | None = None,
+) -> int:
+    from aria_et.session import run_recording_session
+
+    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+
+    def present(event_sink: EventSink) -> None:
+        status("Importing PsychoPy...")
+        from psychopy import core, monitors, prefs, visual
+
+        from aria_et.psychopy.environment import effective_window_size, open_window
+
+        effective_size = effective_window_size(
+            fullscreen=fullscreen,
+            window_size=window_size,
+            screen_resolution_pixels=screen_resolution_pixels,
+        )
+        status(
+            "Opening PsychoPy window "
+            f"({effective_size[0]}x{effective_size[1]}, fullscreen={fullscreen}, screen={screen})..."
+        )
+        window = open_window(
+            visual_module=visual,
+            monitors_module=monitors,
+            prefs_module=prefs,
+            fullscreen=fullscreen,
+            screen=screen,
+            window_size=window_size,
+            screen_distance_meters=screen_distance_meters,
+            screen_resolution_pixels=screen_resolution_pixels,
+            screen_size_meters=screen_size_meters,
+            monitor_name=monitor_name,
+            audio_speaker=audio_speaker,
+        )
+        try:
+            status("Running Social Interactive session.")
+            presenter = PsychoPySocialInteractivePresenter(
+                window=window,
+                play_sound=play_sound,
+                trial_limit=trial_limit,
+                render_status=status if debug_render else None,
+            )
+            presenter.present(
+                build_social_interactive_sequence(),
+                PsychoPyClock(core.Clock()),
+                StatusLoggingEventSink(event_sink, status),
+            )
+            status("Social Interactive session finished.")
+        finally:
+            status("Closing PsychoPy window...")
+            window.close()
+
+    return run_recording_session(
+        task_id="social-interactive",
+        tracker=tracker,
+        tracker_address=tracker_address,
+        output_dir=output_dir,
+        bids=_bids_metadata(subject, session, run),
+        stimulus_display=_stimulus_display_metadata(
+            screen=screen,
+            fullscreen=fullscreen,
+            window_size=window_size,
+            screen_distance_meters=screen_distance_meters,
+            screen_resolution_pixels=screen_resolution_pixels,
+            screen_size_meters=screen_size_meters,
+        ),
+        present=present,
+    )
+
+
+def _bids_metadata(subject: str, session: str | None, run: str | None):
+    from aria_et.session import BidsSessionMetadata
+
+    return BidsSessionMetadata(subject=subject, session=session, run=run)
+
+
+def _stimulus_display_metadata(
+    *,
+    screen: int,
+    fullscreen: bool,
+    window_size: tuple[int, int],
+    screen_distance_meters: float,
+    screen_resolution_pixels: tuple[int, int],
+    screen_size_meters: tuple[float, float],
+):
+    from aria_et.session import StimulusDisplayMetadata
+
+    return StimulusDisplayMetadata(
+        screen_distance_meters=screen_distance_meters,
+        screen_resolution_pixels=screen_resolution_pixels,
+        screen_size_meters=screen_size_meters,
+        psychopy_screen=screen,
+        fullscreen=fullscreen,
+        window_size_pixels=screen_resolution_pixels if fullscreen else window_size,
+    )

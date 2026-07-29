@@ -24,6 +24,7 @@ DemoStaticSocialScenesRunner = Callable[..., int]
 DemoPupillaryLightReflexRunner = Callable[..., int]
 CheckEyeTrackerRunner = Callable[..., int]
 RunActivityMonitoringRunner = Callable[..., int]
+RunSocialInteractiveRunner = Callable[..., int]
 RunStaticSocialScenesRunner = Callable[..., int]
 RunPupillaryLightReflexRunner = Callable[..., int]
 ExportBidsRunner = Callable[..., object]
@@ -262,6 +263,18 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
         help="Print SI rendering diagnostics.",
     )
 
+    run_si = subparsers.add_parser(
+        "run-si",
+        help="Run Social Interactive as an acquisition session.",
+    )
+    _add_run_presentation_arguments(
+        run_si,
+        config,
+        no_sound_help="Disable movie audio playback.",
+        trial_limit_help="Limit the number of SI trials.",
+        debug_help="Print SI rendering diagnostics.",
+    )
+
     demo_ss = subparsers.add_parser(
         "demo-ss",
         help="Run the bundled Static Social Scenes sequence in PsychoPy.",
@@ -378,6 +391,7 @@ def main(
     demo_pupillary_light_reflex_runner: DemoPupillaryLightReflexRunner | None = None,
     check_eyetracker_runner: CheckEyeTrackerRunner | None = None,
     run_activity_monitoring_runner: RunActivityMonitoringRunner | None = None,
+    run_social_interactive_runner: RunSocialInteractiveRunner | None = None,
     run_static_social_scenes_runner: RunStaticSocialScenesRunner | None = None,
     run_pupillary_light_reflex_runner: RunPupillaryLightReflexRunner | None = None,
     export_bids_runner: ExportBidsRunner | None = None,
@@ -529,6 +543,36 @@ def main(
             screen_distance_meters=config.screen_distance_meters,
             screen_resolution_pixels=parse_window_size(config.screen_resolution),
             screen_size_meters=parse_float_pair(config.screen_size_meters),
+            monitor_name=config.monitor_name,
+            audio_speaker=config.audio_speaker,
+            play_sound=not args.no_sound,
+            trial_limit=args.trial_limit,
+            debug_render=args.debug_render,
+        )
+
+    if args.command == "run-si":
+        warn_if_config_missing()
+        runner = run_social_interactive_runner
+        if runner is None:
+            from aria_et.psychopy.social_interactive import (
+                run_social_interactive_session,
+            )
+
+            runner = run_social_interactive_session
+
+        return runner(
+            tracker=args.tracker,
+            tracker_address=args.address,
+            output_dir=args.output or default_sourcedata_root(config),
+            subject=args.subject,
+            session=args.session,
+            run=args.run,
+            fullscreen=args.fullscreen,
+            screen=args.screen,
+            window_size=parse_window_size(args.size),
+            screen_distance_meters=args.screen_distance_meters,
+            screen_resolution_pixels=parse_window_size(args.screen_resolution),
+            screen_size_meters=parse_float_pair(args.screen_size_meters),
             monitor_name=config.monitor_name,
             audio_speaker=config.audio_speaker,
             play_sound=not args.no_sound,

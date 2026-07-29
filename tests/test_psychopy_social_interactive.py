@@ -1,7 +1,10 @@
 import sys
 from dataclasses import dataclass, field
 
-from aria_et.psychopy.social_interactive import PsychoPySocialInteractivePresenter
+from aria_et.psychopy.social_interactive import (
+    PsychoPySocialInteractivePresenter,
+    run_social_interactive_session,
+)
 from aria_et.runtime import ManualClock, RecordingEventSink
 from aria_et.social_interactive import build_social_interactive_sequence
 
@@ -167,6 +170,49 @@ def test_social_interactive_presenter_can_limit_trials_for_demos():
 
     assert [trial.trial_id for trial in result.presented_trials] == ["si-01", "si-02"]
     assert event_sink.events[-1].payload["trial_count"] == 2
+
+
+def test_run_social_interactive_session_uses_recording_session(monkeypatch):
+    calls = []
+
+    def fake_run_recording_session(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(
+        "aria_et.session.run_recording_session",
+        fake_run_recording_session,
+    )
+
+    exit_code = run_social_interactive_session(
+        tracker="none",
+        tracker_address="tobii-prp://169.254.10.180",
+        output_dir="runs/test-si",
+        subject="01",
+        session="baseline",
+        run="02",
+        fullscreen=True,
+        screen=2,
+        window_size=(1024, 768),
+        screen_distance_meters=0.6,
+        screen_resolution_pixels=(1280, 720),
+        screen_size_meters=(0.4, 0.2),
+        monitor_name="EIZO_EV2480",
+        audio_speaker="EV2480",
+    )
+
+    assert exit_code == 0
+    assert calls[0]["task_id"] == "social-interactive"
+    assert calls[0]["tracker"] == "none"
+    assert calls[0]["tracker_address"] == "tobii-prp://169.254.10.180"
+    assert calls[0]["output_dir"] == "runs/test-si"
+    assert calls[0]["bids"].subject == "01"
+    assert calls[0]["bids"].session == "baseline"
+    assert calls[0]["bids"].run == "02"
+    assert calls[0]["stimulus_display"].psychopy_screen == 2
+    assert calls[0]["stimulus_display"].fullscreen is True
+    assert calls[0]["stimulus_display"].window_size_pixels == (1280, 720)
+    assert callable(calls[0]["present"])
 
 
 def test_importing_social_interactive_presenter_does_not_import_psychopy():

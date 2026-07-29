@@ -572,6 +572,83 @@ def test_demo_social_interactive_invokes_injected_runner():
     ]
 
 
+def test_run_social_interactive_invokes_injected_runner():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        [
+            "run-si",
+            "--tracker",
+            "none",
+            "--output",
+            "runs/test-si",
+            "--subject",
+            "01",
+            "--session",
+            "baseline",
+            "--run",
+            "02",
+            "--screen",
+            "2",
+            "--screen-distance-meters",
+            "0.6",
+            "--screen-resolution",
+            "1280x720",
+            "--screen-size-meters",
+            "0.4x0.2",
+            "--no-sound",
+            "--trial-limit",
+            "2",
+            "--debug-render",
+        ],
+        run_social_interactive_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "tracker": "none",
+            "tracker_address": None,
+            "output_dir": "runs/test-si",
+            "subject": "01",
+            "session": "baseline",
+            "run": "02",
+            "fullscreen": True,
+            "screen": 2,
+            "window_size": (1024, 768),
+            "screen_distance_meters": 0.6,
+            "screen_resolution_pixels": (1280, 720),
+            "screen_size_meters": (0.4, 0.2),
+            "monitor_name": "EIZO_EV2480",
+            "audio_speaker": None,
+            "play_sound": False,
+            "trial_limit": 2,
+            "debug_render": True,
+        }
+    ]
+
+
+def test_run_social_interactive_defaults_to_user_data_sourcedata_root(tmp_path):
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        ["run-si", "--tracker", "none", "--subject", "1"],
+        run_social_interactive_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls[0]["output_dir"] == tmp_path / "aria-et-data" / "sourcedata"
+    assert calls[0]["subject"] == "1"
+
+
 def test_demo_static_social_scenes_invokes_injected_runner():
     calls = []
 
