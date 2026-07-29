@@ -78,7 +78,16 @@ def run_recording_session(
 ) -> int:
     error = error_sink or (lambda message: print(message, file=sys.stderr))
 
-    output_path = Path(output_dir)
+    try:
+        output_path, resolved_bids = _resolve_output_path(
+            output_dir=Path(output_dir),
+            task_id=task_id,
+            bids=bids,
+        )
+    except FileExistsError as error_message:
+        error(str(error_message))
+        return 5
+
     if output_path.exists():
         error(f"Output directory already exists: {output_path}")
         return 5
@@ -93,7 +102,7 @@ def run_recording_session(
         output_path / "session.json",
         task_id,
         tracker,
-        bids=bids,
+        bids=resolved_bids,
         stimulus_display=stimulus_display,
     )
     event_sink = JsonLinesEventSink(output_path / "events.jsonl")
@@ -120,6 +129,76 @@ def run_recording_session(
         event_sink.close()
 
     return 0
+
+
+def _resolve_output_path(
+    *,
+    output_dir: Path,
+    task_id: str,
+    bids: BidsSessionMetadata | None,
+) -> tuple[Path, BidsSessionMetadata | None]:
+    if bids is None:
+        return output_dir, None
+
+    normalized_bids = _normalize_bids_metadata(bids)
+    if normalized_bids.run is None:
+        normalized_bids = BidsSessionMetadata(
+            subject=normalized_bids.subject,
+            session=normalized_bids.session,
+            run=_next_run_label(output_dir, task_id, normalized_bids),
+        )
+    output_path = _bids_run_dir(output_dir, task_id, normalized_bids)
+    if output_path.exists():
+        raise FileExistsError(f"Output directory already exists: {output_path}")
+    return output_path, normalized_bids
+
+
+def _normalize_bids_metadata(bids: BidsSessionMetadata) -> BidsSessionMetadata:
+    return BidsSessionMetadata(
+        subject=_normalize_bids_label(bids.subject, "sub-"),
+        session=_normalize_optional_bids_label(bids.session, "ses-"),
+        run=_normalize_optional_bids_label(bids.run, "run-"),
+    )
+
+
+def _normalize_optional_bids_label(value: str | None, prefix: str) -> str | None:
+    if value is None:
+        return None
+    return _normalize_bids_label(value, prefix)
+
+
+def _normalize_bids_label(value: str, prefix: str) -> str:
+    stripped = value[len(prefix) :] if value.startswith(prefix) else value
+    return stripped.zfill(2) if stripped.isdecimal() else stripped
+
+
+def _next_run_label(
+    output_dir: Path,
+    task_id: str,
+    bids: BidsSessionMetadata,
+) -> str:
+    run_number = 1
+    while True:
+        candidate = f"{run_number:02d}"
+        candidate_path = _bids_run_dir(
+            output_dir,
+            task_id,
+            BidsSessionMetadata(
+                subject=bids.subject,
+                session=bids.session,
+                run=candidate,
+            ),
+        )
+        if not candidate_path.exists():
+            return candidate
+        run_number += 1
+
+
+def _bids_run_dir(output_dir: Path, task_id: str, bids: BidsSessionMetadata) -> Path:
+    path = output_dir / f"sub-{bids.subject}"
+    if bids.session is not None:
+        path = path / f"ses-{bids.session}"
+    return path / f"task-{task_id}_run-{bids.run}"
 
 
 def _write_session_metadata(

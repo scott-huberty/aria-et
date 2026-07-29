@@ -602,7 +602,7 @@ def _add_run_presentation_arguments(
         "--output-dir",
         dest="output",
         required=True,
-        help="Directory where session artifacts will be written.",
+        help="Root directory where session artifacts will be written.",
     )
     parser.add_argument(
         "--subject",
@@ -616,8 +616,8 @@ def _add_run_presentation_arguments(
     )
     parser.add_argument(
         "--run",
-        default="01",
-        help="BIDS run label. Default: 01.",
+        default=None,
+        help="Optional BIDS run label without the run- prefix. Defaults to the next available run.",
     )
     display_mode = parser.add_mutually_exclusive_group()
     display_mode.add_argument(

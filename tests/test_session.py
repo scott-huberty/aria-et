@@ -148,12 +148,15 @@ def test_run_recording_session_records_events_and_gaze_for_tobii(tmp_path):
 
 
 def test_run_recording_session_writes_bids_and_display_metadata(tmp_path):
-    output_dir = tmp_path / "run-plr"
+    output_root = tmp_path / "runs"
+    output_dir = output_root / "sub-01" / "ses-baseline" / (
+        "task-pupillary-light-reflex_run-02"
+    )
 
     exit_code = run_recording_session(
         task_id="pupillary-light-reflex",
         tracker="none",
-        output_dir=output_dir,
+        output_dir=output_root,
         present=lambda event_sink: None,
         bids=BidsSessionMetadata(subject="01", session="baseline", run="02"),
         stimulus_display=StimulusDisplayMetadata(
@@ -183,3 +186,50 @@ def test_run_recording_session_writes_bids_and_display_metadata(tmp_path):
         "fullscreen": True,
         "window_size_pixels": [1024, 768],
     }
+
+
+def test_run_recording_session_normalizes_bids_labels_and_allocates_next_run(tmp_path):
+    output_root = tmp_path / "runs"
+    existing = output_root / "sub-01" / "ses-02" / (
+        "task-pupillary-light-reflex_run-01"
+    )
+    existing.mkdir(parents=True)
+
+    exit_code = run_recording_session(
+        task_id="pupillary-light-reflex",
+        tracker="none",
+        output_dir=output_root,
+        present=lambda event_sink: None,
+        bids=BidsSessionMetadata(subject="sub-1", session="ses-2", run=None),
+    )
+
+    output_dir = output_root / "sub-01" / "ses-02" / (
+        "task-pupillary-light-reflex_run-02"
+    )
+    assert exit_code == 0
+    assert output_dir.exists()
+    metadata = json.loads((output_dir / "session.json").read_text())
+    assert metadata["bids"] == {
+        "subject": "01",
+        "session": "02",
+        "run": "02",
+    }
+
+
+def test_run_recording_session_rejects_explicit_existing_bids_run(tmp_path, capsys):
+    output_root = tmp_path / "runs"
+    existing = output_root / "sub-01" / "ses-baseline" / (
+        "task-pupillary-light-reflex_run-01"
+    )
+    existing.mkdir(parents=True)
+
+    exit_code = run_recording_session(
+        task_id="pupillary-light-reflex",
+        tracker="none",
+        output_dir=output_root,
+        present=lambda event_sink: None,
+        bids=BidsSessionMetadata(subject="1", session="baseline", run="1"),
+    )
+
+    assert exit_code != 0
+    assert "already exists" in capsys.readouterr().err
