@@ -8,5 +8,6 @@ dependencies:
   - setuptools>=64
   - wheel
   - pip:
+      - bids-validator-deno
       - psychopy==2026.2.1
       - tobii-research
