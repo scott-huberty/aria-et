@@ -121,8 +121,23 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
     )
     calibrate_eyetracker.add_argument(
         "--output",
-        default="calibrations",
-        help="Directory where calibration artifacts are saved.",
+        "--output-dir",
+        dest="output",
+        default=None,
+        help=(
+            "Root directory where calibration artifacts will be written. "
+            f"Defaults to {config.data_root / 'sourcedata'}."
+        ),
+    )
+    calibrate_eyetracker.add_argument(
+        "--subject",
+        required=True,
+        help="BIDS subject label without the sub- prefix.",
+    )
+    calibrate_eyetracker.add_argument(
+        "--session",
+        required=True,
+        help="BIDS session label without the ses- prefix.",
     )
     calibrate_display_mode = calibrate_eyetracker.add_mutually_exclusive_group()
     calibrate_display_mode.add_argument(
@@ -481,6 +496,11 @@ def main(
         return runner(address=args.address)
 
     if args.command == "calibrate-eyetracker":
+        calibration_output_dir = calibration_artifact_root(
+            output_dir=args.output or default_sourcedata_root(config),
+            subject=args.subject,
+            session=args.session,
+        )
         if args.routine == "child-friendly":
             warn_if_config_missing()
             runner = child_friendly_calibration_runner
@@ -495,7 +515,7 @@ def main(
                 address=args.address,
                 serial_number=args.serial_number,
                 screen=args.screen if args.screen is not None else config.psychopy_screen,
-                calibration_output_dir=args.output,
+                calibration_output_dir=calibration_output_dir,
                 fullscreen=args.fullscreen,
                 window_size=parse_window_size(args.size),
                 screen_distance_meters=config.screen_distance_meters,
@@ -519,7 +539,7 @@ def main(
             "address": args.address,
             "serial_number": args.serial_number,
             "screen": args.screen if args.screen is not None else config.etm_screen,
-            "calibration_output_dir": args.output,
+            "calibration_output_dir": calibration_output_dir,
         }
         if args.manager is not None:
             kwargs["executable"] = args.manager
@@ -871,6 +891,20 @@ def default_sourcedata_root(config: AriaEtConfig | None = None) -> Path:
 
 def default_bids_root(config: AriaEtConfig | None = None) -> Path:
     return default_data_root(config) / "bids"
+
+
+def calibration_artifact_root(
+    *,
+    output_dir: str | Path,
+    subject: str,
+    session: str,
+) -> Path:
+    from aria_et.session import bids_subject_session_dir
+
+    return (
+        bids_subject_session_dir(output_dir, subject=subject, session=session)
+        / "calibrations"
+    )
 
 
 def init_config_file(path: str | Path | None = None, *, force: bool = False) -> int:

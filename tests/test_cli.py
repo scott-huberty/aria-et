@@ -168,7 +168,7 @@ def test_calibrate_eyetracker_invokes_manager_runner_with_production_defaults():
         return 0
 
     exit_code = main(
-        ["calibrate-eyetracker"],
+        ["calibrate-eyetracker", "--subject", "1", "--session", "smoke"],
         calibrate_eyetracker_runner=runner,
     )
 
@@ -176,7 +176,14 @@ def test_calibrate_eyetracker_invokes_manager_runner_with_production_defaults():
     assert calls == [
         {
             "address": None,
-            "calibration_output_dir": "calibrations",
+            "calibration_output_dir": (
+                Path.home()
+                / "aria-et-data"
+                / "sourcedata"
+                / "sub-01"
+                / "ses-smoke"
+                / "calibrations"
+            ),
             "serial_number": None,
             "screen": 2,
         }
@@ -193,6 +200,10 @@ def test_calibrate_eyetracker_can_target_address_serial_screen_and_manager():
     exit_code = main(
         [
             "calibrate-eyetracker",
+            "--subject",
+            "01",
+            "--session",
+            "smoke",
             "--address",
             "tobii-prp://169.254.10.180",
             "--screen",
@@ -207,7 +218,14 @@ def test_calibrate_eyetracker_can_target_address_serial_screen_and_manager():
     assert calls == [
         {
             "address": "tobii-prp://169.254.10.180",
-            "calibration_output_dir": "calibrations",
+            "calibration_output_dir": (
+                Path.home()
+                / "aria-et-data"
+                / "sourcedata"
+                / "sub-01"
+                / "ses-smoke"
+                / "calibrations"
+            ),
             "serial_number": None,
             "screen": 2,
             "executable": "/tmp/TobiiProEyeTrackerManager",
@@ -225,8 +243,12 @@ def test_calibrate_eyetracker_can_set_output_directory():
     exit_code = main(
         [
             "calibrate-eyetracker",
-            "--output",
-            "runs/calibrations",
+            "--subject",
+            "1",
+            "--session",
+            "smoke",
+            "--output-dir",
+            "runs",
         ],
         calibrate_eyetracker_runner=runner,
     )
@@ -235,7 +257,10 @@ def test_calibrate_eyetracker_can_set_output_directory():
     assert calls == [
         {
             "address": None,
-            "calibration_output_dir": "runs/calibrations",
+            "calibration_output_dir": Path("runs")
+            / "sub-01"
+            / "ses-smoke"
+            / "calibrations",
             "serial_number": None,
             "screen": 2,
         }
@@ -254,12 +279,16 @@ def test_calibrate_eyetracker_child_friendly_invokes_psychopy_sdk_runner():
             "calibrate-eyetracker",
             "--routine",
             "child-friendly",
+            "--subject",
+            "1",
+            "--session",
+            "smoke",
             "--address",
             "tobii-prp://169.254.10.180",
             "--screen",
             "2",
-            "--output",
-            "runs/calibrations",
+            "--output-dir",
+            "runs",
             "--windowed",
             "--size",
             "800x600",
@@ -278,7 +307,10 @@ def test_calibrate_eyetracker_child_friendly_invokes_psychopy_sdk_runner():
             "address": "tobii-prp://169.254.10.180",
             "serial_number": None,
             "screen": 2,
-            "calibration_output_dir": "runs/calibrations",
+            "calibration_output_dir": Path("runs")
+            / "sub-01"
+            / "ses-smoke"
+            / "calibrations",
             "fullscreen": False,
             "window_size": (800, 600),
             "screen_distance_meters": 0.65,
@@ -306,6 +338,10 @@ def test_calibrate_eyetracker_child_friendly_defaults_to_psychopy_screen():
             "calibrate-eyetracker",
             "--routine",
             "child-friendly",
+            "--subject",
+            "1",
+            "--session",
+            "smoke",
         ],
         child_friendly_calibration_runner=runner,
     )
@@ -352,7 +388,7 @@ eye_tracker_manager = "/Applications/ConfiguredETM"
 
     assert (
         main(
-            ["calibrate-eyetracker"],
+            ["calibrate-eyetracker", "--subject", "1", "--session", "smoke"],
             calibrate_eyetracker_runner=calibration_runner,
         )
         == 0

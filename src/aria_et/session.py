@@ -209,6 +209,21 @@ def _resolve_output_path(
     return output_path, normalized_bids
 
 
+def bids_subject_session_dir(
+    output_dir: str | Path,
+    *,
+    subject: str,
+    session: str | None,
+) -> Path:
+    normalized = _normalize_bids_metadata(
+        BidsSessionMetadata(subject=subject, session=session)
+    )
+    path = Path(output_dir) / f"sub-{normalized.subject}"
+    if normalized.session is not None:
+        path = path / f"ses-{normalized.session}"
+    return path
+
+
 def _normalize_bids_metadata(bids: BidsSessionMetadata) -> BidsSessionMetadata:
     return BidsSessionMetadata(
         subject=_normalize_bids_label(bids.subject, "sub-"),
