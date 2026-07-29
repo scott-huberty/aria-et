@@ -36,7 +36,7 @@ def test_activity_monitoring_assets_resolve_bundled_media_and_soundtrack():
     assets = activity_monitoring_assets()
 
     assert assets.image("ams_a4_s6_b4_ga_d1_f1.jpg").is_file()
-    assert assets.video("am_a3_s5_b3_gm_d1_f0.avi").is_file()
+    assert assets.video("am_a3_s5_b3_gm_d1_f0.mp4").is_file()
     assert assets.soundtrack.name == "satie.wav"
     assert assets.soundtrack.is_file()
 

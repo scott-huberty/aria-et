@@ -15,22 +15,22 @@ def test_activity_monitoring_sequence_matches_abcct_order_files():
         "AM-B4-R",
     ]
     assert [trial.stimulus.media.name for trial in sequence.trials] == [
-        "am_a3_s5_b3_gm_d1_f0.avi",
+        "am_a3_s5_b3_gm_d1_f0.mp4",
         "ams_a4_s6_b4_ga_d1_f1.jpg",
-        "am_a6_s3_b5_ga_d1_f1.avi",
+        "am_a6_s3_b5_ga_d1_f1.mp4",
         "ams_a7_s0_b7_gm_d1_f1.jpg",
-        "am_a1_s2_b0_gm_d1_f1.avi",
-        "am_a2_s7_b2_ga_d1_f0.avi",
+        "am_a1_s2_b0_gm_d1_f1.mp4",
+        "am_a2_s7_b2_ga_d1_f0.mp4",
         "ams_a0_s3_b3_gm_d1_f1.jpg",
         "ams_a1_s2_b0_ga_d1_f0.jpg",
-        "am_a7_s4_b6_gm_d1_f0.avi",
+        "am_a7_s4_b6_gm_d1_f0.mp4",
         "ams_a6_s2_b2_ga_d1_f0.jpg",
-        "am_a0_s6_b1_ga_d1_f0.avi",
+        "am_a0_s6_b1_ga_d1_f0.mp4",
         "ams_a3_s7_b4_gm_d1_f0.jpg",
-        "am_a5_s0_b6_ga_d1_f1.avi",
+        "am_a5_s0_b6_ga_d1_f1.mp4",
         "ams_a2_s0_b4_ga_d1_f1.jpg",
         "ams_a5_s2_b5_gm_d1_f0.jpg",
-        "am_a4_s1_b3_gm_d1_f1.avi",
+        "am_a4_s1_b3_gm_d1_f1.mp4",
     ]
 
 

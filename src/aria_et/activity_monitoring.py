@@ -60,22 +60,22 @@ class _TrialDefinition:
 
 _TRIAL_DEFINITIONS: tuple[_TrialDefinition, ...] = (
     _TrialDefinition(
-        "AM-B1-R", "dynamic-video", "mutual-gaze", "am_a3_s5_b3_gm_d1_f0.avi"
+        "AM-B1-R", "dynamic-video", "mutual-gaze", "am_a3_s5_b3_gm_d1_f0.mp4"
     ),
     _TrialDefinition(
         "AM-B1-R", "static-image", "activity-gaze", "ams_a4_s6_b4_ga_d1_f1.jpg"
     ),
     _TrialDefinition(
-        "AM-B1-R", "dynamic-video", "activity-gaze", "am_a6_s3_b5_ga_d1_f1.avi"
+        "AM-B1-R", "dynamic-video", "activity-gaze", "am_a6_s3_b5_ga_d1_f1.mp4"
     ),
     _TrialDefinition(
         "AM-B1-R", "static-image", "mutual-gaze", "ams_a7_s0_b7_gm_d1_f1.jpg"
     ),
     _TrialDefinition(
-        "AM-B2-R", "dynamic-video", "mutual-gaze", "am_a1_s2_b0_gm_d1_f1.avi"
+        "AM-B2-R", "dynamic-video", "mutual-gaze", "am_a1_s2_b0_gm_d1_f1.mp4"
     ),
     _TrialDefinition(
-        "AM-B2-R", "dynamic-video", "activity-gaze", "am_a2_s7_b2_ga_d1_f0.avi"
+        "AM-B2-R", "dynamic-video", "activity-gaze", "am_a2_s7_b2_ga_d1_f0.mp4"
     ),
     _TrialDefinition(
         "AM-B2-R", "static-image", "mutual-gaze", "ams_a0_s3_b3_gm_d1_f1.jpg"
@@ -84,19 +84,19 @@ _TRIAL_DEFINITIONS: tuple[_TrialDefinition, ...] = (
         "AM-B2-R", "static-image", "activity-gaze", "ams_a1_s2_b0_ga_d1_f0.jpg"
     ),
     _TrialDefinition(
-        "AM-B3-R", "dynamic-video", "mutual-gaze", "am_a7_s4_b6_gm_d1_f0.avi"
+        "AM-B3-R", "dynamic-video", "mutual-gaze", "am_a7_s4_b6_gm_d1_f0.mp4"
     ),
     _TrialDefinition(
         "AM-B3-R", "static-image", "activity-gaze", "ams_a6_s2_b2_ga_d1_f0.jpg"
     ),
     _TrialDefinition(
-        "AM-B3-R", "dynamic-video", "activity-gaze", "am_a0_s6_b1_ga_d1_f0.avi"
+        "AM-B3-R", "dynamic-video", "activity-gaze", "am_a0_s6_b1_ga_d1_f0.mp4"
     ),
     _TrialDefinition(
         "AM-B3-R", "static-image", "mutual-gaze", "ams_a3_s7_b4_gm_d1_f0.jpg"
     ),
     _TrialDefinition(
-        "AM-B4-R", "dynamic-video", "activity-gaze", "am_a5_s0_b6_ga_d1_f1.avi"
+        "AM-B4-R", "dynamic-video", "activity-gaze", "am_a5_s0_b6_ga_d1_f1.mp4"
     ),
     _TrialDefinition(
         "AM-B4-R", "static-image", "activity-gaze", "ams_a2_s0_b4_ga_d1_f1.jpg"
@@ -105,7 +105,7 @@ _TRIAL_DEFINITIONS: tuple[_TrialDefinition, ...] = (
         "AM-B4-R", "static-image", "mutual-gaze", "ams_a5_s2_b5_gm_d1_f0.jpg"
     ),
     _TrialDefinition(
-        "AM-B4-R", "dynamic-video", "mutual-gaze", "am_a4_s1_b3_gm_d1_f1.avi"
+        "AM-B4-R", "dynamic-video", "mutual-gaze", "am_a4_s1_b3_gm_d1_f1.mp4"
     ),
 )
 

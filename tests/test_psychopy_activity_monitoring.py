@@ -125,7 +125,7 @@ def test_activity_monitoring_presenter_uses_image_and_movie_factories():
     assert len(factories.movie_plays) == 8
     assert len(factories.movie_draws) == 8
     assert len(factories.image_draws) == 8
-    assert factories.movie_plays[0].endswith("am_a3_s5_b3_gm_d1_f0.avi")
+    assert factories.movie_plays[0].endswith("am_a3_s5_b3_gm_d1_f0.mp4")
     assert factories.image_draws[0].endswith("ams_a4_s6_b4_ga_d1_f1.jpg")
 
 
