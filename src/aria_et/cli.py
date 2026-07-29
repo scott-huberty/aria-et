@@ -9,6 +9,9 @@ from collections.abc import Callable, Sequence
 from aria_et.tasks import BATTERY_ORDER
 
 
+DEFAULT_ETM_SCREEN = 2
+DEFAULT_PSYCHOPY_SCREEN = 1
+
 DemoCalibrationRunner = Callable[..., int]
 CalibrateEyeTrackerRunner = Callable[..., int]
 DemoActivityMonitoringRunner = Callable[..., int]
@@ -57,8 +60,11 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate_eyetracker.add_argument(
         "--screen",
         type=int,
-        default=1,
-        help="Display index for calibration. Default 1 targets the second screen.",
+        default=DEFAULT_ETM_SCREEN,
+        help=(
+            "ETM display number for calibration. Default 2 targets the EIZO "
+            "stimulus display in the lab setup."
+        ),
     )
     calibrate_eyetracker.add_argument(
         "--manager",
@@ -91,8 +97,11 @@ def build_parser() -> argparse.ArgumentParser:
     demo_calibration.add_argument(
         "--screen",
         type=int,
-        default=1,
-        help="Display index for calibration. Default 1 targets the second screen.",
+        default=DEFAULT_PSYCHOPY_SCREEN,
+        help=(
+            "PsychoPy display index. Default 1 targets the EIZO stimulus "
+            "display in the lab setup."
+        ),
     )
     demo_calibration.add_argument(
         "--size",
@@ -138,6 +147,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run in a window. This is the default.",
     )
     demo_am.set_defaults(fullscreen=False)
+    _add_screen_argument(demo_am)
     demo_am.add_argument(
         "--size",
         default="1024x768",
@@ -188,6 +198,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run in a window. This is the default.",
     )
     demo_si.set_defaults(fullscreen=False)
+    _add_screen_argument(demo_si)
     demo_si.add_argument(
         "--size",
         default="1024x768",
@@ -227,6 +238,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run in a window. This is the default.",
     )
     demo_ss.set_defaults(fullscreen=False)
+    _add_screen_argument(demo_ss)
     demo_ss.add_argument(
         "--size",
         default="1024x768",
@@ -277,6 +289,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run in a window. This is the default.",
     )
     demo_plr.set_defaults(fullscreen=False)
+    _add_screen_argument(demo_plr)
     demo_plr.add_argument(
         "--size",
         default="1024x768",
@@ -400,6 +413,7 @@ def main(
 
         return runner(
             fullscreen=args.fullscreen,
+            screen=args.screen,
             window_size=parse_window_size(args.size),
             play_sound=not args.no_sound,
             trial_limit=args.trial_limit,
@@ -420,6 +434,7 @@ def main(
             tracker_address=args.address,
             output_dir=args.output,
             fullscreen=args.fullscreen,
+            screen=args.screen,
             window_size=parse_window_size(args.size),
             play_sound=not args.no_sound,
             trial_limit=args.trial_limit,
@@ -435,6 +450,7 @@ def main(
 
         return runner(
             fullscreen=args.fullscreen,
+            screen=args.screen,
             window_size=parse_window_size(args.size),
             play_sound=not args.no_sound,
             trial_limit=args.trial_limit,
@@ -450,6 +466,7 @@ def main(
 
         return runner(
             fullscreen=args.fullscreen,
+            screen=args.screen,
             window_size=parse_window_size(args.size),
             play_sound=not args.no_sound,
             trial_limit=args.trial_limit,
@@ -470,6 +487,7 @@ def main(
             tracker_address=args.address,
             output_dir=args.output,
             fullscreen=args.fullscreen,
+            screen=args.screen,
             window_size=parse_window_size(args.size),
             play_sound=not args.no_sound,
             trial_limit=args.trial_limit,
@@ -487,6 +505,7 @@ def main(
 
         return runner(
             fullscreen=args.fullscreen,
+            screen=args.screen,
             window_size=parse_window_size(args.size),
             play_sound=not args.no_sound,
             trial_limit=args.trial_limit,
@@ -508,6 +527,7 @@ def main(
             tracker_address=args.address,
             output_dir=args.output,
             fullscreen=args.fullscreen,
+            screen=args.screen,
             window_size=parse_window_size(args.size),
             play_sound=not args.no_sound,
             trial_limit=args.trial_limit,
@@ -551,9 +571,10 @@ def _add_run_presentation_arguments(
         "--windowed",
         action="store_false",
         dest="fullscreen",
-        help="Run in a window. This is the default.",
+        help="Run in a window.",
     )
-    parser.set_defaults(fullscreen=False)
+    parser.set_defaults(fullscreen=True)
+    _add_screen_argument(parser)
     parser.add_argument(
         "--size",
         default="1024x768",
@@ -574,6 +595,18 @@ def _add_run_presentation_arguments(
         "--debug-render",
         action="store_true",
         help=debug_help,
+    )
+
+
+def _add_screen_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--screen",
+        type=int,
+        default=DEFAULT_PSYCHOPY_SCREEN,
+        help=(
+            "PsychoPy display index. Default 1 targets the EIZO stimulus "
+            "display in the lab setup."
+        ),
     )
 
 

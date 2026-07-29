@@ -63,7 +63,7 @@ def test_calibrate_eyetracker_invokes_manager_runner_with_production_defaults():
             "address": None,
             "calibration_output_dir": "calibrations",
             "serial_number": None,
-            "screen": 1,
+            "screen": 2,
         }
     ]
 
@@ -122,7 +122,7 @@ def test_calibrate_eyetracker_can_set_output_directory():
             "address": None,
             "calibration_output_dir": "runs/calibrations",
             "serial_number": None,
-            "screen": 1,
+            "screen": 2,
         }
     ]
 
@@ -254,6 +254,7 @@ def test_demo_activity_monitoring_invokes_injected_runner():
     assert calls == [
         {
             "fullscreen": True,
+            "screen": 1,
             "window_size": (800, 600),
             "play_sound": False,
             "trial_limit": 2,
@@ -294,6 +295,7 @@ def test_run_activity_monitoring_invokes_injected_runner():
             "tracker_address": None,
             "output_dir": "runs/test-am",
             "fullscreen": True,
+            "screen": 1,
             "window_size": (800, 600),
             "play_sound": False,
             "trial_limit": 2,
@@ -327,6 +329,7 @@ def test_demo_social_interactive_invokes_injected_runner():
     assert calls == [
         {
             "fullscreen": True,
+            "screen": 1,
             "window_size": (800, 600),
             "play_sound": False,
             "trial_limit": 2,
@@ -360,6 +363,7 @@ def test_demo_static_social_scenes_invokes_injected_runner():
     assert calls == [
         {
             "fullscreen": True,
+            "screen": 1,
             "window_size": (800, 600),
             "play_sound": False,
             "trial_limit": 2,
@@ -392,7 +396,8 @@ def test_run_static_social_scenes_invokes_injected_runner():
             "tracker": "none",
             "tracker_address": None,
             "output_dir": "runs/test-ss",
-            "fullscreen": False,
+            "fullscreen": True,
+            "screen": 1,
             "window_size": (1024, 768),
             "play_sound": True,
             "trial_limit": None,
@@ -428,6 +433,7 @@ def test_demo_pupillary_light_reflex_invokes_injected_runner():
     assert calls == [
         {
             "fullscreen": True,
+            "screen": 1,
             "window_size": (800, 600),
             "play_sound": False,
             "trial_limit": 2,
@@ -451,6 +457,8 @@ def test_run_pupillary_light_reflex_invokes_injected_runner():
             "none",
             "--output",
             "runs/test-plr",
+            "--screen",
+            "2",
             "--attention-cue-seconds",
             "0",
         ],
@@ -463,7 +471,8 @@ def test_run_pupillary_light_reflex_invokes_injected_runner():
             "tracker": "none",
             "tracker_address": None,
             "output_dir": "runs/test-plr",
-            "fullscreen": False,
+            "fullscreen": True,
+            "screen": 2,
             "window_size": (1024, 768),
             "play_sound": True,
             "trial_limit": None,

@@ -369,6 +369,7 @@ class StatusLoggingEventSink:
 def run_pupillary_light_reflex_demo(
     *,
     fullscreen: bool = False,
+    screen: int = 1,
     window_size: tuple[int, int] = (1024, 768),
     play_sound: bool = True,
     trial_limit: int | None = None,
@@ -385,11 +386,12 @@ def run_pupillary_light_reflex_demo(
 
     status(
         "Opening PsychoPy window "
-        f"({window_size[0]}x{window_size[1]}, fullscreen={fullscreen})..."
+        f"({window_size[0]}x{window_size[1]}, fullscreen={fullscreen}, screen={screen})..."
     )
     window = visual.Window(
         size=window_size,
         fullscr=fullscreen,
+        screen=screen,
         units="pix",
         color="black",
     )
@@ -421,6 +423,7 @@ def run_pupillary_light_reflex_session(
     tracker_address: str | None = None,
     output_dir: str,
     fullscreen: bool = False,
+    screen: int = 1,
     window_size: tuple[int, int] = (1024, 768),
     play_sound: bool = True,
     trial_limit: int | None = None,
@@ -438,11 +441,12 @@ def run_pupillary_light_reflex_session(
 
         status(
             "Opening PsychoPy window "
-            f"({window_size[0]}x{window_size[1]}, fullscreen={fullscreen})..."
+            f"({window_size[0]}x{window_size[1]}, fullscreen={fullscreen}, screen={screen})..."
         )
         window = visual.Window(
             size=window_size,
             fullscr=fullscreen,
+            screen=screen,
             units="pix",
             color="black",
         )
