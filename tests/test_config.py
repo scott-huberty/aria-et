@@ -14,6 +14,8 @@ def test_load_config_uses_defaults_when_file_is_missing(tmp_path, monkeypatch):
     assert config.screen_distance_meters == 0.65
     assert config.screen_resolution == "1920x1080"
     assert config.screen_size_meters == "0.527x0.296"
+    assert config.monitor_name == "EIZO_EV2480"
+    assert config.audio_speaker is None
     assert config.eye_tracker_manager is None
 
 
@@ -32,6 +34,10 @@ psychopy_screen = 2
 screen_distance_meters = 0.72
 screen_resolution = "2560x1440"
 screen_size_meters = "0.6x0.34"
+monitor_name = "ConfiguredMonitor"
+
+[audio]
+speaker = "EV2480"
 
 [tobii]
 eye_tracker_manager = "/Applications/Tobii"
@@ -48,6 +54,8 @@ eye_tracker_manager = "/Applications/Tobii"
     assert config.screen_distance_meters == 0.72
     assert config.screen_resolution == "2560x1440"
     assert config.screen_size_meters == "0.6x0.34"
+    assert config.monitor_name == "ConfiguredMonitor"
+    assert config.audio_speaker == "EV2480"
     assert config.eye_tracker_manager == "/Applications/Tobii"
 
 

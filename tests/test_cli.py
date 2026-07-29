@@ -203,6 +203,10 @@ psychopy_screen = 3
 screen_distance_meters = 0.72
 screen_resolution = "2560x1440"
 screen_size_meters = "0.6x0.34"
+monitor_name = "ConfiguredMonitor"
+
+[audio]
+speaker = "EV2480"
 
 [tobii]
 eye_tracker_manager = "/Applications/ConfiguredETM"
@@ -243,6 +247,8 @@ eye_tracker_manager = "/Applications/ConfiguredETM"
     assert run_calls[0]["screen_distance_meters"] == 0.72
     assert run_calls[0]["screen_resolution_pixels"] == (2560, 1440)
     assert run_calls[0]["screen_size_meters"] == (0.6, 0.34)
+    assert run_calls[0]["monitor_name"] == "ConfiguredMonitor"
+    assert run_calls[0]["audio_speaker"] == "EV2480"
 
 
 def test_demo_calibration_invokes_injected_runner():
@@ -271,6 +277,11 @@ def test_demo_calibration_invokes_injected_runner():
             "fullscreen": False,
             "screen": 1,
             "window_size": (800, 600),
+            "screen_distance_meters": 0.65,
+            "screen_resolution_pixels": (1920, 1080),
+            "screen_size_meters": (0.527, 0.296),
+            "monitor_name": "EIZO_EV2480",
+            "audio_speaker": None,
             "play_sound": False,
             "point_duration_seconds": 0.25,
             "advance_on_space": False,
@@ -294,6 +305,11 @@ def test_demo_calibration_defaults_to_eizo_fullscreen_runner_options():
             "fullscreen": True,
             "screen": 1,
             "window_size": (1024, 768),
+            "screen_distance_meters": 0.65,
+            "screen_resolution_pixels": (1920, 1080),
+            "screen_size_meters": (0.527, 0.296),
+            "monitor_name": "EIZO_EV2480",
+            "audio_speaker": None,
             "play_sound": True,
             "point_duration_seconds": 3.0,
             "advance_on_space": False,
@@ -374,6 +390,11 @@ def test_demo_activity_monitoring_invokes_injected_runner():
             "fullscreen": True,
             "screen": 1,
             "window_size": (800, 600),
+            "screen_distance_meters": 0.65,
+            "screen_resolution_pixels": (1920, 1080),
+            "screen_size_meters": (0.527, 0.296),
+            "monitor_name": "EIZO_EV2480",
+            "audio_speaker": None,
             "play_sound": False,
             "trial_limit": 2,
             "debug_render": True,
@@ -423,6 +444,8 @@ def test_run_activity_monitoring_invokes_injected_runner():
             "screen_distance_meters": 0.65,
             "screen_resolution_pixels": (1920, 1080),
             "screen_size_meters": (0.527, 0.296),
+            "monitor_name": "EIZO_EV2480",
+            "audio_speaker": None,
             "play_sound": False,
             "trial_limit": 2,
             "debug_render": True,
@@ -484,6 +507,11 @@ def test_demo_social_interactive_invokes_injected_runner():
             "fullscreen": True,
             "screen": 1,
             "window_size": (800, 600),
+            "screen_distance_meters": 0.65,
+            "screen_resolution_pixels": (1920, 1080),
+            "screen_size_meters": (0.527, 0.296),
+            "monitor_name": "EIZO_EV2480",
+            "audio_speaker": None,
             "play_sound": False,
             "trial_limit": 2,
             "debug_render": True,
@@ -518,6 +546,11 @@ def test_demo_static_social_scenes_invokes_injected_runner():
             "fullscreen": True,
             "screen": 1,
             "window_size": (800, 600),
+            "screen_distance_meters": 0.65,
+            "screen_resolution_pixels": (1920, 1080),
+            "screen_size_meters": (0.527, 0.296),
+            "monitor_name": "EIZO_EV2480",
+            "audio_speaker": None,
             "play_sound": False,
             "trial_limit": 2,
             "debug_render": True,
@@ -560,6 +593,8 @@ def test_run_static_social_scenes_invokes_injected_runner():
             "screen_distance_meters": 0.65,
             "screen_resolution_pixels": (1920, 1080),
             "screen_size_meters": (0.527, 0.296),
+            "monitor_name": "EIZO_EV2480",
+            "audio_speaker": None,
             "play_sound": True,
             "trial_limit": None,
             "debug_render": False,
@@ -594,6 +629,11 @@ def test_demo_pupillary_light_reflex_invokes_injected_runner():
             "fullscreen": True,
             "screen": 1,
             "window_size": (800, 600),
+            "screen_distance_meters": 0.65,
+            "screen_resolution_pixels": (1920, 1080),
+            "screen_size_meters": (0.527, 0.296),
+            "monitor_name": "EIZO_EV2480",
+            "audio_speaker": None,
             "play_sound": False,
             "trial_limit": 2,
             "debug_render": True,
@@ -648,6 +688,8 @@ def test_run_pupillary_light_reflex_invokes_injected_runner():
             "screen_distance_meters": 0.6,
             "screen_resolution_pixels": (1280, 720),
             "screen_size_meters": (0.4, 0.2),
+            "monitor_name": "EIZO_EV2480",
+            "audio_speaker": None,
             "play_sound": True,
             "trial_limit": None,
             "debug_render": False,

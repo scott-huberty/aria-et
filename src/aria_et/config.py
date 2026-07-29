@@ -19,6 +19,7 @@ DEFAULT_PSYCHOPY_SCREEN = 1
 DEFAULT_EIZO_SCREEN_DISTANCE_METERS = 0.65
 DEFAULT_EIZO_SCREEN_RESOLUTION = "1920x1080"
 DEFAULT_EIZO_SCREEN_SIZE_METERS = "0.527x0.296"
+DEFAULT_MONITOR_NAME = "EIZO_EV2480"
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,8 @@ class AriaEtConfig:
     screen_distance_meters: float = DEFAULT_EIZO_SCREEN_DISTANCE_METERS
     screen_resolution: str = DEFAULT_EIZO_SCREEN_RESOLUTION
     screen_size_meters: str = DEFAULT_EIZO_SCREEN_SIZE_METERS
+    monitor_name: str = DEFAULT_MONITOR_NAME
+    audio_speaker: str | None = None
     eye_tracker_manager: str | None = None
 
 
@@ -74,6 +77,15 @@ def load_config(path: str | Path | None = None) -> AriaEtConfig:
             _section(raw_config, "display"),
             "screen_size_meters",
             DEFAULT_EIZO_SCREEN_SIZE_METERS,
+        ),
+        monitor_name=_str_value(
+            _section(raw_config, "display"),
+            "monitor_name",
+            DEFAULT_MONITOR_NAME,
+        ),
+        audio_speaker=_optional_str_value(
+            _section(raw_config, "audio"),
+            "speaker",
         ),
         eye_tracker_manager=_optional_str_value(
             _section(raw_config, "tobii"),

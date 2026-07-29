@@ -332,6 +332,11 @@ def run_gap_overlap_reward_calibration_demo(
     fullscreen: bool = True,
     screen: int = 1,
     window_size: tuple[int, int] = (1024, 768),
+    screen_distance_meters: float = 0.65,
+    screen_resolution_pixels: tuple[int, int] = (1920, 1080),
+    screen_size_meters: tuple[float, float] = (0.527, 0.296),
+    monitor_name: str = "EIZO_EV2480",
+    audio_speaker: str | None = None,
     play_sound: bool = True,
     point_duration_seconds: float = 1.0,
     advance_on_space: bool = False,
@@ -341,20 +346,32 @@ def run_gap_overlap_reward_calibration_demo(
     status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
 
     status("Importing PsychoPy...")
-    from psychopy import core, event, visual
+    from psychopy import core, event, monitors, prefs, visual
 
+    from aria_et.psychopy.environment import effective_window_size, open_window
     from aria_et.runtime import RecordingEventSink
 
+    effective_size = effective_window_size(
+        fullscreen=fullscreen,
+        window_size=window_size,
+        screen_resolution_pixels=screen_resolution_pixels,
+    )
     status(
         "Opening PsychoPy window "
-        f"({window_size[0]}x{window_size[1]}, fullscreen={fullscreen}, screen={screen})..."
+        f"({effective_size[0]}x{effective_size[1]}, fullscreen={fullscreen}, screen={screen})..."
     )
-    window = visual.Window(
-        size=window_size,
-        fullscr=fullscreen,
+    window = open_window(
+        visual_module=visual,
+        monitors_module=monitors,
+        prefs_module=prefs,
+        fullscreen=fullscreen,
         screen=screen,
-        units="pix",
-        color="black",
+        window_size=window_size,
+        screen_distance_meters=screen_distance_meters,
+        screen_resolution_pixels=screen_resolution_pixels,
+        screen_size_meters=screen_size_meters,
+        monitor_name=monitor_name,
+        audio_speaker=audio_speaker,
     )
     status(
         "PsychoPy window sizes: "
