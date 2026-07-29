@@ -276,6 +276,52 @@ def test_psychopy_presenter_collects_data_after_each_animation():
     ]
 
 
+def test_psychopy_presenter_can_spin_until_collection_then_play_feedback():
+    sequence = build_gap_overlap_reward_calibration_sequence(rng=Random(1))
+    window = FakeWindow()
+    factories = FakePsychoPyFactories()
+    collected = []
+
+    def collect_point(point):
+        collected.append((point.target.label, window.flips))
+        return True
+
+    result = make_presenter(
+        window,
+        factories,
+        point_duration_seconds=0.3,
+        feedback_duration_seconds=0.2,
+        frame_duration_seconds=0.1,
+        collect_before_feedback=True,
+        point_collector=collect_point,
+    ).present(sequence, ManualClock(), RecordingEventSink())
+
+    assert [point.label for point in result.presented_points] == [
+        "center",
+        "top-left",
+        "top-right",
+        "bottom-right",
+        "bottom-left",
+    ]
+    assert collected == [
+        ("center", 3),
+        ("top-left", 8),
+        ("top-right", 13),
+        ("bottom-right", 18),
+        ("bottom-left", 23),
+    ]
+    assert window.flips == 25
+    assert [getattr(image, "ori", None) for image in factories.images[:3]] == [
+        0.0,
+        18.0,
+        36.0,
+    ]
+    assert [getattr(image, "ori", None) for image in factories.images[3:5]] == [
+        None,
+        None,
+    ]
+
+
 def test_psychopy_presenter_can_disable_sound():
     sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow()

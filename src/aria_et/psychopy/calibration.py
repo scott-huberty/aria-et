@@ -62,6 +62,9 @@ class PsychoPyCalibrationPresenter:
     abort_requested: AbortCheck | None = None
     advance_requested: AdvanceCheck | None = None
     point_collector: PointCollector | None = None
+    collect_before_feedback: bool = False
+    feedback_duration_seconds: float = 1.0
+    spin_degrees_per_second: float = 180.0
     render_status: RenderStatus | None = None
     _active_sounds: list[SoundLike] = field(default_factory=list, init=False, repr=False)
 
@@ -148,10 +151,18 @@ class PsychoPyCalibrationPresenter:
         )
 
         self._play_sound(point.stimulus.sound)
-        if not self._present_stimulus(point):
-            return None
-        if self.point_collector is not None and not self.point_collector(point):
-            return None
+        if self.collect_before_feedback:
+            if not self._present_collection_stimulus(point):
+                return None
+            if self.point_collector is not None and not self.point_collector(point):
+                return None
+            if not self._present_stimulus(point, duration_seconds=self.feedback_duration_seconds):
+                return None
+        else:
+            if not self._present_stimulus(point):
+                return None
+            if self.point_collector is not None and not self.point_collector(point):
+                return None
         if not self._wait_for_advance():
             return None
 
@@ -171,15 +182,28 @@ class PsychoPyCalibrationPresenter:
             ended_at=ended_at,
         )
 
-    def _present_stimulus(self, point: CalibrationPoint) -> bool:
-        return self._draw_frame_animation(point)
+    def _present_stimulus(
+        self,
+        point: CalibrationPoint,
+        *,
+        duration_seconds: float | None = None,
+    ) -> bool:
+        return self._draw_frame_animation(point, duration_seconds=duration_seconds)
 
-    def _draw_frame_animation(self, point: CalibrationPoint) -> bool:
+    def _draw_frame_animation(
+        self,
+        point: CalibrationPoint,
+        *,
+        duration_seconds: float | None = None,
+    ) -> bool:
         position = self._to_window_position(point.target.position)
         frames = point.stimulus.animation_frames
         if not frames:
             raise ValueError("Calibration stimulus must include frames or a movie.")
-        frame_count = max(1, round(self.point_duration_seconds / self.frame_duration_seconds))
+        animation_seconds = (
+            self.point_duration_seconds if duration_seconds is None else duration_seconds
+        )
+        frame_count = max(1, round(animation_seconds / self.frame_duration_seconds))
         self._render_status(
             f"Animation started: {point.target.label} "
             f"frame_count={frame_count} frame_duration={self.frame_duration_seconds}"
@@ -221,6 +245,46 @@ class PsychoPyCalibrationPresenter:
             )
 
         self._render_status(f"Animation ended: {point.target.label}")
+        return True
+
+    def _present_collection_stimulus(self, point: CalibrationPoint) -> bool:
+        position = self._to_window_position(point.target.position)
+        frames = point.stimulus.animation_frames
+        if not frames:
+            raise ValueError("Calibration stimulus must include frames or a movie.")
+        frame_count = max(1, round(self.point_duration_seconds / self.frame_duration_seconds))
+        self._render_status(
+            f"Collection animation started: {point.target.label} "
+            f"frame_count={frame_count} frame_duration={self.frame_duration_seconds}"
+        )
+
+        frame = frames[0]
+        for frame_index in range(frame_count):
+            if self._abort_requested():
+                self._render_status(
+                    f"Collection animation aborted before frame: {point.target.label} "
+                    f"frame={frame_index + 1}/{frame_count}"
+                )
+                return False
+
+            rotation = (
+                frame_index
+                * self.frame_duration_seconds
+                * self.spin_degrees_per_second
+            ) % 360
+            with as_file(frame) as frame_path:
+                image = self._image_factory()(
+                    self.window,
+                    str(frame_path),
+                    position,
+                    self.image_size_pixels,
+                )
+                setattr(image, "ori", rotation)
+                image.draw()
+            self.window.flip()
+            self._wait()(self.frame_duration_seconds)
+
+        self._render_status(f"Collection animation ended: {point.target.label}")
         return True
 
     def _play_sound(self, sound: Traversable | None) -> None:
@@ -481,7 +545,19 @@ def run_child_friendly_eyetracker_calibration(
         y = point.target.position.y
         status(f"Collecting Tobii calibration data: {point.target.label} ({x}, {y})")
         calibration_api.discard_data(x, y)
-        calibration_api.collect_data(x, y)
+        collection_status = calibration_api.collect_data(x, y)
+        if collection_status == getattr(
+            tobii_research,
+            "CALIBRATION_STATUS_FAILURE",
+            None,
+        ):
+            status(f"Tobii calibration data collection failed: {point.target.label}")
+            return False
+
+        status(
+            "Tobii calibration data collected: "
+            f"{point.target.label} status={collection_status}"
+        )
         return True
 
     effective_size = effective_window_size(
@@ -524,6 +600,7 @@ def run_child_friendly_eyetracker_calibration(
                 abort_requested=abort_requested,
                 advance_requested=advance_requested,
                 point_collector=collect_point,
+                collect_before_feedback=True,
                 render_status=status if debug_render else None,
             )
             result = presenter.present(
