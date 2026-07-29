@@ -20,6 +20,7 @@ DEFAULT_EIZO_SCREEN_DISTANCE_METERS = 0.65
 DEFAULT_EIZO_SCREEN_RESOLUTION = "1920x1080"
 DEFAULT_EIZO_SCREEN_SIZE_METERS = "0.527x0.296"
 DEFAULT_MONITOR_NAME = "EIZO_EV2480"
+DEFAULT_AUDIO_SPEAKER = "EV2480"
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,36 @@ class AriaEtConfig:
 
 def default_config_path() -> Path:
     return Path.home() / ".aria-et" / "config.toml"
+
+
+def default_config_text(config: AriaEtConfig | None = None) -> str:
+    config = config or AriaEtConfig(
+        data_root=Path.home() / DEFAULT_DATA_DIR_NAME,
+        audio_speaker=DEFAULT_AUDIO_SPEAKER,
+    )
+    audio_speaker = config.audio_speaker or DEFAULT_AUDIO_SPEAKER
+    lines = [
+        "[data]",
+        f'root = "{config.data_root}"',
+        "",
+        "[display]",
+        f"psychopy_screen = {config.psychopy_screen}",
+        f"etm_screen = {config.etm_screen}",
+        f'screen_resolution = "{config.screen_resolution}"',
+        f'screen_size_meters = "{config.screen_size_meters}"',
+        f"screen_distance_meters = {config.screen_distance_meters}",
+        f'monitor_name = "{config.monitor_name}"',
+        "",
+        "[audio]",
+        f'speaker = "{audio_speaker}"',
+        "",
+        "[tobii]",
+        "# eye_tracker_manager = "
+        '"/Applications/TobiiProEyeTrackerManager.app/Contents/MacOS/'
+        'TobiiProEyeTrackerManager"',
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def load_config(path: str | Path | None = None) -> AriaEtConfig:

@@ -23,6 +23,59 @@ def test_list_tasks_prints_battery_order(capsys):
     ]
 
 
+def test_init_config_writes_lab_defaults(tmp_path, capsys):
+    config_path = tmp_path / "config.toml"
+
+    exit_code = main(["init-config", "--path", str(config_path)])
+
+    assert exit_code == 0
+    assert "Wrote ARIA-ET config" in capsys.readouterr().out
+    config_text = config_path.read_text(encoding="utf-8")
+    assert '[display]' in config_text
+    assert 'monitor_name = "EIZO_EV2480"' in config_text
+    assert '[audio]' in config_text
+    assert 'speaker = "EV2480"' in config_text
+
+
+def test_init_config_refuses_to_overwrite_existing_file(tmp_path, capsys):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("custom = true\n", encoding="utf-8")
+
+    exit_code = main(["init-config", "--path", str(config_path)])
+
+    assert exit_code == 1
+    assert "already exists" in capsys.readouterr().err
+    assert config_path.read_text(encoding="utf-8") == "custom = true\n"
+
+
+def test_init_config_can_force_overwrite_existing_file(tmp_path):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("custom = true\n", encoding="utf-8")
+
+    exit_code = main(["init-config", "--path", str(config_path), "--force"])
+
+    assert exit_code == 0
+    assert 'monitor_name = "EIZO_EV2480"' in config_path.read_text(encoding="utf-8")
+
+
+def test_psychopy_task_warns_when_config_is_missing_without_creating_it(tmp_path, capsys):
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        ["run-plr", "--tracker", "none", "--subject", "01"],
+        run_pupillary_light_reflex_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert "No ARIA-ET config found" in capsys.readouterr().err
+    assert not (tmp_path / ".aria-et" / "config.toml").exists()
+    assert calls[0]["monitor_name"] == "EIZO_EV2480"
+
+
 def test_check_eyetracker_invokes_injected_runner():
     calls = []
 

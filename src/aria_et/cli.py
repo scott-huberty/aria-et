@@ -7,7 +7,12 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from aria_et.config import AriaEtConfig, load_config
+from aria_et.config import (
+    AriaEtConfig,
+    default_config_path,
+    default_config_text,
+    load_config,
+)
 from aria_et.tasks import BATTERY_ORDER
 
 
@@ -32,6 +37,21 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
     subparsers.add_parser(
         "list-tasks",
         help="Print the configured battery order.",
+    )
+
+    init_config = subparsers.add_parser(
+        "init-config",
+        help="Create a user ARIA-ET config file with lab display/audio defaults.",
+    )
+    init_config.add_argument(
+        "--path",
+        default=None,
+        help=f"Config file path to write. Defaults to {default_config_path()}.",
+    )
+    init_config.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing config file.",
     )
 
     export_bids = subparsers.add_parser(
@@ -370,6 +390,9 @@ def main(
             print(task.task_id)
         return 0
 
+    if args.command == "init-config":
+        return init_config_file(path=args.path, force=args.force)
+
     if args.command == "export-bids":
         runner = export_bids_runner
         if runner is None:
@@ -415,6 +438,7 @@ def main(
         return runner(**kwargs)
 
     if args.command == "demo-calibration":
+        warn_if_config_missing()
         runner = demo_calibration_runner
         if runner is None:
             from aria_et.psychopy.calibration import (
@@ -439,6 +463,7 @@ def main(
         )
 
     if args.command == "demo-am":
+        warn_if_config_missing()
         runner = demo_activity_monitoring_runner
         if runner is None:
             from aria_et.psychopy.activity_monitoring import run_activity_monitoring_demo
@@ -460,6 +485,7 @@ def main(
         )
 
     if args.command == "run-am":
+        warn_if_config_missing()
         runner = run_activity_monitoring_runner
         if runner is None:
             from aria_et.psychopy.activity_monitoring import (
@@ -489,6 +515,7 @@ def main(
         )
 
     if args.command == "demo-si":
+        warn_if_config_missing()
         runner = demo_social_interactive_runner
         if runner is None:
             from aria_et.psychopy.social_interactive import run_social_interactive_demo
@@ -510,6 +537,7 @@ def main(
         )
 
     if args.command == "demo-ss":
+        warn_if_config_missing()
         runner = demo_static_social_scenes_runner
         if runner is None:
             from aria_et.psychopy.static_social_scenes import run_static_social_scenes_demo
@@ -531,6 +559,7 @@ def main(
         )
 
     if args.command == "run-ss":
+        warn_if_config_missing()
         runner = run_static_social_scenes_runner
         if runner is None:
             from aria_et.psychopy.static_social_scenes import (
@@ -560,6 +589,7 @@ def main(
         )
 
     if args.command == "demo-plr":
+        warn_if_config_missing()
         runner = demo_pupillary_light_reflex_runner
         if runner is None:
             from aria_et.psychopy.pupillary_light_reflex import (
@@ -583,6 +613,7 @@ def main(
         )
 
     if args.command == "run-plr":
+        warn_if_config_missing()
         runner = run_pupillary_light_reflex_runner
         if runner is None:
             from aria_et.psychopy.pupillary_light_reflex import (
@@ -721,6 +752,33 @@ def default_sourcedata_root(config: AriaEtConfig | None = None) -> Path:
 
 def default_bids_root(config: AriaEtConfig | None = None) -> Path:
     return default_data_root(config) / "bids"
+
+
+def init_config_file(path: str | Path | None = None, *, force: bool = False) -> int:
+    config_path = Path(path).expanduser() if path is not None else default_config_path()
+    if config_path.exists() and not force:
+        print(
+            f"ARIA-ET config already exists at {config_path}. "
+            "Use --force to overwrite it.",
+            file=sys.stderr,
+        )
+        return 1
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(default_config_text(), encoding="utf-8")
+    print(f"Wrote ARIA-ET config to {config_path}.")
+    return 0
+
+
+def warn_if_config_missing(path: str | Path | None = None) -> None:
+    config_path = Path(path).expanduser() if path is not None else default_config_path()
+    if config_path.exists():
+        return
+    print(
+        f"No ARIA-ET config found at {config_path}. Using built-in EIZO defaults. "
+        "Run `aria-et init-config` to persist lab display/audio settings.",
+        file=sys.stderr,
+    )
 
 
 def _add_screen_argument(parser: argparse.ArgumentParser, config: AriaEtConfig) -> None:
