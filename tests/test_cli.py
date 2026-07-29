@@ -73,6 +73,35 @@ def test_export_bids_invokes_injected_runner(capsys):
     assert "Exported BIDS eyetracking files to bids-out" in capsys.readouterr().out
 
 
+def test_export_bids_defaults_to_user_data_bids_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(
+            bids_root=kwargs["bids_root"],
+            written_files=(),
+        )
+
+    exit_code = main(
+        [
+            "export-bids",
+            "--input",
+            "runs/plr-smoke",
+        ],
+        export_bids_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "run_dir": "runs/plr-smoke",
+            "bids_root": tmp_path / "aria-et-data" / "bids",
+        }
+    ]
+
+
 def test_calibrate_eyetracker_invokes_manager_runner_with_production_defaults():
     calls = []
 
@@ -338,6 +367,33 @@ def test_run_activity_monitoring_invokes_injected_runner():
             "debug_render": True,
         }
     ]
+
+
+def test_run_activity_monitoring_defaults_to_user_data_sourcedata_root(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        [
+            "run-am",
+            "--tracker",
+            "none",
+            "--subject",
+            "1",
+        ],
+        run_activity_monitoring_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls[0]["output_dir"] == tmp_path / "aria-et-data" / "sourcedata"
+    assert calls[0]["subject"] == "1"
+    assert calls[0]["run"] is None
 
 
 def test_demo_social_interactive_invokes_injected_runner():

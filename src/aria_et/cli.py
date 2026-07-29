@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Callable, Sequence
+from pathlib import Path
 
 from aria_et.tasks import BATTERY_ORDER
 
@@ -14,6 +15,7 @@ DEFAULT_PSYCHOPY_SCREEN = 1
 DEFAULT_EIZO_SCREEN_DISTANCE_METERS = 0.65
 DEFAULT_EIZO_SCREEN_RESOLUTION = "1920x1080"
 DEFAULT_EIZO_SCREEN_SIZE_METERS = "0.527x0.296"
+DEFAULT_DATA_DIR_NAME = "aria-et-data"
 
 DemoCalibrationRunner = Callable[..., int]
 CalibrateEyeTrackerRunner = Callable[..., int]
@@ -52,8 +54,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         "--bids-root",
         dest="bids_root",
-        required=True,
-        help="BIDS dataset root directory to write.",
+        default=None,
+        help="BIDS dataset root directory to write. Defaults to ~/aria-et-data/bids.",
     )
 
     check_eyetracker = subparsers.add_parser(
@@ -376,7 +378,7 @@ def main(
 
             runner = export_run_to_bids
 
-        result = runner(run_dir=args.run_dir, bids_root=args.bids_root)
+        result = runner(run_dir=args.run_dir, bids_root=args.bids_root or default_bids_root())
         written_files = getattr(result, "written_files", ())
         print(f"Exported BIDS eyetracking files to {result.bids_root}.")
         for path in written_files:
@@ -457,7 +459,7 @@ def main(
         return runner(
             tracker=args.tracker,
             tracker_address=args.address,
-            output_dir=args.output,
+            output_dir=args.output or default_sourcedata_root(),
             subject=args.subject,
             session=args.session,
             run=args.run,
@@ -516,7 +518,7 @@ def main(
         return runner(
             tracker=args.tracker,
             tracker_address=args.address,
-            output_dir=args.output,
+            output_dir=args.output or default_sourcedata_root(),
             subject=args.subject,
             session=args.session,
             run=args.run,
@@ -561,7 +563,7 @@ def main(
         return runner(
             tracker=args.tracker,
             tracker_address=args.address,
-            output_dir=args.output,
+            output_dir=args.output or default_sourcedata_root(),
             subject=args.subject,
             session=args.session,
             run=args.run,
@@ -601,8 +603,8 @@ def _add_run_presentation_arguments(
         "--output",
         "--output-dir",
         dest="output",
-        required=True,
-        help="Root directory where session artifacts will be written.",
+        default=None,
+        help="Root directory where session artifacts will be written. Defaults to ~/aria-et-data/sourcedata.",
     )
     parser.add_argument(
         "--subject",
@@ -670,6 +672,18 @@ def _add_run_presentation_arguments(
         action="store_true",
         help=debug_help,
     )
+
+
+def default_data_root() -> Path:
+    return Path.home() / DEFAULT_DATA_DIR_NAME
+
+
+def default_sourcedata_root() -> Path:
+    return default_data_root() / "sourcedata"
+
+
+def default_bids_root() -> Path:
+    return default_data_root() / "bids"
 
 
 def _add_screen_argument(parser: argparse.ArgumentParser) -> None:
