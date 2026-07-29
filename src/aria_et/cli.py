@@ -330,12 +330,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Limit the number of PLR trials for demos.",
     )
     demo_plr.add_argument(
-        "--attention-cue-seconds",
-        type=float,
-        default=1.0,
-        help="Seconds to show the inter-trial attention cue. Use 0 to disable.",
-    )
-    demo_plr.add_argument(
         "--debug-render",
         action="store_true",
         help="Print PLR rendering diagnostics.",
@@ -351,13 +345,6 @@ def build_parser() -> argparse.ArgumentParser:
         trial_limit_help="Limit the number of PLR trials.",
         debug_help="Print PLR rendering diagnostics.",
     )
-    run_plr.add_argument(
-        "--attention-cue-seconds",
-        type=float,
-        default=1.0,
-        help="Seconds to show the inter-trial attention cue. Use 0 to disable.",
-    )
-
     return parser
 
 
@@ -559,7 +546,6 @@ def main(
             window_size=parse_window_size(args.size),
             play_sound=not args.no_sound,
             trial_limit=args.trial_limit,
-            inter_trial_attention_seconds=args.attention_cue_seconds,
             debug_render=args.debug_render,
         )
 
@@ -587,7 +573,6 @@ def main(
             screen_size_meters=parse_float_pair(args.screen_size_meters),
             play_sound=not args.no_sound,
             trial_limit=args.trial_limit,
-            inter_trial_attention_seconds=args.attention_cue_seconds,
             debug_render=args.debug_render,
         )
 

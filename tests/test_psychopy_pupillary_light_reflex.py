@@ -58,7 +58,7 @@ class FakeFactories:
 
 
 def make_presenter(window, factories, **overrides):
-    defaults = {"frame_duration_seconds": 10, "inter_trial_attention_seconds": 0}
+    defaults = {"frame_duration_seconds": 10}
     defaults.update(overrides)
     return PsychoPyPupillaryLightReflexPresenter(
         window=window,
@@ -133,7 +133,7 @@ def test_pupillary_light_reflex_presenter_reuses_preloaded_stimulus_images():
     assert sum("plr71/frame_001.png" in path for path in factories.image_draws) == 1
 
 
-def test_pupillary_light_reflex_presenter_shows_attention_cue_between_trials():
+def test_pupillary_light_reflex_presenter_runs_trials_without_attention_cues():
     sequence = build_pupillary_light_reflex_sequence()
     window = FakeWindow()
     factories = FakeFactories()
@@ -144,26 +144,25 @@ def test_pupillary_light_reflex_presenter_shows_attention_cue_between_trials():
         factories,
         trial_limit=2,
         frame_duration_seconds=0.5,
-        inter_trial_attention_seconds=1.0,
     ).present(
         sequence,
         ManualClock(),
         event_sink,
     )
 
-    assert len(factories.image_draws) == (187 * 2) + 2
-    assert len(factories.waits) == (187 * 2) + 2
-    assert len(factories.sound_plays) == 3
+    assert len(factories.image_draws) == 187 * 2
+    assert len(factories.waits) == 187 * 2
+    assert len(factories.sound_plays) == 2
 
     event_names = [event.name for event in event_sink.events]
     first_trial_end = event_names.index("pupillary-light-reflex.trial.ended")
-    cue_start = event_names.index("pupillary-light-reflex.attention-cue.started")
-    cue_end = event_names.index("pupillary-light-reflex.attention-cue.ended")
     second_trial_start = event_names.index(
         "pupillary-light-reflex.trial.started",
         first_trial_end + 1,
     )
-    assert first_trial_end < cue_start < cue_end < second_trial_start
+    assert "pupillary-light-reflex.attention-cue.started" not in event_names
+    assert "pupillary-light-reflex.attention-cue.ended" not in event_names
+    assert first_trial_end < second_trial_start
 
 
 def test_pupillary_light_reflex_presenter_honors_trial_timing():

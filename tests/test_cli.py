@@ -466,8 +466,6 @@ def test_demo_pupillary_light_reflex_invokes_injected_runner():
             "--no-sound",
             "--trial-limit",
             "2",
-            "--attention-cue-seconds",
-            "0.25",
             "--debug-render",
         ],
         demo_pupillary_light_reflex_runner=runner,
@@ -481,7 +479,6 @@ def test_demo_pupillary_light_reflex_invokes_injected_runner():
             "window_size": (800, 600),
             "play_sound": False,
             "trial_limit": 2,
-            "inter_trial_attention_seconds": 0.25,
             "debug_render": True,
         }
     ]
@@ -515,8 +512,6 @@ def test_run_pupillary_light_reflex_invokes_injected_runner():
             "1280x720",
             "--screen-size-meters",
             "0.4x0.2",
-            "--attention-cue-seconds",
-            "0",
         ],
         run_pupillary_light_reflex_runner=runner,
     )
@@ -538,7 +533,6 @@ def test_run_pupillary_light_reflex_invokes_injected_runner():
             "screen_size_meters": (0.4, 0.2),
             "play_sound": True,
             "trial_limit": None,
-            "inter_trial_attention_seconds": 0,
             "debug_render": False,
         }
     ]
@@ -569,22 +563,6 @@ def test_run_pupillary_light_reflex_passes_explicit_tracker_address():
     assert exit_code == 0
     assert calls[0]["tracker"] == "tobii"
     assert calls[0]["tracker_address"] == "tobii-prp://169.254.10.180"
-
-
-def test_demo_pupillary_light_reflex_can_disable_attention_cue():
-    calls = []
-
-    def runner(**kwargs):
-        calls.append(kwargs)
-        return 0
-
-    exit_code = main(
-        ["demo-plr", "--attention-cue-seconds", "0"],
-        demo_pupillary_light_reflex_runner=runner,
-    )
-
-    assert exit_code == 0
-    assert calls[0]["inter_trial_attention_seconds"] == 0
 
 
 def test_parse_window_size():
