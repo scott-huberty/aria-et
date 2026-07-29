@@ -1,9 +1,14 @@
 import sys
 from dataclasses import dataclass, field
 from random import Random
+from types import SimpleNamespace
 
 from aria_et.calibration import build_gap_overlap_reward_calibration_sequence
-from aria_et.psychopy.calibration import PsychoPyCalibrationPresenter, StatusLoggingEventSink
+from aria_et.psychopy.calibration import (
+    PsychoPyCalibrationPresenter,
+    StatusLoggingEventSink,
+    run_child_friendly_eyetracker_calibration,
+)
 from aria_et.runtime import ManualClock, RecordingEventSink
 
 
@@ -230,6 +235,47 @@ def test_psychopy_presenter_plays_reward_sound_for_each_point():
     assert presenter._active_sounds == factories.sounds
 
 
+def test_psychopy_presenter_collects_data_after_each_animation():
+    sequence = build_gap_overlap_reward_calibration_sequence()
+    window = FakeWindow()
+    factories = FakePsychoPyFactories()
+    collected = []
+
+    def collect_point(point):
+        collected.append(
+            (
+                point.target.label,
+                point.target.position.x,
+                point.target.position.y,
+                window.flips,
+            )
+        )
+        return True
+
+    result = make_presenter(
+        window,
+        factories,
+        point_duration_seconds=0.1,
+        frame_duration_seconds=0.1,
+        point_collector=collect_point,
+    ).present(sequence, ManualClock(), RecordingEventSink())
+
+    assert [point.label for point in result.presented_points] == [
+        "center",
+        "top-left",
+        "top-right",
+        "bottom-right",
+        "bottom-left",
+    ]
+    assert collected == [
+        ("center", 0.5, 0.5, 1),
+        ("top-left", 0.1, 0.1, 2),
+        ("top-right", 0.9, 0.1, 3),
+        ("bottom-right", 0.9, 0.9, 4),
+        ("bottom-left", 0.1, 0.9, 5),
+    ]
+
+
 def test_psychopy_presenter_can_disable_sound():
     sequence = build_gap_overlap_reward_calibration_sequence()
     window = FakeWindow()
@@ -360,6 +406,122 @@ def test_status_logging_event_sink_logs_point_progression():
         "Point started: top-left normalized=(0.1, 0.1) window=(-400.0, 320.0)",
         "Point ended: top-left",
     ]
+
+
+def test_child_friendly_eyetracker_calibration_uses_tobii_sdk_and_saves_data(
+    tmp_path,
+    monkeypatch,
+):
+    calibration_calls = []
+
+    class FakeTracker:
+        address = "tobii-prp://169.254.10.180"
+        model = "Tobii Pro Spectrum"
+        serial_number = "TPS-123"
+        firmware_version = "2.6.2"
+
+        def retrieve_calibration_data(self):
+            return b"child-friendly-calibration"
+
+    tracker = FakeTracker()
+
+    class FakeCalibrationResult:
+        status = "success"
+
+    class FakeScreenBasedCalibration:
+        def __init__(self, eyetracker):
+            assert eyetracker is tracker
+
+        def enter_calibration_mode(self):
+            calibration_calls.append(("enter",))
+
+        def discard_data(self, x, y):
+            calibration_calls.append(("discard", x, y))
+
+        def collect_data(self, x, y):
+            calibration_calls.append(("collect", x, y))
+
+        def compute_and_apply(self):
+            calibration_calls.append(("compute",))
+            return FakeCalibrationResult()
+
+        def leave_calibration_mode(self):
+            calibration_calls.append(("leave",))
+
+    fake_tobii = SimpleNamespace(
+        __version__="2.1.0",
+        CALIBRATION_STATUS_FAILURE="failure",
+        ScreenBasedCalibration=FakeScreenBasedCalibration,
+        find_all_eyetrackers=lambda: (tracker,),
+    )
+
+    def import_module(name):
+        if name == "tobii_research":
+            return fake_tobii
+        raise ImportError(name)
+
+    class FakeMonitor:
+        def setSizePix(self, size):
+            self.size = size
+
+        def saveMon(self):
+            pass
+
+    class FakeMonitors:
+        @staticmethod
+        def Monitor(name, width=None, distance=None):
+            return FakeMonitor()
+
+    class FakeWindow:
+        size = (1920, 1080)
+        clientSize = (1920, 1080)
+
+        def flip(self):
+            pass
+
+        def close(self):
+            pass
+
+    class FakeVisual:
+        @staticmethod
+        def Window(**kwargs):
+            return FakeWindow()
+
+        @staticmethod
+        def ImageStim(*args, **kwargs):
+            return SimpleNamespace(draw=lambda: None)
+
+    fake_psychopy = SimpleNamespace(
+        core=SimpleNamespace(
+            Clock=lambda: SimpleNamespace(getTime=lambda: 0.0),
+            wait=lambda seconds: None,
+        ),
+        event=SimpleNamespace(
+            clearEvents=lambda: None,
+            getKeys=lambda keyList=None: [],
+        ),
+        monitors=FakeMonitors,
+        prefs=SimpleNamespace(hardware={}),
+        visual=FakeVisual,
+        sound=SimpleNamespace(Sound=lambda path: SimpleNamespace(play=lambda: None)),
+    )
+    monkeypatch.setitem(sys.modules, "psychopy", fake_psychopy)
+
+    exit_code = run_child_friendly_eyetracker_calibration(
+        calibration_output_dir=tmp_path / "calibrations",
+        point_duration_seconds=0.0,
+        play_sound=False,
+        import_module=import_module,
+        status_sink=lambda message: None,
+    )
+
+    assert exit_code == 0
+    assert calibration_calls[0] == ("enter",)
+    assert calibration_calls[-2:] == [("compute",), ("leave",)]
+    assert ("collect", 0.5, 0.5) in calibration_calls
+    assert ("collect", 0.1, 0.1) in calibration_calls
+    calibration_bin = next((tmp_path / "calibrations").glob("*/calibration.bin"))
+    assert calibration_bin.read_bytes() == b"child-friendly-calibration"
 
 
 def delegate_event(name, payload):

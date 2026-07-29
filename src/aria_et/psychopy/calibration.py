@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import importlib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from importlib.resources import as_file
@@ -43,6 +44,7 @@ SoundFactory = Callable[[str], SoundLike]
 Wait = Callable[[float], None]
 AbortCheck = Callable[[], bool]
 AdvanceCheck = Callable[[], bool]
+PointCollector = Callable[[CalibrationPoint], bool]
 StatusSink = Callable[[str], None]
 RenderStatus = Callable[[str], None]
 
@@ -59,6 +61,7 @@ class PsychoPyCalibrationPresenter:
     play_sound: bool = True
     abort_requested: AbortCheck | None = None
     advance_requested: AdvanceCheck | None = None
+    point_collector: PointCollector | None = None
     render_status: RenderStatus | None = None
     _active_sounds: list[SoundLike] = field(default_factory=list, init=False, repr=False)
 
@@ -146,6 +149,8 @@ class PsychoPyCalibrationPresenter:
 
         self._play_sound(point.stimulus.sound)
         if not self._present_stimulus(point):
+            return None
+        if self.point_collector is not None and not self.point_collector(point):
             return None
         if not self._wait_for_advance():
             return None
@@ -412,3 +417,153 @@ def run_gap_overlap_reward_calibration_demo(
         window.close()
 
     return 0
+
+
+def run_child_friendly_eyetracker_calibration(
+    *,
+    address: str | None = None,
+    serial_number: str | None = None,
+    screen: int = 1,
+    calibration_output_dir: str = "calibrations",
+    fullscreen: bool = True,
+    window_size: tuple[int, int] = (1024, 768),
+    screen_distance_meters: float = 0.65,
+    screen_resolution_pixels: tuple[int, int] = (1920, 1080),
+    screen_size_meters: tuple[float, float] = (0.527, 0.296),
+    monitor_name: str = "EIZO_EV2480",
+    audio_speaker: str | None = None,
+    play_sound: bool = True,
+    point_duration_seconds: float = 3.0,
+    advance_on_space: bool = False,
+    debug_render: bool = False,
+    import_module: Callable[[str], object] = importlib.import_module,
+    status_sink: StatusSink | None = None,
+    error_sink: StatusSink | None = None,
+) -> int:
+    from aria_et.eyetracker import (
+        TobiiSdkUnavailableError,
+        TobiiTrackerUnavailableError,
+        _open_tracker_after_calibration,
+        load_tobii_research,
+        save_current_calibration,
+    )
+
+    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+    error = error_sink or (lambda message: print(message, file=sys.stderr))
+
+    if address is not None and serial_number is not None:
+        error("Use either --address or --serial-number, not both.")
+        return 51
+
+    try:
+        tobii_research = load_tobii_research(import_module=import_module)
+        eyetracker = _open_tracker_after_calibration(
+            address=address,
+            serial_number=serial_number,
+            import_module=import_module,
+        )
+        calibration_api = tobii_research.ScreenBasedCalibration(eyetracker)
+    except TobiiSdkUnavailableError as error_message:
+        error(str(error_message))
+        return 2
+    except TobiiTrackerUnavailableError as error_message:
+        error(str(error_message))
+        return 3
+
+    status("Importing PsychoPy...")
+    from psychopy import core, event, monitors, prefs, visual
+
+    from aria_et.psychopy.environment import effective_window_size, open_window
+    from aria_et.runtime import RecordingEventSink
+
+    def collect_point(point: CalibrationPoint) -> bool:
+        x = point.target.position.x
+        y = point.target.position.y
+        status(f"Collecting Tobii calibration data: {point.target.label} ({x}, {y})")
+        calibration_api.discard_data(x, y)
+        calibration_api.collect_data(x, y)
+        return True
+
+    effective_size = effective_window_size(
+        fullscreen=fullscreen,
+        window_size=window_size,
+        screen_resolution_pixels=screen_resolution_pixels,
+    )
+    status(
+        "Opening PsychoPy window "
+        f"({effective_size[0]}x{effective_size[1]}, fullscreen={fullscreen}, screen={screen})..."
+    )
+    window = open_window(
+        visual_module=visual,
+        monitors_module=monitors,
+        prefs_module=prefs,
+        fullscreen=fullscreen,
+        screen=screen,
+        window_size=window_size,
+        screen_distance_meters=screen_distance_meters,
+        screen_resolution_pixels=screen_resolution_pixels,
+        screen_size_meters=screen_size_meters,
+        monitor_name=monitor_name,
+        audio_speaker=audio_speaker,
+    )
+
+    try:
+        status("Entering Tobii SDK calibration mode.")
+        calibration_api.enter_calibration_mode()
+        try:
+            event.clearEvents()
+            abort_requested = lambda: bool(event.getKeys(keyList=["escape"]))
+            advance_requested = None
+            if advance_on_space:
+                advance_requested = lambda: bool(event.getKeys(keyList=["space"]))
+
+            presenter = PsychoPyCalibrationPresenter(
+                window=window,
+                play_sound=play_sound,
+                point_duration_seconds=point_duration_seconds,
+                abort_requested=abort_requested,
+                advance_requested=advance_requested,
+                point_collector=collect_point,
+                render_status=status if debug_render else None,
+            )
+            result = presenter.present(
+                build_gap_overlap_reward_calibration_sequence(),
+                PsychoPyClock(core.Clock()),
+                StatusLoggingEventSink(RecordingEventSink(), status),
+            )
+            if len(result.presented_points) == 0:
+                status("No calibration points collected.")
+                return 31
+
+            status("Computing and applying Tobii SDK calibration.")
+            calibration_result = calibration_api.compute_and_apply()
+        finally:
+            status("Leaving Tobii SDK calibration mode.")
+            calibration_api.leave_calibration_mode()
+    finally:
+        status("Closing PsychoPy window...")
+        window.close()
+
+    if _calibration_failed(calibration_result, tobii_research):
+        error("Tobii SDK calibration failed.")
+        return 31
+
+    try:
+        artifact_dir = save_current_calibration(
+            eyetracker=eyetracker,
+            output_dir=calibration_output_dir,
+            method="child-friendly-sdk",
+            screen=screen,
+        )
+    except OSError as error_message:
+        error(f"Calibration completed, but saving calibration data failed: {error_message}")
+        return 4
+
+    status(f"Saved calibration data to {artifact_dir}.")
+    return 0
+
+
+def _calibration_failed(calibration_result: object, tobii_research: object) -> bool:
+    failure = getattr(tobii_research, "CALIBRATION_STATUS_FAILURE", None)
+    status = getattr(calibration_result, "status", None)
+    return failure is not None and status == failure

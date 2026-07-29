@@ -18,6 +18,7 @@ from aria_et.tasks import BATTERY_ORDER
 
 DemoCalibrationRunner = Callable[..., int]
 CalibrateEyeTrackerRunner = Callable[..., int]
+ChildFriendlyCalibrationRunner = Callable[..., int]
 DemoActivityMonitoringRunner = Callable[..., int]
 DemoSocialInteractiveRunner = Callable[..., int]
 DemoStaticSocialScenesRunner = Callable[..., int]
@@ -89,6 +90,12 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
         help="Launch Tobii Pro Eye Tracker Manager user calibration.",
     )
     calibrate_eyetracker.add_argument(
+        "--routine",
+        choices=("etm", "child-friendly"),
+        default="etm",
+        help="Calibration routine to run. Defaults to Tobii Pro Eye Tracker Manager.",
+    )
+    calibrate_eyetracker.add_argument(
         "--address",
         default=None,
         help="Optional Tobii tracker URI to calibrate directly.",
@@ -101,10 +108,10 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
     calibrate_eyetracker.add_argument(
         "--screen",
         type=int,
-        default=config.etm_screen,
+        default=None,
         help=(
-            "ETM display number for calibration. Defaults to the configured "
-            "EIZO stimulus display."
+            "Display index for calibration. Defaults to the configured ETM "
+            "screen for --routine etm and PsychoPy screen for --routine child-friendly."
         ),
     )
     calibrate_eyetracker.add_argument(
@@ -116,6 +123,45 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
         "--output",
         default="calibrations",
         help="Directory where calibration artifacts are saved.",
+    )
+    calibrate_display_mode = calibrate_eyetracker.add_mutually_exclusive_group()
+    calibrate_display_mode.add_argument(
+        "--fullscreen",
+        action="store_true",
+        help="Run child-friendly calibration full screen.",
+    )
+    calibrate_display_mode.add_argument(
+        "--windowed",
+        action="store_false",
+        dest="fullscreen",
+        help="Run child-friendly calibration in a window.",
+    )
+    calibrate_eyetracker.set_defaults(fullscreen=True)
+    calibrate_eyetracker.add_argument(
+        "--size",
+        default="1024x768",
+        help="Window size for child-friendly --windowed mode, formatted as WIDTHxHEIGHT.",
+    )
+    calibrate_eyetracker.add_argument(
+        "--no-sound",
+        action="store_true",
+        help="Disable child-friendly calibration sound playback.",
+    )
+    calibrate_eyetracker.add_argument(
+        "--point-duration",
+        type=float,
+        default=3.0,
+        help="Seconds to display each child-friendly calibration point.",
+    )
+    calibrate_eyetracker.add_argument(
+        "--advance-on-space",
+        action="store_true",
+        help="Wait for Space before moving to the next child-friendly calibration point.",
+    )
+    calibrate_eyetracker.add_argument(
+        "--debug-render",
+        action="store_true",
+        help="Print child-friendly calibration rendering diagnostics.",
     )
 
     demo_calibration = subparsers.add_parser(
@@ -385,6 +431,7 @@ def main(
     argv: Sequence[str] | None = None,
     demo_calibration_runner: DemoCalibrationRunner | None = None,
     calibrate_eyetracker_runner: CalibrateEyeTrackerRunner | None = None,
+    child_friendly_calibration_runner: ChildFriendlyCalibrationRunner | None = None,
     demo_activity_monitoring_runner: DemoActivityMonitoringRunner | None = None,
     demo_social_interactive_runner: DemoSocialInteractiveRunner | None = None,
     demo_static_social_scenes_runner: DemoStaticSocialScenesRunner | None = None,
@@ -434,6 +481,34 @@ def main(
         return runner(address=args.address)
 
     if args.command == "calibrate-eyetracker":
+        if args.routine == "child-friendly":
+            warn_if_config_missing()
+            runner = child_friendly_calibration_runner
+            if runner is None:
+                from aria_et.psychopy.calibration import (
+                    run_child_friendly_eyetracker_calibration,
+                )
+
+                runner = run_child_friendly_eyetracker_calibration
+
+            return runner(
+                address=args.address,
+                serial_number=args.serial_number,
+                screen=args.screen if args.screen is not None else config.psychopy_screen,
+                calibration_output_dir=args.output,
+                fullscreen=args.fullscreen,
+                window_size=parse_window_size(args.size),
+                screen_distance_meters=config.screen_distance_meters,
+                screen_resolution_pixels=parse_window_size(config.screen_resolution),
+                screen_size_meters=parse_float_pair(config.screen_size_meters),
+                monitor_name=config.monitor_name,
+                audio_speaker=config.audio_speaker,
+                play_sound=not args.no_sound,
+                point_duration_seconds=args.point_duration,
+                advance_on_space=args.advance_on_space,
+                debug_render=args.debug_render,
+            )
+
         runner = calibrate_eyetracker_runner
         if runner is None:
             from aria_et.eyetracker import run_eyetracker_manager_calibration
@@ -443,7 +518,7 @@ def main(
         kwargs = {
             "address": args.address,
             "serial_number": args.serial_number,
-            "screen": args.screen,
+            "screen": args.screen if args.screen is not None else config.etm_screen,
             "calibration_output_dir": args.output,
         }
         if args.manager is not None:

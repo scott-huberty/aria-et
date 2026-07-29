@@ -242,6 +242,78 @@ def test_calibrate_eyetracker_can_set_output_directory():
     ]
 
 
+def test_calibrate_eyetracker_child_friendly_invokes_psychopy_sdk_runner():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        [
+            "calibrate-eyetracker",
+            "--routine",
+            "child-friendly",
+            "--address",
+            "tobii-prp://169.254.10.180",
+            "--screen",
+            "2",
+            "--output",
+            "runs/calibrations",
+            "--windowed",
+            "--size",
+            "800x600",
+            "--no-sound",
+            "--point-duration",
+            "0.5",
+            "--advance-on-space",
+            "--debug-render",
+        ],
+        child_friendly_calibration_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "address": "tobii-prp://169.254.10.180",
+            "serial_number": None,
+            "screen": 2,
+            "calibration_output_dir": "runs/calibrations",
+            "fullscreen": False,
+            "window_size": (800, 600),
+            "screen_distance_meters": 0.65,
+            "screen_resolution_pixels": (1920, 1080),
+            "screen_size_meters": (0.527, 0.296),
+            "monitor_name": "EIZO_EV2480",
+            "audio_speaker": None,
+            "play_sound": False,
+            "point_duration_seconds": 0.5,
+            "advance_on_space": True,
+            "debug_render": True,
+        }
+    ]
+
+
+def test_calibrate_eyetracker_child_friendly_defaults_to_psychopy_screen():
+    calls = []
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    exit_code = main(
+        [
+            "calibrate-eyetracker",
+            "--routine",
+            "child-friendly",
+        ],
+        child_friendly_calibration_runner=runner,
+    )
+
+    assert exit_code == 0
+    assert calls[0]["screen"] == 1
+
+
 def test_cli_uses_user_config_defaults(tmp_path):
     config_path = tmp_path / ".aria-et" / "config.toml"
     config_path.parent.mkdir()

@@ -299,8 +299,8 @@ def save_current_calibration(
     artifact_dir: str | Path | None = None,
     method: str,
     screen: int,
-    manager_executable: str,
-    manager_return_code: int,
+    manager_executable: str | None = None,
+    manager_return_code: int | None = None,
     now: datetime | None = None,
 ) -> Path:
     created_at = now or datetime.now(timezone.utc)
@@ -323,9 +323,11 @@ def save_current_calibration(
         "screen": screen,
         "tracker": _tracker_metadata(eyetracker),
         "calibration_data_file": calibration_data_file.name,
-        "manager_executable": manager_executable,
-        "manager_return_code": manager_return_code,
     }
+    if manager_executable is not None:
+        metadata["manager_executable"] = manager_executable
+    if manager_return_code is not None:
+        metadata["manager_return_code"] = manager_return_code
     if etm_log_file.exists():
         metadata["etm_log_file"] = etm_log_file.name
     (artifact_dir / "calibration.json").write_text(
