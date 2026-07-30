@@ -18,6 +18,28 @@ def should_reraise_sound_error(error: BaseException) -> bool:
     return isinstance(error, (KeyboardInterrupt, SystemExit, GeneratorExit))
 
 
+def demo_sound_factory(
+    *,
+    sound_module: Any,
+    prefs_module: Any,
+    status_sink: Any,
+) -> Any:
+    def make_sound(path: str) -> Any:
+        try:
+            return sound_module.Sound(path)
+        except BaseException as error:
+            if should_reraise_sound_error(error):
+                raise
+            prefs_module.hardware["audioDevice"] = ["default"]
+            status_sink(
+                "Configured speaker is unavailable; trying PsychoPy's default "
+                f"speaker instead ({error})."
+            )
+            return sound_module.Sound(path)
+
+    return make_sound
+
+
 def effective_window_size(
     *,
     fullscreen: bool,

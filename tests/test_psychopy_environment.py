@@ -1,6 +1,7 @@
 from aria_et.psychopy.environment import (
     configure_audio,
     configure_monitor,
+    demo_sound_factory,
     effective_window_size,
     open_window,
 )
@@ -43,6 +44,10 @@ class FakeVisual:
 class FakePrefs:
     def __init__(self):
         self.hardware = {}
+
+
+class FakeSpeakerError(BaseException):
+    pass
 
 
 def test_effective_window_size_uses_screen_resolution_for_fullscreen():
@@ -108,3 +113,55 @@ def test_open_window_uses_monitor_audio_and_effective_fullscreen_size():
     assert window["fullscr"] is True
     assert window["screen"] == 1
     assert window["monitor"].name == "EIZO_EV2480"
+
+
+def test_demo_sound_factory_falls_back_to_default_speaker():
+    prefs = FakePrefs()
+    prefs.hardware["audioDevice"] = ["EV2480"]
+    statuses = []
+    calls = []
+
+    class FakeSoundModule:
+        @staticmethod
+        def Sound(path):
+            calls.append((path, tuple(prefs.hardware["audioDevice"])))
+            if len(calls) == 1:
+                raise FakeSpeakerError("No speaker device found with name 'EV2480'")
+            return {"path": path}
+
+    make_sound = demo_sound_factory(
+        sound_module=FakeSoundModule,
+        prefs_module=prefs,
+        status_sink=statuses.append,
+    )
+
+    assert make_sound("reward.wav") == {"path": "reward.wav"}
+    assert calls == [
+        ("reward.wav", ("EV2480",)),
+        ("reward.wav", ("default",)),
+    ]
+    assert prefs.hardware["audioDevice"] == ["default"]
+    assert "trying PsychoPy's default speaker" in statuses[0]
+
+
+def test_demo_sound_factory_reraises_if_default_speaker_also_fails():
+    prefs = FakePrefs()
+    prefs.hardware["audioDevice"] = ["EV2480"]
+
+    class FakeSoundModule:
+        @staticmethod
+        def Sound(path):
+            raise FakeSpeakerError("No available speaker")
+
+    make_sound = demo_sound_factory(
+        sound_module=FakeSoundModule,
+        prefs_module=prefs,
+        status_sink=lambda message: None,
+    )
+
+    try:
+        make_sound("reward.wav")
+    except FakeSpeakerError as error:
+        assert "No available speaker" in str(error)
+    else:
+        raise AssertionError("Expected fallback speaker failure to be re-raised.")

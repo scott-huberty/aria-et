@@ -435,9 +435,13 @@ def run_gap_overlap_reward_calibration_demo(
     status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
 
     status("Importing PsychoPy...")
-    from psychopy import core, event, monitors, prefs, visual
+    from psychopy import core, event, monitors, prefs, sound, visual
 
-    from aria_et.psychopy.environment import effective_window_size, open_window
+    from aria_et.psychopy.environment import (
+        demo_sound_factory,
+        effective_window_size,
+        open_window,
+    )
     from aria_et.runtime import RecordingEventSink
 
     effective_size = effective_window_size(
@@ -484,6 +488,11 @@ def run_gap_overlap_reward_calibration_demo(
 
         presenter = PsychoPyCalibrationPresenter(
             window=window,
+            sound_factory=demo_sound_factory(
+                sound_module=sound,
+                prefs_module=prefs,
+                status_sink=status,
+            ),
             play_sound=play_sound,
             continue_without_sound_on_error=True,
             sound_error_sink=status,
