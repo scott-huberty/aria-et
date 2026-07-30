@@ -40,6 +40,50 @@ def demo_sound_factory(
     return make_sound
 
 
+def demo_movie_factory(
+    *,
+    visual_module: Any,
+    prefs_module: Any,
+    status_sink: Any,
+    play_sound: bool,
+    audio_speaker: str | None,
+) -> Any:
+    def make_movie(window: Any, path: str) -> Any:
+        if not play_sound:
+            return visual_module.MovieStim(window, filename=path, noAudio=True)
+
+        try:
+            return visual_module.MovieStim(
+                window,
+                filename=path,
+                noAudio=False,
+                audioDevice=audio_speaker,
+            )
+        except BaseException as error:
+            if should_reraise_sound_error(error):
+                raise
+            prefs_module.hardware["audioDevice"] = ["default"]
+            status_sink(
+                "Configured speaker is unavailable; trying PsychoPy's default "
+                f"speaker instead ({error})."
+            )
+
+        try:
+            return visual_module.MovieStim(
+                window,
+                filename=path,
+                noAudio=False,
+                audioDevice=None,
+            )
+        except BaseException as error:
+            if should_reraise_sound_error(error):
+                raise
+            warn_demo_sound_unavailable(sink=status_sink, error=error)
+            return visual_module.MovieStim(window, filename=path, noAudio=True)
+
+    return make_movie
+
+
 def effective_window_size(
     *,
     fullscreen: bool,

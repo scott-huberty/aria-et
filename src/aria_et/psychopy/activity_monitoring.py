@@ -367,7 +367,11 @@ def run_activity_monitoring_demo(
     status("Importing PsychoPy...")
     from psychopy import core, monitors, prefs, visual
 
-    from aria_et.psychopy.environment import effective_window_size, open_window
+    from aria_et.psychopy.environment import (
+        demo_movie_factory,
+        effective_window_size,
+        open_window,
+    )
     from aria_et.runtime import RecordingEventSink
 
     effective_size = effective_window_size(
@@ -396,6 +400,13 @@ def run_activity_monitoring_demo(
         status("Running Activity Monitoring demo.")
         presenter = PsychoPyActivityMonitoringPresenter(
             window=window,
+            movie_factory=demo_movie_factory(
+                visual_module=visual,
+                prefs_module=prefs,
+                status_sink=status,
+                play_sound=play_sound,
+                audio_speaker=audio_speaker,
+            ),
             play_sound=play_sound,
             audio_speaker=audio_speaker,
             continue_without_sound_on_error=True,

@@ -1,6 +1,7 @@
 from aria_et.psychopy.environment import (
     configure_audio,
     configure_monitor,
+    demo_movie_factory,
     demo_sound_factory,
     effective_window_size,
     open_window,
@@ -165,3 +166,90 @@ def test_demo_sound_factory_reraises_if_default_speaker_also_fails():
         assert "No available speaker" in str(error)
     else:
         raise AssertionError("Expected fallback speaker failure to be re-raised.")
+
+
+def test_demo_movie_factory_falls_back_to_default_speaker():
+    prefs = FakePrefs()
+    prefs.hardware["audioDevice"] = ["EV2480"]
+    statuses = []
+    calls = []
+
+    class FakeVisualModule:
+        @staticmethod
+        def MovieStim(window, **kwargs):
+            calls.append((window, kwargs, tuple(prefs.hardware["audioDevice"])))
+            if len(calls) == 1:
+                raise FakeSpeakerError("No speaker device found with name 'EV2480'")
+            return {"movie": kwargs}
+
+    make_movie = demo_movie_factory(
+        visual_module=FakeVisualModule,
+        prefs_module=prefs,
+        status_sink=statuses.append,
+        play_sound=True,
+        audio_speaker="EV2480",
+    )
+
+    assert make_movie("window", "movie.mp4") == {
+        "movie": {
+            "filename": "movie.mp4",
+            "noAudio": False,
+            "audioDevice": None,
+        }
+    }
+    assert calls[0][1] == {
+        "filename": "movie.mp4",
+        "noAudio": False,
+        "audioDevice": "EV2480",
+    }
+    assert calls[1][2] == ("default",)
+    assert prefs.hardware["audioDevice"] == ["default"]
+    assert "trying PsychoPy's default speaker" in statuses[0]
+
+
+def test_demo_movie_factory_falls_back_to_silent_movie_if_default_speaker_fails():
+    prefs = FakePrefs()
+    prefs.hardware["audioDevice"] = ["EV2480"]
+    statuses = []
+    calls = []
+
+    class FakeVisualModule:
+        @staticmethod
+        def MovieStim(window, **kwargs):
+            calls.append(kwargs)
+            if kwargs["noAudio"]:
+                return {"movie": kwargs}
+            raise FakeSpeakerError("No available speaker")
+
+    make_movie = demo_movie_factory(
+        visual_module=FakeVisualModule,
+        prefs_module=prefs,
+        status_sink=statuses.append,
+        play_sound=True,
+        audio_speaker="EV2480",
+    )
+
+    assert make_movie("window", "movie.mp4") == {
+        "movie": {
+            "filename": "movie.mp4",
+            "noAudio": True,
+        }
+    }
+    assert calls == [
+        {
+            "filename": "movie.mp4",
+            "noAudio": False,
+            "audioDevice": "EV2480",
+        },
+        {
+            "filename": "movie.mp4",
+            "noAudio": False,
+            "audioDevice": None,
+        },
+        {
+            "filename": "movie.mp4",
+            "noAudio": True,
+        },
+    ]
+    assert "trying PsychoPy's default speaker" in statuses[0]
+    assert "Sound playback is disabled for this demo" in statuses[1]
