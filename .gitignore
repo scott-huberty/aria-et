@@ -13,3 +13,7 @@ docs/
 runs/
 calibrations/
 bids
+
+TASKS.md
+issues/
+.DS_Store
