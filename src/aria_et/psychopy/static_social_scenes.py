@@ -66,6 +66,8 @@ class PsychoPyStaticSocialScenesPresenter:
     sound_factory: SoundFactory | None = None
     wait: Wait | None = None
     play_sound: bool = True
+    continue_without_sound_on_error: bool = False
+    sound_error_sink: StatusSink | None = None
     trial_limit: int | None = None
     frame_duration_seconds: float = 1 / 30
     render_status: StatusSink | None = None
@@ -175,8 +177,19 @@ class PsychoPyStaticSocialScenesPresenter:
             return
 
         with as_file(trial.stimulus.soundtrack) as soundtrack_path:
-            sound_object = self._sound_factory()(str(soundtrack_path))
-            sound_object.play()
+            try:
+                sound_object = self._sound_factory()(str(soundtrack_path))
+                sound_object.play()
+            except BaseException as error:
+                from aria_et.psychopy.environment import should_reraise_sound_error
+
+                if (
+                    not self.continue_without_sound_on_error
+                    or should_reraise_sound_error(error)
+                ):
+                    raise
+                self._warn_sound_unavailable(error)
+                return
             self._active_sounds.append(sound_object)
 
     def _stop_active_sounds(self) -> None:
@@ -223,6 +236,13 @@ class PsychoPyStaticSocialScenesPresenter:
     def _render_status(self, message: str) -> None:
         if self.render_status is not None:
             self.render_status(message)
+
+    def _warn_sound_unavailable(self, error: BaseException) -> None:
+        if self.sound_error_sink is None:
+            return
+        from aria_et.psychopy.environment import warn_demo_sound_unavailable
+
+        warn_demo_sound_unavailable(sink=self.sound_error_sink, error=error)
 
 
 @dataclass
@@ -308,6 +328,8 @@ def run_static_social_scenes_demo(
         presenter = PsychoPyStaticSocialScenesPresenter(
             window=window,
             play_sound=play_sound,
+            continue_without_sound_on_error=True,
+            sound_error_sink=status,
             trial_limit=trial_limit,
             render_status=status if debug_render else None,
         )

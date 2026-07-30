@@ -5,6 +5,19 @@ from __future__ import annotations
 from typing import Any
 
 
+def warn_demo_sound_unavailable(*, sink: Any, error: BaseException) -> None:
+    sink(
+        "Sound playback is disabled for this demo because PsychoPy could not "
+        f"initialize the configured speaker ({error}). Use --no-sound to silence "
+        "this warning, or connect/select the configured speaker before running "
+        "with sound."
+    )
+
+
+def should_reraise_sound_error(error: BaseException) -> bool:
+    return isinstance(error, (KeyboardInterrupt, SystemExit, GeneratorExit))
+
+
 def effective_window_size(
     *,
     fullscreen: bool,

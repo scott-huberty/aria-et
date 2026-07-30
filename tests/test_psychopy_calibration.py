@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from random import Random
 from types import SimpleNamespace
 
+import pytest
+
 from aria_et.calibration import build_gap_overlap_reward_calibration_sequence
 from aria_et.psychopy.calibration import (
     PsychoPyCalibrationPresenter,
@@ -46,6 +48,10 @@ class FakeSound:
         self.played.append(self.path)
 
 
+class FakeDeviceNotConnectedError(BaseException):
+    pass
+
+
 @dataclass
 class FakePsychoPyFactories:
     images: list[FakeImage] = field(default_factory=list)
@@ -71,9 +77,9 @@ class FakePsychoPyFactories:
 def make_presenter(window, factories, **overrides):
     return PsychoPyCalibrationPresenter(
         window=window,
-        image_factory=factories.make_image,
-        sound_factory=factories.make_sound,
-        wait=factories.wait,
+        image_factory=overrides.pop("image_factory", factories.make_image),
+        sound_factory=overrides.pop("sound_factory", factories.make_sound),
+        wait=overrides.pop("wait", factories.wait),
         **overrides,
     )
 
@@ -233,6 +239,57 @@ def test_psychopy_presenter_plays_reward_sound_for_each_point():
     assert all(path.endswith(".wav") for path in factories.played)
     assert all("snd_gap_rew" in path for path in factories.played)
     assert presenter._active_sounds == factories.sounds
+
+
+def test_psychopy_presenter_raises_sound_initialization_errors_by_default():
+    sequence = build_gap_overlap_reward_calibration_sequence()
+    window = FakeWindow()
+    factories = FakePsychoPyFactories()
+
+    def fail_sound(path):
+        raise FakeDeviceNotConnectedError("No speaker device found with name 'EV2480'")
+
+    with pytest.raises(FakeDeviceNotConnectedError, match="EV2480"):
+        make_presenter(
+            window,
+            factories,
+            sound_factory=fail_sound,
+            point_duration_seconds=0.1,
+            frame_duration_seconds=0.1,
+        ).present(sequence, ManualClock(), RecordingEventSink())
+
+
+def test_psychopy_presenter_can_continue_without_demo_sound_when_speaker_is_missing():
+    sequence = build_gap_overlap_reward_calibration_sequence()
+    window = FakeWindow()
+    factories = FakePsychoPyFactories()
+    warnings = []
+
+    def fail_sound(path):
+        raise FakeDeviceNotConnectedError("No speaker device found with name 'EV2480'")
+
+    result = make_presenter(
+        window,
+        factories,
+        sound_factory=fail_sound,
+        point_duration_seconds=0.1,
+        frame_duration_seconds=0.1,
+        continue_without_sound_on_error=True,
+        sound_error_sink=warnings.append,
+    ).present(sequence, ManualClock(), RecordingEventSink())
+
+    assert [point.label for point in result.presented_points] == [
+        "center",
+        "top-left",
+        "top-right",
+        "bottom-right",
+        "bottom-left",
+    ]
+    assert window.flips == 5
+    assert len(warnings) == 5
+    assert "Sound playback is disabled for this demo" in warnings[0]
+    assert "EV2480" in warnings[0]
+    assert "--no-sound" in warnings[0]
 
 
 def test_psychopy_presenter_collects_data_after_each_animation():
