@@ -7,7 +7,13 @@ __pycache__/
 # Offline mirror of the Tobii Pro SDK 2.1 Python API reference (vendor HTML).
 # Re-fetch from developer.tobiipro.com rather than committing ~1.2 MB of it.
 docs/tobii-sdk-2.1/
-docs/
+docs/tobii-sdk-2.1-api.md
+docs/tobii-sdk-2.1-examples.md
+docs/build/
+docs/_build/
+docs/README.md
+docs/gen_*
+
 
 # Output
 runs/

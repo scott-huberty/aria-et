@@ -15,6 +15,10 @@ test = [
     "bids-validator-deno",
     "pytest",
 ]
+docs = [
+    "sphinx",
+    "sphinxcontrib-youtube",
+]
 
 [project.scripts]
 aria-et = "aria_et.cli:main"
