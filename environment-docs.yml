@@ -1,4 +1,4 @@
-name: aria-et
+name: aria-et-docs
 channels:
   - conda-forge
 dependencies:
