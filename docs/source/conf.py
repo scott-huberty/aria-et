@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "ARIA Eyetracking"
+project = "Eyetracking"
 copyright = "2026, Scott Huberty"
 author = "Scott Huberty"
 release = "v0.1.0"

@@ -3,12 +3,11 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-ARIA Eyetracking documentation
-==============================
-
-ARIA Eyetracking implements the ABCCT eyetracking paradigms, calibration
-workflows, Tobii recording sessions, and BIDS export tools.
-
+An Implementation of the ABCCT Eyetracking battery
+==================================================
+This site documents an implementation of the
+`Autism Biomarkers Consortium for Clinical Trials <https://medicine.yale.edu/lab/mcpartland/abc-ct/>`__
+eyetracking battery.
 
 .. toctree::
    :maxdepth: 2
