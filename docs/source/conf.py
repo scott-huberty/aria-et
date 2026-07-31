@@ -26,3 +26,9 @@ exclude_patterns = []
 
 html_theme = 'alabaster'
 html_static_path = ['_static']
+html_css_files = ['aria.css']
+
+html_theme_options = {
+    'description': 'ABCCT eyetracking paradigms and Tobii recording workflows',
+    'fixed_sidebar': True,
+}

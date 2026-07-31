@@ -1,0 +1,129 @@
+@import url("https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&display=swap");
+
+:root {
+  --aria-black: #000000;
+  --aria-slate: #5f6e78;
+  --aria-gray: #595959;
+  --aria-teal: #006860;
+  --aria-blue: #356584;
+  --aria-green: #6cc351;
+  --aria-lavender: #878cbe;
+  --aria-deep-teal: #004d47;
+  --aria-page: #f7faf9;
+  --aria-border: #d9e6e2;
+}
+
+body {
+  background: var(--aria-page);
+  color: var(--aria-black);
+  font-family: "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+div.document {
+  background: #ffffff;
+  border-left: 1px solid var(--aria-border);
+  border-right: 1px solid var(--aria-border);
+}
+
+div.body {
+  color: var(--aria-black);
+  max-width: 880px;
+}
+
+div.body h1,
+div.body h2,
+div.body h3,
+div.body h4,
+div.body h5,
+div.body h6 {
+  font-family: "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 800;
+}
+
+div.body h1 {
+  color: var(--aria-teal);
+  border-bottom: 4px solid var(--aria-green);
+}
+
+div.body h2 {
+  color: var(--aria-blue);
+  border-bottom: 1px solid var(--aria-border);
+}
+
+div.body h3 {
+  color: var(--aria-slate);
+}
+
+div.body h4 {
+  color: var(--aria-lavender);
+}
+
+div.body h5,
+div.body h6 {
+  color: var(--aria-deep-teal);
+}
+
+div.sphinxsidebar {
+  font-family: "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+div.sphinxsidebar h1,
+div.sphinxsidebar h2,
+div.sphinxsidebar h3,
+div.sphinxsidebar h4 {
+  color: var(--aria-teal);
+  font-family: "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 800;
+}
+
+a,
+div.sphinxsidebar a {
+  color: var(--aria-teal);
+}
+
+a:hover,
+div.sphinxsidebar a:hover {
+  color: var(--aria-green);
+}
+
+table.docutils {
+  border: 1px solid var(--aria-border);
+  border-collapse: collapse;
+}
+
+table.docutils th {
+  background: var(--aria-teal);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+table.docutils td,
+table.docutils th {
+  border: 1px solid var(--aria-border);
+  padding: 0.5rem 0.65rem;
+}
+
+table.docutils tr:nth-child(even) td {
+  background: #f3f8f6;
+}
+
+code,
+tt,
+pre {
+  font-family: "Courier New", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+code.literal {
+  color: var(--aria-deep-teal);
+  background: #edf6f1;
+  border: 1px solid #d7eadf;
+  border-radius: 4px;
+  padding: 0.05rem 0.25rem;
+}
+
+div.body img {
+  border: 1px solid var(--aria-border);
+  max-width: 100%;
+}
