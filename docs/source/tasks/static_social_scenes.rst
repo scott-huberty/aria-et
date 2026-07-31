@@ -47,3 +47,35 @@ Social Scenes presenter.
    * - ``static-social-scenes.ended``
      - Task sequence ended.
      - ``sequence_id``, ``trial_count``
+
+Payload Field Reference
+-----------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 55 20
+
+   * - Field
+     - Description
+     - Example or values
+   * - ``sequence_id``
+     - Task sequence identifier.
+     - ``static-social-scenes``
+   * - ``trial_id``
+     - Trial identifier assigned by sequence order.
+     - ``ss-01`` through ``ss-12``
+   * - ``trial_type``
+     - Static Social Scenes condition.
+     - ``static-scene`` or ``visual-search``
+   * - ``image``
+     - Bundled image filename presented on that trial.
+     - ``static*_f0.jpg`` or ``popout*_f0.jpg``
+   * - ``soundtrack``
+     - Bundled soundtrack filename paired with that trial.
+     - ``si_song*_vp080.wav``
+   * - ``background_rgb``
+     - RGB background color used for the trial.
+     - ``(0, 0, 0)`` for static-scene; ``(255, 255, 255)`` for visual-search
+   * - ``trial_count``
+     - Number of trials completed before the task ended.
+     - Integer from ``0`` to ``12``

@@ -56,3 +56,35 @@ Monitoring presenter.
    * - ``activity-monitoring.ended``
      - Task sequence ended.
      - ``sequence_id``, ``trial_count``
+
+Payload Field Reference
+-----------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 55 20
+
+   * - Field
+     - Description
+     - Example or values
+   * - ``sequence_id``
+     - Task sequence identifier.
+     - ``activity-monitoring``
+   * - ``trial_id``
+     - Trial identifier assigned by sequence order.
+     - ``am-01`` through ``am-16``
+   * - ``media_type``
+     - Stimulus presentation type.
+     - ``dynamic-video`` or ``static-image``
+   * - ``gaze_condition``
+     - Social gaze condition represented by the stimulus.
+     - ``activity-gaze`` or ``mutual-gaze``
+   * - ``media``
+     - Bundled stimulus filename presented on that trial.
+     - ``.mp4`` for dynamic-video trials; ``.jpg`` for static-image trials
+   * - ``duration_seconds``
+     - Duration of the blank inter-trial interval.
+     - ``1.0``
+   * - ``trial_count``
+     - Number of trials completed before the task ended.
+     - Integer from ``0`` to ``16``

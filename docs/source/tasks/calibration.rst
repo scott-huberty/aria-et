@@ -48,3 +48,35 @@ presenter.
    * - ``calibration.ended``
      - Calibration sequence ended.
      - ``sequence_id``, ``point_count``
+
+Payload Field Reference
+-----------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 55 20
+
+   * - Field
+     - Description
+     - Example or values
+   * - ``sequence_id``
+     - Calibration sequence identifier.
+     - ``gap-overlap-reward-5-point``
+   * - ``label``
+     - Human-readable calibration target label.
+     - ``center``, ``top-left``, ``top-right``, ``bottom-right``, ``bottom-left``
+   * - ``x``
+     - Target x position in normalized display coordinates. ``0`` is the left edge and ``1`` is the right edge.
+     - ``0.1``, ``0.5``, ``0.9``
+   * - ``y``
+     - Target y position in normalized display coordinates. ``0`` is the top edge and ``1`` is the bottom edge.
+     - ``0.1``, ``0.5``, ``0.9``
+   * - ``window_x``
+     - Target x position converted into PsychoPy window coordinates.
+     - Float
+   * - ``window_y``
+     - Target y position converted into PsychoPy window coordinates.
+     - Float
+   * - ``point_count``
+     - Number of calibration points completed before the event was emitted.
+     - Integer from ``0`` to ``5``
