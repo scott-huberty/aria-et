@@ -18,6 +18,7 @@ test = [
 docs = [
     "sphinx",
     "sphinxcontrib-youtube",
+    "furo",
 ]
 
 [project.scripts]

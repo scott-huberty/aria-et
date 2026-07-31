@@ -1,129 +1,129 @@
 @import url("https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&display=swap");
 
 :root {
-  --aria-black: #000000;
-  --aria-slate: #5f6e78;
-  --aria-gray: #595959;
-  --aria-teal: #006860;
-  --aria-blue: #356584;
+  --aria-black: #ecf5f2;
+  --aria-slate: #c5d0d5;
+  --aria-gray: #b8c6c1;
+  --aria-teal: #8fd879;
+  --aria-blue: #9fb7d7;
   --aria-green: #6cc351;
-  --aria-lavender: #878cbe;
-  --aria-deep-teal: #004d47;
-  --aria-page: #f7faf9;
-  --aria-border: #d9e6e2;
+  --aria-lavender: #b5badf;
+  --aria-deep-teal: #d9f5d0;
+  --aria-page: #102321;
+  --aria-border: #2a4d48;
+  --aria-soft-green: #17332f;
 }
 
 body {
-  background: var(--aria-page);
-  color: var(--aria-black);
-  font-family: "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 16px;
-  line-height: 1.6;
+  letter-spacing: 0;
+  color-scheme: dark;
 }
 
-div.document {
-  background: #ffffff;
-  border-left: 1px solid var(--aria-border);
-  border-right: 1px solid var(--aria-border);
+.theme-toggle-container {
+  display: none;
 }
 
-div.body {
-  color: var(--aria-black);
-  max-width: 880px;
-}
-
-div.body h1,
-div.body h2,
-div.body h3,
-div.body h4,
-div.body h5,
-div.body h6 {
-  font-family: "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+.sidebar-brand-text {
+  color: var(--aria-deep-teal);
   font-weight: 800;
+  letter-spacing: 0;
 }
 
-div.body h1 {
+.content {
+  line-height: 1.65;
+}
+
+.content h1,
+.content h2,
+.content h3,
+.content h4,
+.content h5,
+.content h6 {
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.content h1 {
   color: var(--aria-teal);
+  padding-bottom: 0.45rem;
   border-bottom: 4px solid var(--aria-green);
 }
 
-div.body h2 {
+.content h2 {
   color: var(--aria-blue);
+  padding-bottom: 0.25rem;
   border-bottom: 1px solid var(--aria-border);
 }
 
-div.body h3 {
+.content h3 {
   color: var(--aria-slate);
 }
 
-div.body h4 {
+.content h4 {
   color: var(--aria-lavender);
 }
 
-div.body h5,
-div.body h6 {
-  color: var(--aria-deep-teal);
+.content a {
+  font-weight: 600;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.15em;
 }
 
-div.sphinxsidebar {
-  font-family: "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+.content img {
+  display: block;
+  max-width: min(100%, 760px);
+  margin: 0 0 1.35rem;
+  border: 1px solid var(--aria-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 28%);
 }
 
-div.sphinxsidebar h1,
-div.sphinxsidebar h2,
-div.sphinxsidebar h3,
-div.sphinxsidebar h4 {
-  color: var(--aria-teal);
-  font-family: "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+.content iframe {
+  display: block;
+  max-width: 100%;
+  margin: 0 0 0.75rem;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 28%);
+}
+
+.content table.docutils {
+  width: 100%;
+  margin: 1rem 0 1.5rem;
+  border: 1px solid var(--aria-border);
+  border-collapse: collapse;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.content table.docutils th {
+  background: var(--aria-teal);
+  color: #ffffff;
   font-weight: 800;
 }
 
-a,
-div.sphinxsidebar a {
-  color: var(--aria-teal);
-}
-
-a:hover,
-div.sphinxsidebar a:hover {
-  color: var(--aria-green);
-}
-
-table.docutils {
+.content table.docutils td,
+.content table.docutils th {
   border: 1px solid var(--aria-border);
-  border-collapse: collapse;
+  padding: 0.55rem 0.7rem;
+  vertical-align: top;
 }
 
-table.docutils th {
-  background: var(--aria-teal);
-  color: #ffffff;
-  font-weight: 700;
+.content table.docutils tr:nth-child(even) td {
+  background: var(--aria-soft-green);
 }
 
-table.docutils td,
-table.docutils th {
-  border: 1px solid var(--aria-border);
-  padding: 0.5rem 0.65rem;
-}
-
-table.docutils tr:nth-child(even) td {
-  background: #f3f8f6;
-}
-
-code,
-tt,
-pre {
-  font-family: "Courier New", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-
-code.literal {
-  color: var(--aria-deep-teal);
-  background: #edf6f1;
-  border: 1px solid #d7eadf;
+.content code.literal {
+  color: #d9f5d0;
+  background: var(--aria-soft-green);
+  border: 1px solid #2a4d48;
   border-radius: 4px;
   padding: 0.05rem 0.25rem;
 }
 
-div.body img {
-  border: 1px solid var(--aria-border);
-  max-width: 100%;
+.content .toctree-wrapper ul {
+  padding-left: 1.2rem;
+}
+
+.content .toctree-wrapper li {
+  margin: 0.25rem 0;
 }
