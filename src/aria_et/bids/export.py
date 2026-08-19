@@ -13,6 +13,7 @@ from typing import Any
 
 TASK_BIDS_LABELS = {
     "activity-monitoring": "ActivityMonitoring",
+    "social-interactive": "SocialInteractive",
     "static-social-scenes": "StaticSocialScenes",
     "pupillary-light-reflex": "PupillaryLightReflex",
 }

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from aria_et.bids import export_run_to_bids
+from aria_et.bids.export import TASK_BIDS_LABELS
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -16,6 +17,15 @@ def _write_jsonl(path: Path, rows: list[dict]) -> None:
         "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
         encoding="utf-8",
     )
+
+
+def test_bids_task_labels_cover_all_aria_tasks():
+    assert TASK_BIDS_LABELS == {
+        "activity-monitoring": "ActivityMonitoring",
+        "pupillary-light-reflex": "PupillaryLightReflex",
+        "social-interactive": "SocialInteractive",
+        "static-social-scenes": "StaticSocialScenes",
+    }
 
 
 def test_export_run_to_bids_writes_binocular_physio_and_events(tmp_path):
