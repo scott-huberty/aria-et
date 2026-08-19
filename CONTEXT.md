@@ -50,11 +50,19 @@ Writer thread:
   JSON serialize samples
   write one JSONL row per sample
   flush every 250 samples or 0.5 s
+  refresh gaze_writer.json at flush cadence
   drain and flush on clean stop
 ```
 
 This preserves the existing raw data format while reducing Python allocation,
 JSON serialization, and file I/O inside the SDK callback thread.
+
+Tobii gaze writer health is now recorded in `gaze_writer.json` beside each run's
+`gaze.jsonl`. The sidecar is refreshed at writer flush cadence and includes
+received, written, dropped, queued, and flush counters. Clean runs also copy the
+final writer summary into `session.json` and print a concise summary to
+`session.log`. This is meant to make callback queue pressure and Python-side
+sample drops visible during later crash review.
 
 Session logs now prefix each captured stdout/stderr line and uncaught traceback
 line with a local wall-clock ISO timestamp, making `session.log` easier to align
@@ -77,7 +85,7 @@ Relevant files:
 Validation after the design change:
 
 ```text
-191 passed, 7 skipped
+193 passed, 7 skipped
 ```
 
 ## Data Validation Notes

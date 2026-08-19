@@ -167,6 +167,7 @@ def _assert_raw_run(run_dir: Path, task_id: str, trial_limit: int) -> None:
     assert (run_dir / "tracker.json").exists()
     assert (run_dir / "events.jsonl").exists()
     assert (run_dir / "gaze.jsonl").exists()
+    assert (run_dir / "gaze_writer.json").exists()
     assert (run_dir / "session.log").exists()
 
     session = json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
@@ -183,6 +184,12 @@ def _assert_raw_run(run_dir: Path, task_id: str, trial_limit: int) -> None:
 
     gaze_lines = _raw_line_count(run_dir / "gaze.jsonl")
     assert gaze_lines > 100
+    gaze_writer = json.loads(
+        (run_dir / "gaze_writer.json").read_text(encoding="utf-8")
+    )
+    assert gaze_writer["written_queue_samples"] == gaze_lines
+    assert gaze_writer["dropped_queue_samples"] == 0
+    assert session["gaze_writer"]["final_health"]["written_queue_samples"] == gaze_lines
 
 
 def _assert_bids_export(

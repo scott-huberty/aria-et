@@ -288,6 +288,62 @@ def test_tobii_gaze_recorder_drains_queue_on_stop(tmp_path):
     assert len((tmp_path / "gaze.jsonl").read_text().splitlines()) == 10
 
 
+def test_tobii_gaze_recorder_writes_writer_health_snapshots(tmp_path):
+    tracker = FakeEyeTracker()
+    clock = ManualClock()
+    recorder = TobiiGazeRecorder(
+        eyetracker=tracker,
+        tobii_research=FakeTobiiModule,
+        gaze_path=tmp_path / "gaze.jsonl",
+        tracker_metadata_path=tmp_path / "tracker.json",
+        writer_health_path=tmp_path / "gaze_writer.json",
+        clock=clock,
+        flush_every_samples=2,
+        flush_every_seconds=60.0,
+    )
+
+    recorder.start()
+    try:
+        callback = tracker.subscriptions[0]["callback"]
+        callback({"system_time_stamp": 1})
+        callback({"system_time_stamp": 2})
+        recorder._queue.join()
+        health = json.loads((tmp_path / "gaze_writer.json").read_text())
+        assert health["received_queue_samples"] == 2
+        assert health["written_queue_samples"] == 2
+        assert health["dropped_queue_samples"] == 0
+        assert health["flush_count"] == 1
+        assert health["max_queue_samples"] == 6000
+        assert health["writer_error"] is None
+    finally:
+        recorder.stop()
+
+    final_health = json.loads((tmp_path / "gaze_writer.json").read_text())
+    assert final_health["written_queue_samples"] == 2
+    assert final_health["flush_count"] == 2
+    assert final_health["writer_thread_alive"] is False
+
+
+def test_tobii_gaze_recorder_counts_queue_drops(tmp_path):
+    tracker = FakeEyeTracker()
+    recorder = TobiiGazeRecorder(
+        eyetracker=tracker,
+        tobii_research=FakeTobiiModule,
+        gaze_path=tmp_path / "gaze.jsonl",
+        tracker_metadata_path=tmp_path / "tracker.json",
+        writer_health_path=tmp_path / "gaze_writer.json",
+        clock=lambda: 12.5,
+        max_queue_samples=1,
+    )
+    recorder._started = True
+    recorder._queue.put_nowait((12.5, {"system_time_stamp": 1}))
+
+    recorder._record_gaze_sample({"system_time_stamp": 2})
+
+    assert recorder.writer_health()["received_queue_samples"] == 1
+    assert recorder.writer_health()["dropped_queue_samples"] == 1
+
+
 def test_save_current_calibration_writes_metadata_and_sdk_payload(tmp_path):
     tracker = FakeEyeTracker()
     artifact_dir = save_current_calibration(

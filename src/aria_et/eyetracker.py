@@ -135,6 +135,7 @@ class TobiiGazeRecorder:
         tobii_research: ModuleType,
         gaze_path: str | Path,
         tracker_metadata_path: str | Path,
+        writer_health_path: str | Path | None = None,
         clock: Callable[[], float] = time.time,
         flush_every_samples: int = 250,
         flush_every_seconds: float = 0.5,
@@ -151,6 +152,9 @@ class TobiiGazeRecorder:
         self.tobii_research = tobii_research
         self.gaze_path = Path(gaze_path)
         self.tracker_metadata_path = Path(tracker_metadata_path)
+        self.writer_health_path = (
+            Path(writer_health_path) if writer_health_path is not None else None
+        )
         self.clock = clock
         self.flush_every_samples = flush_every_samples
         self.flush_every_seconds = flush_every_seconds
@@ -162,7 +166,12 @@ class TobiiGazeRecorder:
         self._started = False
         self._samples_since_flush = 0
         self._last_flush_at = 0.0
+        self._started_at: float | None = None
+        self._stopped_at: float | None = None
+        self.received_queue_samples = 0
+        self.written_queue_samples = 0
         self.dropped_queue_samples = 0
+        self.gaze_file_flush_count = 0
 
     def __enter__(self) -> "TobiiGazeRecorder":
         self.start()
@@ -194,7 +203,13 @@ class TobiiGazeRecorder:
         self._writer_error = None
         self._samples_since_flush = 0
         self._last_flush_at = self.clock()
+        self._started_at = self._last_flush_at
+        self._stopped_at = None
+        self.received_queue_samples = 0
+        self.written_queue_samples = 0
         self.dropped_queue_samples = 0
+        self.gaze_file_flush_count = 0
+        self._write_writer_health_snapshot()
         self._writer_thread = threading.Thread(
             target=self._write_gaze_samples,
             name="TobiiGazeJsonlWriter",
@@ -231,6 +246,8 @@ class TobiiGazeRecorder:
             if self._file is not None:
                 self._file.close()
                 self._file = None
+            self._stopped_at = self.clock()
+            self._write_writer_health_snapshot()
             if self._writer_error is not None:
                 raise RuntimeError("Tobii gaze writer thread failed.") from self._writer_error
 
@@ -239,6 +256,7 @@ class TobiiGazeRecorder:
             return
 
         try:
+            self.received_queue_samples += 1
             self._queue.put_nowait((self.clock(), gaze_data))
         except queue.Full:
             self.dropped_queue_samples += 1
@@ -279,6 +297,7 @@ class TobiiGazeRecorder:
         }
         line = json.dumps(record, sort_keys=True) + "\n"
         self._file.write(line)
+        self.written_queue_samples += 1
         self._samples_since_flush += 1
         if self._should_flush(received_at):
             self._flush_gaze_file()
@@ -308,6 +327,46 @@ class TobiiGazeRecorder:
         self._file.flush()
         self._samples_since_flush = 0
         self._last_flush_at = self.clock()
+        self.gaze_file_flush_count += 1
+        self._write_writer_health_snapshot()
+
+    def writer_health(self) -> dict[str, object]:
+        return {
+            "schema_version": 1,
+            "started_at": self._started_at,
+            "stopped_at": self._stopped_at,
+            "received_queue_samples": self.received_queue_samples,
+            "written_queue_samples": self.written_queue_samples,
+            "dropped_queue_samples": self.dropped_queue_samples,
+            "max_queue_samples": self.max_queue_samples,
+            "queued_samples": self._queue.qsize(),
+            "flush_count": self.gaze_file_flush_count,
+            "flush_every_samples": self.flush_every_samples,
+            "flush_every_seconds": self.flush_every_seconds,
+            "last_flush_at": self._last_flush_at,
+            "writer_thread_alive": (
+                self._writer_thread.is_alive()
+                if self._writer_thread is not None
+                else False
+            ),
+            "writer_error": (
+                repr(self._writer_error) if self._writer_error is not None else None
+            ),
+        }
+
+    def _write_writer_health_snapshot(self) -> None:
+        if self.writer_health_path is None:
+            return
+
+        self.writer_health_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.writer_health_path.with_suffix(
+            self.writer_health_path.suffix + ".tmp"
+        )
+        tmp_path.write_text(
+            json.dumps(self.writer_health(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        tmp_path.replace(self.writer_health_path)
 
 
 def create_tobii_gaze_recorder(
@@ -324,6 +383,7 @@ def create_tobii_gaze_recorder(
         tobii_research=tobii_research,
         gaze_path=gaze_path,
         tracker_metadata_path=tracker_metadata_path,
+        writer_health_path=Path(gaze_path).with_name("gaze_writer.json"),
     )
 
 

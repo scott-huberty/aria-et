@@ -18,9 +18,10 @@ SESSION_LOG_TIMESTAMP = re.compile(
 
 
 class FakeRecorder:
-    def __init__(self, gaze_path, tracker_metadata_path):
+    def __init__(self, gaze_path, tracker_metadata_path, writer_health_path=None):
         self.gaze_path = gaze_path
         self.tracker_metadata_path = tracker_metadata_path
+        self.writer_health_path = writer_health_path
         self.entered = False
         self.exited = False
 
@@ -50,6 +51,18 @@ class FakeRecorder:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.exited = True
+
+    def writer_health(self):
+        return {
+            "schema_version": 1,
+            "received_queue_samples": 1,
+            "written_queue_samples": 1,
+            "dropped_queue_samples": 0,
+            "max_queue_samples": 6000,
+            "queued_samples": 0,
+            "flush_count": 1,
+            "writer_error": None,
+        }
 
 
 def _write_calibration_artifact(
@@ -198,7 +211,11 @@ def test_run_recording_session_records_events_and_gaze_for_tobii(tmp_path):
 
     def recorder_factory(**kwargs):
         recorder_calls.append(kwargs)
-        recorder = FakeRecorder(kwargs["gaze_path"], kwargs["tracker_metadata_path"])
+        recorder = FakeRecorder(
+            kwargs["gaze_path"],
+            kwargs["tracker_metadata_path"],
+            kwargs["writer_health_path"],
+        )
         recorders.append(recorder)
         return recorder
 
@@ -223,6 +240,7 @@ def test_run_recording_session_records_events_and_gaze_for_tobii(tmp_path):
         {
             "gaze_path": output_dir / "gaze.jsonl",
             "tracker_metadata_path": output_dir / "tracker.json",
+            "writer_health_path": output_dir / "gaze_writer.json",
             "address": "tobii-prp://169.254.10.180",
         }
     ]
@@ -237,7 +255,33 @@ def test_run_recording_session_records_events_and_gaze_for_tobii(tmp_path):
     assert json.loads((output_dir / "events.jsonl").read_text())["name"] == (
         "task.started"
     )
-    assert "Found 1 Tobii eye tracker." in (output_dir / "session.log").read_text()
+    session_metadata = json.loads((output_dir / "session.json").read_text())
+    assert session_metadata["gaze_writer"] == {
+        "health_file": "gaze_writer.json",
+        "final_health": {
+            "schema_version": 1,
+            "received_queue_samples": 1,
+            "written_queue_samples": 1,
+            "dropped_queue_samples": 0,
+            "max_queue_samples": 6000,
+            "queued_samples": 0,
+            "flush_count": 1,
+            "writer_error": None,
+        },
+    }
+    assert json.loads((output_dir / "gaze_writer.json").read_text()) == {
+        "schema_version": 1,
+        "received_queue_samples": 1,
+        "written_queue_samples": 1,
+        "dropped_queue_samples": 0,
+        "max_queue_samples": 6000,
+        "queued_samples": 0,
+        "flush_count": 1,
+        "writer_error": None,
+    }
+    session_log = (output_dir / "session.log").read_text()
+    assert "Found 1 Tobii eye tracker." in session_log
+    assert "Tobii gaze writer summary: received=1 written=1 dropped=0" in session_log
 
 
 def test_run_recording_session_writes_bids_and_display_metadata(tmp_path):
@@ -309,7 +353,9 @@ def test_run_recording_session_records_latest_calibration_provenance(tmp_path):
         bids=BidsSessionMetadata(subject="01", session="baseline", run="01"),
         check_eyetracker=lambda **kwargs: 0,
         recorder_factory=lambda **kwargs: FakeRecorder(
-            kwargs["gaze_path"], kwargs["tracker_metadata_path"]
+            kwargs["gaze_path"],
+            kwargs["tracker_metadata_path"],
+            kwargs["writer_health_path"],
         ),
     )
 

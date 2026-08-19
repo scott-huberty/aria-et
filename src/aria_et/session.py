@@ -200,6 +200,7 @@ def run_recording_session(
                     recorder = recorder_factory(
                         gaze_path=output_path / "gaze.jsonl",
                         tracker_metadata_path=output_path / "tracker.json",
+                        writer_health_path=output_path / "gaze_writer.json",
                         address=tracker_address,
                     )
                 except TobiiSdkUnavailableError as error_message:
@@ -209,8 +210,11 @@ def run_recording_session(
                     error(str(error_message))
                     return 3
 
-                with recorder:
-                    present(event_sink)
+                try:
+                    with recorder:
+                        present(event_sink)
+                finally:
+                    _record_gaze_writer_health(output_path, recorder)
             else:
                 present(event_sink)
         finally:
@@ -347,6 +351,59 @@ def _write_session_metadata(
             sort_keys=True,
         )
         + "\n",
+        encoding="utf-8",
+    )
+
+
+def _record_gaze_writer_health(output_path: Path, recorder: object) -> None:
+    health = _recorder_writer_health(recorder)
+    if health is None:
+        return
+
+    writer_health_path = output_path / "gaze_writer.json"
+    if not writer_health_path.exists():
+        writer_health_path.write_text(
+            json.dumps(health, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+    _update_session_metadata(
+        output_path / "session.json",
+        gaze_writer={
+            "health_file": writer_health_path.name,
+            "final_health": health,
+        },
+    )
+    print(
+        "Tobii gaze writer summary: "
+        f"received={health.get('received_queue_samples')} "
+        f"written={health.get('written_queue_samples')} "
+        f"dropped={health.get('dropped_queue_samples')} "
+        f"flushes={health.get('flush_count')} "
+        f"queued={health.get('queued_samples')}"
+    )
+
+
+def _recorder_writer_health(recorder: object) -> dict[str, object] | None:
+    writer_health = getattr(recorder, "writer_health", None)
+    if not callable(writer_health):
+        return None
+    health = writer_health()
+    if not isinstance(health, dict):
+        return None
+    return health
+
+
+def _update_session_metadata(path: Path, **updates: object) -> None:
+    try:
+        metadata = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        metadata = {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata.update(updates)
+    path.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
