@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import json
 import math
+import queue
 import subprocess
 import sys
 import threading
@@ -18,6 +19,7 @@ from typing import Any
 
 ImportModule = Callable[[str], ModuleType]
 StatusSink = Callable[[str], None]
+_QUEUE_STOP = object()
 DEFAULT_EYETRACKER_MANAGER_PATH = (
     "/Applications/TobiiProEyeTrackerManager.app/Contents/MacOS/"
     "TobiiProEyeTrackerManager"
@@ -136,11 +138,14 @@ class TobiiGazeRecorder:
         clock: Callable[[], float] = time.time,
         flush_every_samples: int = 250,
         flush_every_seconds: float = 0.5,
+        max_queue_samples: int = 6000,
     ) -> None:
         if flush_every_samples < 1:
             raise ValueError("flush_every_samples must be at least 1.")
         if flush_every_seconds <= 0:
             raise ValueError("flush_every_seconds must be positive.")
+        if max_queue_samples < 1:
+            raise ValueError("max_queue_samples must be at least 1.")
 
         self.eyetracker = eyetracker
         self.tobii_research = tobii_research
@@ -149,11 +154,15 @@ class TobiiGazeRecorder:
         self.clock = clock
         self.flush_every_samples = flush_every_samples
         self.flush_every_seconds = flush_every_seconds
+        self.max_queue_samples = max_queue_samples
         self._file = None
-        self._lock = threading.Lock()
+        self._queue: queue.Queue[object] = queue.Queue(maxsize=max_queue_samples)
+        self._writer_thread: threading.Thread | None = None
+        self._writer_error: BaseException | None = None
         self._started = False
         self._samples_since_flush = 0
         self._last_flush_at = 0.0
+        self.dropped_queue_samples = 0
 
     def __enter__(self) -> "TobiiGazeRecorder":
         self.start()
@@ -181,14 +190,31 @@ class TobiiGazeRecorder:
             encoding="utf-8",
         )
         self._file = self.gaze_path.open("w", encoding="utf-8")
+        self._queue = queue.Queue(maxsize=self.max_queue_samples)
+        self._writer_error = None
         self._samples_since_flush = 0
         self._last_flush_at = self.clock()
-        self.eyetracker.subscribe_to(
-            self.tobii_research.EYETRACKER_GAZE_DATA,
-            self._record_gaze_sample,
-            as_dictionary=True,
+        self.dropped_queue_samples = 0
+        self._writer_thread = threading.Thread(
+            target=self._write_gaze_samples,
+            name="TobiiGazeJsonlWriter",
+            daemon=False,
         )
+        self._writer_thread.start()
         self._started = True
+        try:
+            self.eyetracker.subscribe_to(
+                self.tobii_research.EYETRACKER_GAZE_DATA,
+                self._record_gaze_sample,
+                as_dictionary=True,
+            )
+        except Exception:
+            self._stop_writer()
+            self._started = False
+            if self._file is not None:
+                self._file.close()
+                self._file = None
+            raise
 
     def stop(self) -> None:
         if not self._started:
@@ -200,32 +226,79 @@ class TobiiGazeRecorder:
                 self._record_gaze_sample,
             )
         finally:
+            self._started = False
+            self._stop_writer()
             if self._file is not None:
-                self._flush_gaze_file()
                 self._file.close()
                 self._file = None
-            self._started = False
+            if self._writer_error is not None:
+                raise RuntimeError("Tobii gaze writer thread failed.") from self._writer_error
 
     def _record_gaze_sample(self, gaze_data: dict[str, object]) -> None:
+        if not self._started:
+            return
+
+        try:
+            self._queue.put_nowait((self.clock(), gaze_data))
+        except queue.Full:
+            self.dropped_queue_samples += 1
+
+    def _write_gaze_samples(self) -> None:
+        try:
+            while True:
+                try:
+                    item = self._queue.get(timeout=self.flush_every_seconds)
+                except queue.Empty:
+                    if self._should_flush(self.clock()):
+                        self._flush_gaze_file()
+                    continue
+
+                try:
+                    if item is _QUEUE_STOP:
+                        self._flush_gaze_file()
+                        return
+
+                    received_at, gaze_data = item
+                    self._write_gaze_sample(received_at, gaze_data)
+                finally:
+                    self._queue.task_done()
+        except BaseException as error:
+            self._writer_error = error
+
+    def _write_gaze_sample(
+        self,
+        received_at: float,
+        gaze_data: dict[str, object],
+    ) -> None:
         if self._file is None:
             return
 
-        received_at = self.clock()
         record = {
             "received_at": received_at,
             "sample": _json_safe(gaze_data),
         }
         line = json.dumps(record, sort_keys=True) + "\n"
-        with self._lock:
-            self._file.write(line)
-            self._samples_since_flush += 1
-            if self._should_flush(received_at):
-                self._flush_gaze_file()
+        self._file.write(line)
+        self._samples_since_flush += 1
+        if self._should_flush(received_at):
+            self._flush_gaze_file()
+
+    def _stop_writer(self) -> None:
+        if self._writer_thread is None:
+            return
+
+        if self._writer_thread.is_alive():
+            self._queue.put(_QUEUE_STOP)
+            self._writer_thread.join()
+        self._writer_thread = None
 
     def _should_flush(self, now: float) -> bool:
         return (
-            self._samples_since_flush >= self.flush_every_samples
-            or now - self._last_flush_at >= self.flush_every_seconds
+            self._samples_since_flush > 0
+            and (
+                self._samples_since_flush >= self.flush_every_samples
+                or now - self._last_flush_at >= self.flush_every_seconds
+            )
         )
 
     def _flush_gaze_file(self) -> None:
