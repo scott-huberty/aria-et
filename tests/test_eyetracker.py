@@ -67,6 +67,24 @@ class FakeTobiiModule:
     EYETRACKER_GAZE_DATA = "eyetracker_gaze_data"
 
 
+class ManualClock:
+    def __init__(self, timestamp=0.0):
+        self.timestamp = timestamp
+
+    def __call__(self):
+        return self.timestamp
+
+
+class CountingFlushTobiiGazeRecorder(TobiiGazeRecorder):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.flush_count = 0
+
+    def _flush_gaze_file(self):
+        self.flush_count += 1
+        super()._flush_gaze_file()
+
+
 def test_check_eyetracker_reports_missing_tobii_sdk(capsys):
     def missing_sdk(name):
         raise ImportError(f"No module named {name}")
@@ -186,6 +204,60 @@ def test_tobii_gaze_recorder_writes_tracker_metadata_and_gaze_samples(tmp_path):
             "system_time_stamp": 123,
         },
     }
+
+
+def test_tobii_gaze_recorder_flushes_after_configured_sample_count(tmp_path):
+    tracker = FakeEyeTracker()
+    clock = ManualClock()
+    recorder = CountingFlushTobiiGazeRecorder(
+        eyetracker=tracker,
+        tobii_research=FakeTobiiModule,
+        gaze_path=tmp_path / "gaze.jsonl",
+        tracker_metadata_path=tmp_path / "tracker.json",
+        clock=clock,
+        flush_every_samples=2,
+        flush_every_seconds=60.0,
+    )
+
+    recorder.start()
+    callback = tracker.subscriptions[0]["callback"]
+    callback({"system_time_stamp": 1})
+    assert recorder.flush_count == 0
+
+    callback({"system_time_stamp": 2})
+    assert recorder.flush_count == 1
+
+    recorder.stop()
+    assert recorder.flush_count == 2
+    assert len((tmp_path / "gaze.jsonl").read_text().splitlines()) == 2
+
+
+def test_tobii_gaze_recorder_flushes_after_configured_elapsed_time(tmp_path):
+    tracker = FakeEyeTracker()
+    clock = ManualClock()
+    recorder = CountingFlushTobiiGazeRecorder(
+        eyetracker=tracker,
+        tobii_research=FakeTobiiModule,
+        gaze_path=tmp_path / "gaze.jsonl",
+        tracker_metadata_path=tmp_path / "tracker.json",
+        clock=clock,
+        flush_every_samples=100,
+        flush_every_seconds=0.5,
+    )
+
+    recorder.start()
+    callback = tracker.subscriptions[0]["callback"]
+    clock.timestamp = 0.25
+    callback({"system_time_stamp": 1})
+    assert recorder.flush_count == 0
+
+    clock.timestamp = 0.5
+    callback({"system_time_stamp": 2})
+    assert recorder.flush_count == 1
+
+    recorder.stop()
+    assert recorder.flush_count == 2
+    assert len((tmp_path / "gaze.jsonl").read_text().splitlines()) == 2
 
 
 def test_save_current_calibration_writes_metadata_and_sdk_payload(tmp_path):

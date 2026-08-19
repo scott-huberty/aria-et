@@ -134,15 +134,26 @@ class TobiiGazeRecorder:
         gaze_path: str | Path,
         tracker_metadata_path: str | Path,
         clock: Callable[[], float] = time.time,
+        flush_every_samples: int = 250,
+        flush_every_seconds: float = 0.5,
     ) -> None:
+        if flush_every_samples < 1:
+            raise ValueError("flush_every_samples must be at least 1.")
+        if flush_every_seconds <= 0:
+            raise ValueError("flush_every_seconds must be positive.")
+
         self.eyetracker = eyetracker
         self.tobii_research = tobii_research
         self.gaze_path = Path(gaze_path)
         self.tracker_metadata_path = Path(tracker_metadata_path)
         self.clock = clock
+        self.flush_every_samples = flush_every_samples
+        self.flush_every_seconds = flush_every_seconds
         self._file = None
         self._lock = threading.Lock()
         self._started = False
+        self._samples_since_flush = 0
+        self._last_flush_at = 0.0
 
     def __enter__(self) -> "TobiiGazeRecorder":
         self.start()
@@ -170,6 +181,8 @@ class TobiiGazeRecorder:
             encoding="utf-8",
         )
         self._file = self.gaze_path.open("w", encoding="utf-8")
+        self._samples_since_flush = 0
+        self._last_flush_at = self.clock()
         self.eyetracker.subscribe_to(
             self.tobii_research.EYETRACKER_GAZE_DATA,
             self._record_gaze_sample,
@@ -188,6 +201,7 @@ class TobiiGazeRecorder:
             )
         finally:
             if self._file is not None:
+                self._flush_gaze_file()
                 self._file.close()
                 self._file = None
             self._started = False
@@ -196,14 +210,31 @@ class TobiiGazeRecorder:
         if self._file is None:
             return
 
+        received_at = self.clock()
         record = {
-            "received_at": self.clock(),
+            "received_at": received_at,
             "sample": _json_safe(gaze_data),
         }
         line = json.dumps(record, sort_keys=True) + "\n"
         with self._lock:
             self._file.write(line)
-            self._file.flush()
+            self._samples_since_flush += 1
+            if self._should_flush(received_at):
+                self._flush_gaze_file()
+
+    def _should_flush(self, now: float) -> bool:
+        return (
+            self._samples_since_flush >= self.flush_every_samples
+            or now - self._last_flush_at >= self.flush_every_seconds
+        )
+
+    def _flush_gaze_file(self) -> None:
+        if self._file is None:
+            return
+
+        self._file.flush()
+        self._samples_since_flush = 0
+        self._last_flush_at = self.clock()
 
 
 def create_tobii_gaze_recorder(
