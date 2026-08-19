@@ -82,32 +82,54 @@ class _TeeStream:
         return self._terminal_stream.isatty()
 
 
+class _TimestampedLogStream:
+    def __init__(self, stream):
+        self._stream = stream
+        self._at_line_start = True
+
+    def write(self, text: str) -> int:
+        for character in text:
+            if self._at_line_start:
+                self._stream.write(f"{_wall_clock_timestamp()} ")
+                self._at_line_start = False
+            self._stream.write(character)
+            if character == "\n":
+                self._at_line_start = True
+        return len(text)
+
+    def flush(self) -> None:
+        self._stream.flush()
+
+
 class _SessionLog:
     def __init__(self, path: Path):
         self.path = path
         self._file = None
+        self._log_stream = None
         self._stdout = None
         self._stderr = None
 
     def __enter__(self):
         self._file = self.path.open("w", encoding="utf-8")
+        self._log_stream = _TimestampedLogStream(self._file)
         self._stdout = sys.stdout
         self._stderr = sys.stderr
-        sys.stdout = _TeeStream(sys.stdout, self._file)
-        sys.stderr = _TeeStream(sys.stderr, self._file)
+        sys.stdout = _TeeStream(sys.stdout, self._log_stream)
+        sys.stderr = _TeeStream(sys.stderr, self._log_stream)
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback) -> bool:
         assert self._file is not None
+        assert self._log_stream is not None
         assert self._stdout is not None
         assert self._stderr is not None
         if exc_type is not None:
-            self._file.write("\n")
+            self._log_stream.write("\n")
             traceback.print_exception(
                 exc_type,
                 exc_value,
                 exc_traceback,
-                file=self._file,
+                file=self._log_stream,
             )
         sys.stdout.flush()
         sys.stderr.flush()
@@ -115,6 +137,10 @@ class _SessionLog:
         sys.stderr = self._stderr
         self._file.close()
         return False
+
+
+def _wall_clock_timestamp() -> str:
+    return datetime.now().astimezone().isoformat(timespec="milliseconds")
 
 
 def run_recording_session(

@@ -108,7 +108,9 @@ static dependency list.
 
 For production, treat the session log as part of the runtime record. It captures
 important warnings about monitor fallback, speaker fallback, movie playback, and
-audio backend selection.
+audio backend selection. Each captured line is prefixed with a local wall-clock
+ISO timestamp so it can be aligned with events, gaze samples, and OS crash
+reports.
 
 How To Verify The Current Stack
 -------------------------------

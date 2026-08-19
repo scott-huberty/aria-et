@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 
 import pytest
@@ -8,6 +9,11 @@ from aria_et.session import (
     BidsSessionMetadata,
     StimulusDisplayMetadata,
     run_recording_session,
+)
+
+
+SESSION_LOG_TIMESTAMP = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2} "
 )
 
 
@@ -106,6 +112,11 @@ def test_run_recording_session_tees_terminal_output_to_session_log(tmp_path, cap
     session_log = (output_dir / "session.log").read_text()
     assert "program status" in session_log
     assert "psychopy warning" in session_log
+    assert all(
+        SESSION_LOG_TIMESTAMP.match(line)
+        for line in session_log.splitlines()
+        if line
+    )
 
 
 def test_run_recording_session_writes_uncaught_traceback_to_session_log(tmp_path):
@@ -127,6 +138,11 @@ def test_run_recording_session_writes_uncaught_traceback_to_session_log(tmp_path
     assert "before crash" in session_log
     assert "Traceback (most recent call last)" in session_log
     assert "RuntimeError: movie frame failed" in session_log
+    assert all(
+        SESSION_LOG_TIMESTAMP.match(line)
+        for line in session_log.splitlines()
+        if line
+    )
 
 
 def test_run_recording_session_rejects_existing_output_directory(tmp_path, capsys):

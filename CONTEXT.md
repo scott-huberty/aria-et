@@ -56,10 +56,16 @@ Writer thread:
 This preserves the existing raw data format while reducing Python allocation,
 JSON serialization, and file I/O inside the SDK callback thread.
 
+Session logs now prefix each captured stdout/stderr line and uncaught traceback
+line with a local wall-clock ISO timestamp, making `session.log` easier to align
+with `events.jsonl`, `gaze.jsonl`, PsychoPy warnings, and macOS crash reports.
+
 Relevant files:
 
 - `src/aria_et/eyetracker.py`
+- `src/aria_et/session.py`
 - `tests/test_eyetracker.py`
+- `tests/test_session.py`
 
 Validation after the design change:
 
@@ -212,7 +218,6 @@ Use BIDS-safe session labels such as `flushtest`, not `flush-test`.
 - Subscribe to Tobii buffer-overflow notifications and record any occurrence in
   session artifacts.
 - Record calibration provenance in each `run-*` session.
-- Prefix each `session.log` line with wall-clock ISO timestamps.
 - Make child-friendly calibration responsive to early gaze by collecting after a
   short dwell delay and retrying until success or timeout.
 - Decide whether optional Tobii SDK streams should be recorded in production:
