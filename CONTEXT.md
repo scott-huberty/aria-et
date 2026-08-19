@@ -234,3 +234,40 @@ Use BIDS-safe session labels such as `flushtest`, not `flush-test`.
 
 - Avoid hyphens in BIDS entity labels for subject/session/run.
 - Treat incomplete runs as exportable but not analytically complete.
+
+## Hardware Smoke Tests
+
+Opt-in hardware smoke tests live in:
+
+```text
+tests/test_hardware_smoke.py
+```
+
+They are marked `requires_eyetracker` and skipped during normal test runs. These
+tests check tracker connection, run two acquisition trials for AM/SI/SS/PLR,
+verify raw `session.json`, `tracker.json`, `events.jsonl`, `gaze.jsonl`, and
+`session.log`, export each smoke run to BIDS, and confirm BIDS eye1/eye2 physio
+row counts match raw gaze sample counts.
+
+Run on the lab machine with:
+
+```bash
+ARIA_ET_HARDWARE=1 \
+ARIA_ET_TRACKER_ADDRESS=tobii-prp://169.254.10.180 \
+/Users/scotterik/miniforge3/envs/aria-et_310/bin/python -m pytest \
+  -m requires_eyetracker tests/test_hardware_smoke.py
+```
+
+Useful optional environment variables:
+
+```bash
+ARIA_ET_SMOKE_SUBJECT=smoke
+ARIA_ET_SMOKE_SESSION=hardware
+ARIA_ET_SMOKE_TRIAL_LIMIT=2
+ARIA_ET_PSYCHOPY_SCREEN=1
+ARIA_ET_SCREEN_RESOLUTION=1920x1080
+ARIA_ET_SCREEN_SIZE_METERS=0.527x0.296
+ARIA_ET_SCREEN_DISTANCE_METERS=0.65
+ARIA_ET_SMOKE_OUTPUT_ROOT=/Users/scotterik/aria-et-data/smoke-tests/sourcedata
+ARIA_ET_SMOKE_BIDS_ROOT=/Users/scotterik/aria-et-data/smoke-tests/bids
+```

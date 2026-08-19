@@ -40,4 +40,5 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 markers = [
     "psychopy_smoke: opt-in GUI smoke tests that open real PsychoPy windows",
+    "requires_eyetracker: opt-in hardware smoke tests that require a connected Tobii eye tracker",
 ]
