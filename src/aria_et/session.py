@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import traceback
 from collections.abc import Callable
@@ -186,6 +187,11 @@ def run_recording_session(
             tracker,
             bids=resolved_bids,
             stimulus_display=stimulus_display,
+            calibration=(
+                _resolve_calibration_provenance(output_path, resolved_bids)
+                if tracker == "tobii"
+                else None
+            ),
         )
         event_sink = JsonLinesEventSink(output_path / "events.jsonl")
         try:
@@ -305,6 +311,7 @@ def _write_session_metadata(
     *,
     bids: BidsSessionMetadata | None = None,
     stimulus_display: StimulusDisplayMetadata | None = None,
+    calibration: dict[str, object] | None = None,
 ) -> None:
     metadata = {
         "schema_version": 1,
@@ -330,6 +337,8 @@ def _write_session_metadata(
             "fullscreen": stimulus_display.fullscreen,
             "window_size_pixels": list(stimulus_display.window_size_pixels),
         }
+    if calibration is not None:
+        metadata["calibration"] = calibration
 
     path.write_text(
         json.dumps(
@@ -340,3 +349,59 @@ def _write_session_metadata(
         + "\n",
         encoding="utf-8",
     )
+
+
+def _resolve_calibration_provenance(
+    run_dir: Path,
+    bids: BidsSessionMetadata | None,
+) -> dict[str, object] | None:
+    if bids is None:
+        return None
+
+    calibrations_dir = run_dir.parent / "calibrations"
+    if not calibrations_dir.exists():
+        return None
+
+    candidates = [
+        metadata_file
+        for metadata_file in calibrations_dir.glob("calibration-*/calibration.json")
+        if metadata_file.is_file()
+    ]
+    if not candidates:
+        return None
+
+    metadata_file = max(candidates, key=_calibration_sort_key)
+    artifact_dir = metadata_file.parent
+    calibration_metadata = _read_calibration_metadata(metadata_file)
+
+    return {
+        "artifact_dir": _relative_path(artifact_dir, run_dir),
+        "metadata_file": _relative_path(metadata_file, run_dir),
+        "calibration_id": calibration_metadata.get("calibration_id", artifact_dir.name),
+        "created_at": calibration_metadata.get("created_at"),
+        "method": calibration_metadata.get("method"),
+        "tracker": calibration_metadata.get("tracker"),
+        "metadata": calibration_metadata,
+    }
+
+
+def _calibration_sort_key(metadata_file: Path) -> tuple[str, float, str]:
+    metadata = _read_calibration_metadata(metadata_file)
+    created_at = metadata.get("created_at")
+    if not isinstance(created_at, str):
+        created_at = ""
+    return (created_at, metadata_file.stat().st_mtime, metadata_file.parent.name)
+
+
+def _read_calibration_metadata(metadata_file: Path) -> dict[str, object]:
+    try:
+        metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(metadata, dict):
+        return {}
+    return metadata
+
+
+def _relative_path(path: Path, start: Path) -> str:
+    return Path(os.path.relpath(path.resolve(), start.resolve())).as_posix()

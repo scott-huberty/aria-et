@@ -60,6 +60,13 @@ Session logs now prefix each captured stdout/stderr line and uncaught traceback
 line with a local wall-clock ISO timestamp, making `session.log` easier to align
 with `events.jsonl`, `gaze.jsonl`, PsychoPy warnings, and macOS crash reports.
 
+Tobii run sessions now record calibration provenance in `session.json` when a
+calibration artifact exists under the same sourcedata subject/session directory:
+`sourcedata/sub-<subject>/ses-<session>/calibrations/calibration-*/calibration.json`.
+The stored provenance includes relative artifact paths, calibration timestamp,
+method, tracker metadata, and the full calibration metadata payload. Dry runs
+with `--tracker none` omit calibration provenance.
+
 Relevant files:
 
 - `src/aria_et/eyetracker.py`
@@ -70,7 +77,7 @@ Relevant files:
 Validation after the design change:
 
 ```text
-189 passed, 2 skipped
+191 passed, 7 skipped
 ```
 
 ## Data Validation Notes
@@ -217,7 +224,6 @@ Use BIDS-safe session labels such as `flushtest`, not `flush-test`.
 
 - Subscribe to Tobii buffer-overflow notifications and record any occurrence in
   session artifacts.
-- Record calibration provenance in each `run-*` session.
 - Make child-friendly calibration responsive to early gaze by collecting after a
   short dwell delay and retrying until success or timeout.
 - Decide whether optional Tobii SDK streams should be recorded in production:

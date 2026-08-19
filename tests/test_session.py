@@ -52,6 +52,32 @@ class FakeRecorder:
         self.exited = True
 
 
+def _write_calibration_artifact(
+    artifact_dir,
+    *,
+    created_at,
+    serial_number,
+    method,
+):
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "calibration.bin").write_bytes(b"fake-calibration")
+    metadata = {
+        "schema_version": 1,
+        "calibration_id": artifact_dir.name,
+        "created_at": created_at,
+        "method": method,
+        "tracker": {
+            "serial_number": serial_number,
+        },
+        "calibration_data_file": "calibration.bin",
+    }
+    (artifact_dir / "calibration.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return metadata
+
+
 def test_run_recording_session_writes_metadata_and_events_for_no_tracker(tmp_path):
     output_dir = tmp_path / "run-am"
 
@@ -253,6 +279,90 @@ def test_run_recording_session_writes_bids_and_display_metadata(tmp_path):
         "fullscreen": True,
         "window_size_pixels": [1024, 768],
     }
+    assert "calibration" not in metadata
+
+
+def test_run_recording_session_records_latest_calibration_provenance(tmp_path):
+    output_root = tmp_path / "sourcedata"
+    calibration_dir = (
+        output_root / "sub-01" / "ses-baseline" / "calibrations"
+    )
+    _write_calibration_artifact(
+        calibration_dir / "calibration-20260819T160000Z",
+        created_at="2026-08-19T16:00:00Z",
+        serial_number="TPS-old",
+        method="tobii-pro-eye-tracker-manager",
+    )
+    latest_metadata = _write_calibration_artifact(
+        calibration_dir / "calibration-20260819T170000Z",
+        created_at="2026-08-19T17:00:00Z",
+        serial_number="TPS-new",
+        method="child-friendly-sdk",
+    )
+
+    exit_code = run_recording_session(
+        task_id="activity-monitoring",
+        tracker="tobii",
+        tracker_address="tobii-prp://169.254.10.180",
+        output_dir=output_root,
+        present=lambda event_sink: None,
+        bids=BidsSessionMetadata(subject="01", session="baseline", run="01"),
+        check_eyetracker=lambda **kwargs: 0,
+        recorder_factory=lambda **kwargs: FakeRecorder(
+            kwargs["gaze_path"], kwargs["tracker_metadata_path"]
+        ),
+    )
+
+    run_dir = (
+        output_root
+        / "sub-01"
+        / "ses-baseline"
+        / "task-activity-monitoring_run-01"
+    )
+    metadata = json.loads((run_dir / "session.json").read_text())
+    assert exit_code == 0
+    assert metadata["calibration"] == {
+        "artifact_dir": "../calibrations/calibration-20260819T170000Z",
+        "calibration_id": "calibration-20260819T170000Z",
+        "created_at": "2026-08-19T17:00:00Z",
+        "metadata": latest_metadata,
+        "metadata_file": (
+            "../calibrations/calibration-20260819T170000Z/calibration.json"
+        ),
+        "method": "child-friendly-sdk",
+        "tracker": {
+            "serial_number": "TPS-new",
+        },
+    }
+
+
+def test_run_recording_session_omits_calibration_provenance_for_no_tracker(tmp_path):
+    output_root = tmp_path / "sourcedata"
+    calibration_dir = output_root / "sub-01" / "ses-baseline" / "calibrations"
+    _write_calibration_artifact(
+        calibration_dir / "calibration-20260819T170000Z",
+        created_at="2026-08-19T17:00:00Z",
+        serial_number="TPS-new",
+        method="child-friendly-sdk",
+    )
+
+    exit_code = run_recording_session(
+        task_id="activity-monitoring",
+        tracker="none",
+        output_dir=output_root,
+        present=lambda event_sink: None,
+        bids=BidsSessionMetadata(subject="01", session="baseline", run="01"),
+    )
+
+    run_dir = (
+        output_root
+        / "sub-01"
+        / "ses-baseline"
+        / "task-activity-monitoring_run-01"
+    )
+    metadata = json.loads((run_dir / "session.json").read_text())
+    assert exit_code == 0
+    assert "calibration" not in metadata
 
 
 def test_run_recording_session_normalizes_bids_labels_and_allocates_next_run(tmp_path):
