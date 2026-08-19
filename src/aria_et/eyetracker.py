@@ -373,6 +373,7 @@ def create_tobii_gaze_recorder(
     *,
     gaze_path: str | Path,
     tracker_metadata_path: str | Path,
+    writer_health_path: str | Path | None = None,
     address: str | None = None,
     import_module: ImportModule = importlib.import_module,
 ) -> TobiiGazeRecorder:
@@ -383,7 +384,11 @@ def create_tobii_gaze_recorder(
         tobii_research=tobii_research,
         gaze_path=gaze_path,
         tracker_metadata_path=tracker_metadata_path,
-        writer_health_path=Path(gaze_path).with_name("gaze_writer.json"),
+        writer_health_path=(
+            Path(writer_health_path)
+            if writer_health_path is not None
+            else Path(gaze_path).with_name("gaze_writer.json")
+        ),
     )
 
 

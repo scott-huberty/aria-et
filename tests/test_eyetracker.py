@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from aria_et.eyetracker import (
     TobiiGazeRecorder,
     check_eyetracker,
+    create_tobii_gaze_recorder,
     run_eyetracker_manager_calibration,
     save_current_calibration,
 )
@@ -342,6 +343,23 @@ def test_tobii_gaze_recorder_counts_queue_drops(tmp_path):
 
     assert recorder.writer_health()["received_queue_samples"] == 1
     assert recorder.writer_health()["dropped_queue_samples"] == 1
+
+
+def test_create_tobii_gaze_recorder_accepts_writer_health_path(tmp_path):
+    sdk = FakeTobiiResearch((FakeEyeTracker(),))
+
+    def installed_sdk(name):
+        return sdk
+
+    recorder = create_tobii_gaze_recorder(
+        gaze_path=tmp_path / "gaze.jsonl",
+        tracker_metadata_path=tmp_path / "tracker.json",
+        writer_health_path=tmp_path / "custom_writer_health.json",
+        address="tobii-prp://169.254.10.180",
+        import_module=installed_sdk,
+    )
+
+    assert recorder.writer_health_path == tmp_path / "custom_writer_health.json"
 
 
 def test_save_current_calibration_writes_metadata_and_sdk_payload(tmp_path):
