@@ -13,6 +13,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "bids-validator-deno",
+    "pre-commit",
     "pytest",
 ]
 docs = [
@@ -42,3 +43,13 @@ markers = [
     "psychopy_smoke: opt-in GUI smoke tests that open real PsychoPy windows",
     "requires_eyetracker: opt-in hardware smoke tests that require a connected Tobii eye tracker",
 ]
+
+[tool.ruff]
+# Ignore everything in the project root EXCEPT the src directory
+extend-exclude = [
+    "*",
+    "!src"
+]
+
+# Set the source directory root for import resolution (isort)
+src = ["src"]
