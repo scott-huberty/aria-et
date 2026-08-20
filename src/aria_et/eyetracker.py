@@ -16,6 +16,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from typing_extensions import Self
 
 ImportModule = Callable[[str], ModuleType]
 StatusSink = Callable[[str], None]
@@ -162,7 +163,7 @@ class TobiiGazeRecorder:
         self._file = None
         self._queue: queue.Queue[object] = queue.Queue(maxsize=max_queue_samples)
         self._writer_thread: threading.Thread | None = None
-        self._writer_error: BaseException | None = None
+        self._writer_error: Exception | None = None
         self._started = False
         self._samples_since_flush = 0
         self._last_flush_at = 0.0
@@ -173,7 +174,7 @@ class TobiiGazeRecorder:
         self.dropped_queue_samples = 0
         self.gaze_file_flush_count = 0
 
-    def __enter__(self) -> "TobiiGazeRecorder":
+    def __enter__(self) -> Self:
         self.start()
         return self
 
@@ -249,7 +250,9 @@ class TobiiGazeRecorder:
             self._stopped_at = self.clock()
             self._write_writer_health_snapshot()
             if self._writer_error is not None:
-                raise RuntimeError("Tobii gaze writer thread failed.") from self._writer_error
+                raise RuntimeError(
+                    "Tobii gaze writer thread failed."
+                ) from self._writer_error
 
     def _record_gaze_sample(self, gaze_data: dict[str, object]) -> None:
         if not self._started:
@@ -280,7 +283,7 @@ class TobiiGazeRecorder:
                     self._write_gaze_sample(received_at, gaze_data)
                 finally:
                     self._queue.task_done()
-        except BaseException as error:
+        except (OSError, TypeError, ValueError) as error:
             self._writer_error = error
 
     def _write_gaze_sample(
@@ -312,12 +315,9 @@ class TobiiGazeRecorder:
         self._writer_thread = None
 
     def _should_flush(self, now: float) -> bool:
-        return (
-            self._samples_since_flush > 0
-            and (
-                self._samples_since_flush >= self.flush_every_samples
-                or now - self._last_flush_at >= self.flush_every_seconds
-            )
+        return self._samples_since_flush > 0 and (
+            self._samples_since_flush >= self.flush_every_samples
+            or now - self._last_flush_at >= self.flush_every_seconds
         )
 
     def _flush_gaze_file(self) -> None:

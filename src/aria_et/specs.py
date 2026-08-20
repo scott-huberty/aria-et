@@ -74,9 +74,7 @@ TASK_SPECS: dict[str, TaskSpec] = {
         block_count=18,
         trials_per_block=(1,) * 18,
         approximate_duration_seconds=2 * 60,
-        trial_types=(
-            TrialTypeSpec("light-flash", trial_count=18, duration_seconds=6),
-        ),
+        trial_types=(TrialTypeSpec("light-flash", trial_count=18, duration_seconds=6),),
     ),
 }
 

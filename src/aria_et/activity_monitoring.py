@@ -8,7 +8,6 @@ from typing import Literal
 
 from aria_et.assets import ActivityMonitoringAssets, activity_monitoring_assets
 
-
 ActivityMonitoringMediaType = Literal["dynamic-video", "static-image"]
 ActivityMonitoringGazeCondition = Literal["activity-gaze", "mutual-gaze"]
 
@@ -167,7 +166,9 @@ def _build_trial(
         gaze_condition=definition.gaze_condition,
         stimulus=ActivityMonitoringStimulus(
             media=media,
-            soundtrack=assets.soundtrack if definition.media_type == "static-image" else None,
+            soundtrack=assets.soundtrack
+            if definition.media_type == "static-image"
+            else None,
         ),
         fixation_seconds=1,
         presentation_seconds=20 if definition.media_type == "dynamic-video" else 10,
@@ -176,4 +177,6 @@ def _build_trial(
 
 
 def _block_ids() -> tuple[str, ...]:
-    return tuple(dict.fromkeys(definition.block_id for definition in _TRIAL_DEFINITIONS))
+    return tuple(
+        dict.fromkeys(definition.block_id for definition in _TRIAL_DEFINITIONS)
+    )

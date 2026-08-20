@@ -5,8 +5,8 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from importlib.resources import as_file
 from importlib.abc import Traversable
+from importlib.resources import as_file
 from typing import Protocol
 
 from aria_et.pupillary_light_reflex import (
@@ -69,7 +69,9 @@ class PsychoPyPupillaryLightReflexPresenter:
     trial_limit: int | None = None
     frame_duration_seconds: float = 1 / 30
     render_status: StatusSink | None = None
-    _active_sounds: list[SoundLike] = field(default_factory=list, init=False, repr=False)
+    _active_sounds: list[SoundLike] = field(
+        default_factory=list, init=False, repr=False
+    )
 
     def present(
         self,
@@ -182,7 +184,9 @@ class PsychoPyPupillaryLightReflexPresenter:
                 cache[trial.stimulus_id] = self._prepare_images(trial.stimulus.frames)
         return cache
 
-    def _prepare_images(self, frames: tuple[Traversable, ...]) -> tuple[DrawableLike, ...]:
+    def _prepare_images(
+        self, frames: tuple[Traversable, ...]
+    ) -> tuple[DrawableLike, ...]:
         images = []
         for frame in frames:
             with as_file(frame) as frame_path:
@@ -336,7 +340,9 @@ def run_pupillary_light_reflex_demo(
     debug_render: bool = False,
     status_sink: StatusSink | None = None,
 ) -> int:
-    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+    status = status_sink or (
+        lambda message: print(message, file=sys.stderr, flush=True)
+    )
 
     status("Importing PsychoPy...")
     from psychopy import core, monitors, prefs, visual
@@ -412,7 +418,9 @@ def run_pupillary_light_reflex_session(
 ) -> int:
     from aria_et.session import run_recording_session
 
-    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+    status = status_sink or (
+        lambda message: print(message, file=sys.stderr, flush=True)
+    )
 
     def present(event_sink: EventSink) -> None:
         status("Importing PsychoPy...")

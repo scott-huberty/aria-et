@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib.resources import files
 from importlib.abc import Traversable
-
+from importlib.resources import files
 
 ASSET_PACKAGE = "aria_et"
 ASSET_ROOT = "assets/abcct"
@@ -13,7 +12,7 @@ ASSET_ROOT = "assets/abcct"
 
 @dataclass(frozen=True)
 class CalibrationRewardAssets:
-    animations: tuple["CalibrationRewardAnimation", ...]
+    animations: tuple[CalibrationRewardAnimation, ...]
     sounds: tuple[Traversable, ...]
 
 
@@ -76,7 +75,11 @@ def gap_overlap_reward_calibration_assets() -> CalibrationRewardAssets:
             name=animation.name,
             frames=tuple(
                 sorted(
-                    (path for path in animation.iterdir() if path.name.endswith(".png")),
+                    (
+                        path
+                        for path in animation.iterdir()
+                        if path.name.endswith(".png")
+                    ),
                     key=lambda path: path.name,
                 )
             ),

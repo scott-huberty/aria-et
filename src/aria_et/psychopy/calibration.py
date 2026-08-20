@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
-import sys
 import importlib
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from importlib.resources import as_file
 from importlib.abc import Traversable
+from importlib.resources import as_file
 from typing import Protocol
 
-from aria_et.calibration import build_gap_overlap_reward_calibration_sequence
-from aria_et.calibration import CalibrationPoint, CalibrationSequence, NormalizedPoint
+from aria_et.calibration import (
+    CalibrationPoint,
+    CalibrationSequence,
+    NormalizedPoint,
+    build_gap_overlap_reward_calibration_sequence,
+)
 from aria_et.runtime import (
     CalibrationRunResult,
     Clock,
@@ -39,7 +43,9 @@ class SoundLike(Protocol):
         """Start sound playback."""
 
 
-ImageFactory = Callable[[WindowLike, str, tuple[float, float], tuple[float, float]], DrawableLike]
+ImageFactory = Callable[
+    [WindowLike, str, tuple[float, float], tuple[float, float]], DrawableLike
+]
 SoundFactory = Callable[[str], SoundLike]
 Wait = Callable[[float], None]
 AbortCheck = Callable[[], bool]
@@ -68,7 +74,9 @@ class PsychoPyCalibrationPresenter:
     feedback_duration_seconds: float = 1.0
     spin_degrees_per_second: float = 180.0
     render_status: RenderStatus | None = None
-    _active_sounds: list[SoundLike] = field(default_factory=list, init=False, repr=False)
+    _active_sounds: list[SoundLike] = field(
+        default_factory=list, init=False, repr=False
+    )
 
     def present(
         self,
@@ -158,7 +166,9 @@ class PsychoPyCalibrationPresenter:
                 return None
             if self.point_collector is not None and not self.point_collector(point):
                 return None
-            if not self._present_stimulus(point, duration_seconds=self.feedback_duration_seconds):
+            if not self._present_stimulus(
+                point, duration_seconds=self.feedback_duration_seconds
+            ):
                 return None
         else:
             if not self._present_stimulus(point):
@@ -203,7 +213,9 @@ class PsychoPyCalibrationPresenter:
         if not frames:
             raise ValueError("Calibration stimulus must include frames or a movie.")
         animation_seconds = (
-            self.point_duration_seconds if duration_seconds is None else duration_seconds
+            self.point_duration_seconds
+            if duration_seconds is None
+            else duration_seconds
         )
         frame_count = max(1, round(animation_seconds / self.frame_duration_seconds))
         self._render_status(
@@ -254,7 +266,9 @@ class PsychoPyCalibrationPresenter:
         frames = point.stimulus.animation_frames
         if not frames:
             raise ValueError("Calibration stimulus must include frames or a movie.")
-        frame_count = max(1, round(self.point_duration_seconds / self.frame_duration_seconds))
+        frame_count = max(
+            1, round(self.point_duration_seconds / self.frame_duration_seconds)
+        )
         self._render_status(
             f"Collection animation started: {point.target.label} "
             f"frame_count={frame_count} frame_duration={self.frame_duration_seconds}"
@@ -270,9 +284,7 @@ class PsychoPyCalibrationPresenter:
                 return False
 
             rotation = (
-                frame_index
-                * self.frame_duration_seconds
-                * self.spin_degrees_per_second
+                frame_index * self.frame_duration_seconds * self.spin_degrees_per_second
             ) % 360
             with as_file(frame) as frame_path:
                 image = self._image_factory()(
@@ -281,7 +293,7 @@ class PsychoPyCalibrationPresenter:
                     position,
                     self.image_size_pixels,
                 )
-                setattr(image, "ori", rotation)
+                image.ori = rotation
                 image.draw()
             self.window.flip()
             self._wait()(self.frame_duration_seconds)
@@ -432,7 +444,9 @@ def run_gap_overlap_reward_calibration_demo(
     debug_render: bool = False,
     status_sink: StatusSink | None = None,
 ) -> int:
-    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+    status = status_sink or (
+        lambda message: print(message, file=sys.stderr, flush=True)
+    )
 
     status("Importing PsychoPy...")
     from psychopy import core, event, monitors, prefs, sound, visual
@@ -543,7 +557,9 @@ def run_child_friendly_eyetracker_calibration(
         save_current_calibration,
     )
 
-    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+    status = status_sink or (
+        lambda message: print(message, file=sys.stderr, flush=True)
+    )
     error = error_sink or (lambda message: print(message, file=sys.stderr))
 
     if address is not None and serial_number is not None:
@@ -664,7 +680,9 @@ def run_child_friendly_eyetracker_calibration(
             screen=screen,
         )
     except OSError as error_message:
-        error(f"Calibration completed, but saving calibration data failed: {error_message}")
+        error(
+            f"Calibration completed, but saving calibration data failed: {error_message}"
+        )
         return 4
 
     status(f"Saved calibration data to {artifact_dir}.")

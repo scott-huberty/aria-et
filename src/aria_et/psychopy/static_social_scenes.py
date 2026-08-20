@@ -71,7 +71,9 @@ class PsychoPyStaticSocialScenesPresenter:
     trial_limit: int | None = None
     frame_duration_seconds: float = 1 / 30
     render_status: StatusSink | None = None
-    _active_sounds: list[SoundLike] = field(default_factory=list, init=False, repr=False)
+    _active_sounds: list[SoundLike] = field(
+        default_factory=list, init=False, repr=False
+    )
 
     def present(
         self,
@@ -139,7 +141,9 @@ class PsychoPyStaticSocialScenesPresenter:
             self._wait()(trial.preblank_seconds)
             self._wait()(trial.fixation_seconds)
             self._play_soundtrack(trial)
-            self._render_status(f"SS trial: {trial.trial_id} {trial.stimulus.image.name}")
+            self._render_status(
+                f"SS trial: {trial.trial_id} {trial.stimulus.image.name}"
+            )
             with as_file(trial.stimulus.image) as image_path:
                 image = self._image_factory()(self.window, str(image_path))
                 self._draw_for_duration(image, trial.presentation_seconds)
@@ -163,7 +167,9 @@ class PsychoPyStaticSocialScenesPresenter:
             ended_at=ended_at,
         )
 
-    def _draw_for_duration(self, drawable: DrawableLike, duration_seconds: float) -> None:
+    def _draw_for_duration(
+        self, drawable: DrawableLike, duration_seconds: float
+    ) -> None:
         remaining_seconds = duration_seconds
         while remaining_seconds > 0:
             frame_seconds = min(self.frame_duration_seconds, remaining_seconds)
@@ -293,7 +299,9 @@ def run_static_social_scenes_demo(
     debug_render: bool = False,
     status_sink: StatusSink | None = None,
 ) -> int:
-    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+    status = status_sink or (
+        lambda message: print(message, file=sys.stderr, flush=True)
+    )
 
     status("Importing PsychoPy...")
     from psychopy import core, monitors, prefs, visual
@@ -369,7 +377,9 @@ def run_static_social_scenes_session(
 ) -> int:
     from aria_et.session import run_recording_session
 
-    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+    status = status_sink or (
+        lambda message: print(message, file=sys.stderr, flush=True)
+    )
 
     def present(event_sink: EventSink) -> None:
         status("Importing PsychoPy...")

@@ -12,11 +12,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+from aria_et.eyetracker import (
+    TobiiSdkUnavailableError,
+    TobiiTrackerUnavailableError,
+    create_tobii_gaze_recorder,
+)
 from aria_et.eyetracker import check_eyetracker as default_check_eyetracker
-from aria_et.eyetracker import create_tobii_gaze_recorder
-from aria_et.eyetracker import TobiiSdkUnavailableError, TobiiTrackerUnavailableError
 from aria_et.runtime import EventSink, RuntimeEvent
-
 
 TrackerName = Literal["none", "tobii"]
 StatusSink = Callable[[str], None]
@@ -275,7 +277,7 @@ def _normalize_optional_bids_label(value: str | None, prefix: str) -> str | None
 
 
 def _normalize_bids_label(value: str, prefix: str) -> str:
-    stripped = value[len(prefix) :] if value.startswith(prefix) else value
+    stripped = value.removeprefix(prefix)
     return stripped.zfill(2) if stripped.isdecimal() else stripped
 
 
@@ -333,9 +335,7 @@ def _write_session_metadata(
         metadata["stimulus_display"] = {
             "screen_distance_meters": stimulus_display.screen_distance_meters,
             "screen_origin": list(stimulus_display.screen_origin),
-            "screen_resolution_pixels": list(
-                stimulus_display.screen_resolution_pixels
-            ),
+            "screen_resolution_pixels": list(stimulus_display.screen_resolution_pixels),
             "screen_size_meters": list(stimulus_display.screen_size_meters),
             "psychopy_screen": stimulus_display.psychopy_screen,
             "fullscreen": stimulus_display.fullscreen,

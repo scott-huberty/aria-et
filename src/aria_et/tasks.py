@@ -17,7 +17,9 @@ CALIBRATION = TaskDefinition("calibration", "5-point calibration")
 ACTIVITY_MONITORING = TaskDefinition("activity-monitoring", "Activity Monitoring")
 SOCIAL_INTERACTIVE = TaskDefinition("social-interactive", "Social Interactive")
 STATIC_SOCIAL_SCENES = TaskDefinition("static-social-scenes", "Static Social Scenes")
-PUPILLARY_LIGHT_REFLEX = TaskDefinition("pupillary-light-reflex", "Pupillary Light Reflex")
+PUPILLARY_LIGHT_REFLEX = TaskDefinition(
+    "pupillary-light-reflex", "Pupillary Light Reflex"
+)
 
 BATTERY_ORDER: tuple[TaskDefinition, ...] = (
     CALIBRATION,

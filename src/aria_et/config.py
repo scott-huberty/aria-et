@@ -48,23 +48,22 @@ def default_config_text(config: AriaEtConfig | None = None) -> str:
     audio_speaker = config.audio_speaker or DEFAULT_AUDIO_SPEAKER
     lines = [
         "[data]",
-        f'root = "{config.data_root}"',
+        f"root = '{config.data_root}'",
         "",
         "[display]",
         f"psychopy_screen = {config.psychopy_screen}",
         f"etm_screen = {config.etm_screen}",
-        f'screen_resolution = "{config.screen_resolution}"',
-        f'screen_size_meters = "{config.screen_size_meters}"',
+        f"screen_resolution = '{config.screen_resolution}'",
+        f"screen_size_meters = '{config.screen_size_meters}'",
         f"screen_distance_meters = {config.screen_distance_meters}",
-        f'monitor_name = "{config.monitor_name}"',
+        f"monitor_name = '{config.monitor_name}'",
         "",
         "[audio]",
-        f'speaker = "{audio_speaker}"',
+        f"speaker = '{audio_speaker}'",
         "",
         "[tobii]",
-        "# eye_tracker_manager = "
-        '"/Applications/TobiiProEyeTrackerManager.app/Contents/MacOS/'
-        'TobiiProEyeTrackerManager"',
+        # TODO: Change this default when we get the Production Windows Laptop.
+        "# eye_tracker_manager = '/Applications/TobiiProEyeTrackerManager.app/Contents/MacOS/TobiiProEyeTrackerManager'",
         "",
     ]
     return "\n".join(lines)
@@ -128,7 +127,7 @@ def load_config(path: str | Path | None = None) -> AriaEtConfig:
 def _section(config: Mapping[str, Any], name: str) -> Mapping[str, Any]:
     section = config.get(name, {})
     if not isinstance(section, Mapping):
-        raise ValueError(f"Configuration section [{name}] must be a table.")
+        raise TypeError(f"Configuration section [{name}] must be a table.")
     return section
 
 
@@ -137,14 +136,14 @@ def _path_value(section: Mapping[str, Any], key: str, default: Path) -> Path:
     if value is None:
         return default
     if not isinstance(value, str):
-        raise ValueError(f"Configuration value {key} must be a string path.")
+        raise TypeError(f"Configuration value {key} must be a string path.")
     return Path(value).expanduser()
 
 
 def _str_value(section: Mapping[str, Any], key: str, default: str) -> str:
     value = section.get(key, default)
     if not isinstance(value, str):
-        raise ValueError(f"Configuration value {key} must be a string.")
+        raise TypeError(f"Configuration value {key} must be a string.")
     return value
 
 
@@ -153,19 +152,19 @@ def _optional_str_value(section: Mapping[str, Any], key: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValueError(f"Configuration value {key} must be a string.")
+        raise TypeError(f"Configuration value {key} must be a string.")
     return value
 
 
 def _int_value(section: Mapping[str, Any], key: str, default: int) -> int:
     value = section.get(key, default)
     if not isinstance(value, int):
-        raise ValueError(f"Configuration value {key} must be an integer.")
+        raise TypeError(f"Configuration value {key} must be an integer.")
     return value
 
 
 def _float_value(section: Mapping[str, Any], key: str, default: float) -> float:
     value = section.get(key, default)
     if not isinstance(value, (int, float)):
-        raise ValueError(f"Configuration value {key} must be a number.")
+        raise TypeError(f"Configuration value {key} must be a number.")
     return float(value)

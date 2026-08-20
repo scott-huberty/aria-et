@@ -8,7 +8,6 @@ from typing import Literal
 
 from aria_et.assets import StaticSocialScenesAssets, static_social_scenes_assets
 
-
 StaticSocialScenesTrialType = Literal["static-scene", "visual-search"]
 
 
@@ -64,37 +63,61 @@ _TRIAL_DEFINITIONS: tuple[_TrialDefinition, ...] = (
         "VSS-B1", "static-scene", "static1_f0.jpg", "si_song2_vp080.wav", (0, 0, 0)
     ),
     _TrialDefinition(
-        "VSS-B1", "visual-search", "popout1_f0.jpg", "si_song3_vp080.wav", (255, 255, 255)
+        "VSS-B1",
+        "visual-search",
+        "popout1_f0.jpg",
+        "si_song3_vp080.wav",
+        (255, 255, 255),
     ),
     _TrialDefinition(
         "VSS-B1", "static-scene", "static2_f0.jpg", "si_song4_vp080.wav", (0, 0, 0)
     ),
     _TrialDefinition(
-        "VSS-B1", "visual-search", "popout2_f0.jpg", "si_song5_vp080.wav", (255, 255, 255)
+        "VSS-B1",
+        "visual-search",
+        "popout2_f0.jpg",
+        "si_song5_vp080.wav",
+        (255, 255, 255),
     ),
     _TrialDefinition(
         "VSS-B1", "static-scene", "static3_f0.jpg", "si_song6_vp080.wav", (0, 0, 0)
     ),
     _TrialDefinition(
-        "VSS-B1", "visual-search", "popout3_f0.jpg", "si_song7_vp080.wav", (255, 255, 255)
+        "VSS-B1",
+        "visual-search",
+        "popout3_f0.jpg",
+        "si_song7_vp080.wav",
+        (255, 255, 255),
     ),
     _TrialDefinition(
         "VSS-B2", "static-scene", "static4_f0.jpg", "si_song8_vp080.wav", (0, 0, 0)
     ),
     _TrialDefinition(
-        "VSS-B2", "visual-search", "popout4_f0.jpg", "si_song9_vp080.wav", (255, 255, 255)
+        "VSS-B2",
+        "visual-search",
+        "popout4_f0.jpg",
+        "si_song9_vp080.wav",
+        (255, 255, 255),
     ),
     _TrialDefinition(
         "VSS-B2", "static-scene", "static5_f0.jpg", "si_song3_vp080.wav", (0, 0, 0)
     ),
     _TrialDefinition(
-        "VSS-B2", "visual-search", "popout5_f0.jpg", "si_song5_vp080.wav", (255, 255, 255)
+        "VSS-B2",
+        "visual-search",
+        "popout5_f0.jpg",
+        "si_song5_vp080.wav",
+        (255, 255, 255),
     ),
     _TrialDefinition(
         "VSS-B2", "static-scene", "static6_f0.jpg", "si_song2_vp080.wav", (0, 0, 0)
     ),
     _TrialDefinition(
-        "VSS-B2", "visual-search", "popout6_f0.jpg", "si_song6_vp080.wav", (255, 255, 255)
+        "VSS-B2",
+        "visual-search",
+        "popout6_f0.jpg",
+        "si_song6_vp080.wav",
+        (255, 255, 255),
     ),
 )
 
@@ -161,4 +184,6 @@ def _build_trial(
 
 
 def _block_ids() -> tuple[str, ...]:
-    return tuple(dict.fromkeys(definition.block_id for definition in _TRIAL_DEFINITIONS))
+    return tuple(
+        dict.fromkeys(definition.block_id for definition in _TRIAL_DEFINITIONS)
+    )

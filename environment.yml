@@ -6,6 +6,7 @@ dependencies:
   - pip
   - pre_commit
   - pytest
+  - ruff
   - setuptools>=64
   - wheel
   - pip:

@@ -248,7 +248,9 @@ def run_social_interactive_demo(
     debug_render: bool = False,
     status_sink: StatusSink | None = None,
 ) -> int:
-    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+    status = status_sink or (
+        lambda message: print(message, file=sys.stderr, flush=True)
+    )
 
     status("Importing PsychoPy...")
     from psychopy import core, monitors, prefs, visual
@@ -322,7 +324,9 @@ def run_social_interactive_session(
 ) -> int:
     from aria_et.session import run_recording_session
 
-    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+    status = status_sink or (
+        lambda message: print(message, file=sys.stderr, flush=True)
+    )
 
     def present(event_sink: EventSink) -> None:
         status("Importing PsychoPy...")

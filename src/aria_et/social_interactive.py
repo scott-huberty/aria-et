@@ -8,7 +8,6 @@ from typing import Literal
 
 from aria_et.assets import SocialInteractiveAssets, social_interactive_assets
 
-
 SocialInteractivePlayCondition = Literal["parallel-play", "cooperative-play"]
 
 
@@ -143,4 +142,6 @@ def _build_trial(
 
 
 def _block_ids() -> tuple[str, ...]:
-    return tuple(dict.fromkeys(definition.block_id for definition in _TRIAL_DEFINITIONS))
+    return tuple(
+        dict.fromkeys(definition.block_id for definition in _TRIAL_DEFINITIONS)
+    )

@@ -8,6 +8,7 @@ dependencies = [
     "psychopy",
     "tomli",
     "tobii-research",
+    "typing-extensions",
 ]
 
 [project.optional-dependencies]
@@ -15,6 +16,7 @@ test = [
     "bids-validator-deno",
     "pre-commit",
     "pytest",
+    "ruff",
 ]
 docs = [
     "sphinx",
@@ -45,10 +47,22 @@ markers = [
 ]
 
 [tool.ruff]
-# Ignore everything in the project root EXCEPT the src directory
-extend-exclude = [
-    "*",
-    "!src"
+include = ["pyproject.toml", "src/**/*.py"]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".egg-info",
+    ".git",
+    ".gitignore",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".svn",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "build",
+    "dist",
+    "node_modules",
 ]
 
 # Set the source directory root for import resolution (isort)

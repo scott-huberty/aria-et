@@ -15,7 +15,6 @@ from aria_et.config import (
 )
 from aria_et.tasks import BATTERY_ORDER
 
-
 DemoCalibrationRunner = Callable[..., int]
 CalibrateEyeTrackerRunner = Callable[..., int]
 ChildFriendlyCalibrationRunner = Callable[..., int]
@@ -201,8 +200,7 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
         type=int,
         default=config.psychopy_screen,
         help=(
-            "PsychoPy display index. Defaults to the configured EIZO "
-            "stimulus display."
+            "PsychoPy display index. Defaults to the configured EIZO stimulus display."
         ),
     )
     demo_calibration.add_argument(
@@ -514,7 +512,9 @@ def main(
             return runner(
                 address=args.address,
                 serial_number=args.serial_number,
-                screen=args.screen if args.screen is not None else config.psychopy_screen,
+                screen=args.screen
+                if args.screen is not None
+                else config.psychopy_screen,
                 calibration_output_dir=calibration_output_dir,
                 fullscreen=args.fullscreen,
                 window_size=parse_window_size(args.size),
@@ -575,7 +575,9 @@ def main(
         warn_if_config_missing()
         runner = demo_activity_monitoring_runner
         if runner is None:
-            from aria_et.psychopy.activity_monitoring import run_activity_monitoring_demo
+            from aria_et.psychopy.activity_monitoring import (
+                run_activity_monitoring_demo,
+            )
 
             runner = run_activity_monitoring_demo
 
@@ -679,7 +681,9 @@ def main(
         warn_if_config_missing()
         runner = demo_static_social_scenes_runner
         if runner is None:
-            from aria_et.psychopy.static_social_scenes import run_static_social_scenes_demo
+            from aria_et.psychopy.static_social_scenes import (
+                run_static_social_scenes_demo,
+            )
 
             runner = run_static_social_scenes_demo
 
@@ -940,8 +944,7 @@ def _add_screen_argument(parser: argparse.ArgumentParser, config: AriaEtConfig) 
         type=int,
         default=config.psychopy_screen,
         help=(
-            "PsychoPy display index. Defaults to the configured EIZO "
-            "stimulus display."
+            "PsychoPy display index. Defaults to the configured EIZO stimulus display."
         ),
     )
 

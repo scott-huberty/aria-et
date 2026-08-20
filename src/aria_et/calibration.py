@@ -11,7 +11,6 @@ from aria_et.assets import (
     gap_overlap_reward_calibration_assets,
 )
 
-
 DEFAULT_CALIBRATION_INSET = 0.1
 
 
@@ -51,7 +50,9 @@ class CalibrationSequence:
     points: tuple[CalibrationPoint, ...]
 
 
-def five_point_targets(inset: float = DEFAULT_CALIBRATION_INSET) -> tuple[CalibrationTarget, ...]:
+def five_point_targets(
+    inset: float = DEFAULT_CALIBRATION_INSET,
+) -> tuple[CalibrationTarget, ...]:
     if not 0 < inset < 0.5:
         raise ValueError(f"inset must be greater than 0 and less than 0.5: {inset}")
 
@@ -68,10 +69,14 @@ def calibration_stimuli_from_reward_assets(
     assets: CalibrationRewardAssets,
 ) -> tuple[CalibrationStimulus, ...]:
     if not assets.animations:
-        raise ValueError("Calibration reward assets must include at least one animation.")
+        raise ValueError(
+            "Calibration reward assets must include at least one animation."
+        )
 
     if any(not animation.frames for animation in assets.animations):
-        raise ValueError("Calibration reward animations must include at least one frame.")
+        raise ValueError(
+            "Calibration reward animations must include at least one frame."
+        )
 
     if not assets.sounds:
         raise ValueError("Calibration reward assets must include at least one sound.")
@@ -88,7 +93,9 @@ def build_gap_overlap_reward_calibration_sequence(
     rng: Random | None = None,
 ) -> CalibrationSequence:
     randomizer = rng or Random()
-    stimuli = calibration_stimuli_from_reward_assets(gap_overlap_reward_calibration_assets())
+    stimuli = calibration_stimuli_from_reward_assets(
+        gap_overlap_reward_calibration_assets()
+    )
 
     return CalibrationSequence(
         sequence_id="gap-overlap-reward-5-point",

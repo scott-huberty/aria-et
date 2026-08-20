@@ -87,7 +87,9 @@ class PsychoPyActivityMonitoringPresenter:
     frame_duration_seconds: float = 1 / 30
     inter_trial_interval_seconds: float = 1.0
     render_status: StatusSink | None = None
-    _active_sounds: list[SoundLike] = field(default_factory=list, init=False, repr=False)
+    _active_sounds: list[SoundLike] = field(
+        default_factory=list, init=False, repr=False
+    )
 
     def present(
         self,
@@ -176,7 +178,9 @@ class PsychoPyActivityMonitoringPresenter:
 
     def _present_image_trial(self, trial: ActivityMonitoringTrial) -> None:
         self._play_soundtrack(trial)
-        self._render_status(f"Image trial: {trial.trial_id} {trial.stimulus.media.name}")
+        self._render_status(
+            f"Image trial: {trial.trial_id} {trial.stimulus.media.name}"
+        )
         with as_file(trial.stimulus.media) as media_path:
             image = self._image_factory()(self.window, str(media_path))
             try:
@@ -185,7 +189,9 @@ class PsychoPyActivityMonitoringPresenter:
                 self._stop_active_sounds()
 
     def _present_movie_trial(self, trial: ActivityMonitoringTrial) -> None:
-        self._render_status(f"Movie trial: {trial.trial_id} {trial.stimulus.media.name}")
+        self._render_status(
+            f"Movie trial: {trial.trial_id} {trial.stimulus.media.name}"
+        )
         with as_file(trial.stimulus.media) as media_path:
             movie = self._movie_factory()(self.window, str(media_path))
             movie.play()
@@ -194,7 +200,9 @@ class PsychoPyActivityMonitoringPresenter:
             finally:
                 movie.stop()
 
-    def _draw_for_duration(self, drawable: DrawableLike, duration_seconds: float) -> None:
+    def _draw_for_duration(
+        self, drawable: DrawableLike, duration_seconds: float
+    ) -> None:
         remaining_seconds = duration_seconds
         while remaining_seconds > 0:
             frame_seconds = min(self.frame_duration_seconds, remaining_seconds)
@@ -362,7 +370,9 @@ def run_activity_monitoring_demo(
     debug_render: bool = False,
     status_sink: StatusSink | None = None,
 ) -> int:
-    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+    status = status_sink or (
+        lambda message: print(message, file=sys.stderr, flush=True)
+    )
 
     status("Importing PsychoPy...")
     from psychopy import core, monitors, prefs, visual
@@ -450,7 +460,9 @@ def run_activity_monitoring_session(
 ) -> int:
     from aria_et.session import run_recording_session
 
-    status = status_sink or (lambda message: print(message, file=sys.stderr, flush=True))
+    status = status_sink or (
+        lambda message: print(message, file=sys.stderr, flush=True)
+    )
 
     def present(event_sink: EventSink) -> None:
         status("Importing PsychoPy...")
