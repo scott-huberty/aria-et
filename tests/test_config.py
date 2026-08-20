@@ -61,15 +61,15 @@ eye_tracker_manager = "/Applications/Tobii"
 
 def test_load_config_rejects_invalid_section_type(tmp_path):
     config_path = tmp_path / "config.toml"
-    config_path.write_text('display = "screen 2"\n', encoding="utf-8")
+    config_path.write_text("display = 'screen 2'\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match=r"\[display\]"):
+    with pytest.raises(TypeError, match=r"\[display\]"):
         load_config(config_path)
 
 
 def test_load_config_rejects_invalid_value_type(tmp_path):
     config_path = tmp_path / "config.toml"
-    config_path.write_text("[display]\npsychopy_screen = \"2\"\n", encoding="utf-8")
+    config_path.write_text('[display]\npsychopy_screen = "2"\n', encoding="utf-8")
 
-    with pytest.raises(ValueError, match="psychopy_screen"):
+    with pytest.raises(TypeError, match="psychopy_screen"):
         load_config(config_path)

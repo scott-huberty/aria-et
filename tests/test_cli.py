@@ -1,6 +1,7 @@
-import pytest
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from aria_et.cli import main, parse_float_pair, parse_window_size
 
@@ -31,10 +32,10 @@ def test_init_config_writes_lab_defaults(tmp_path, capsys):
     assert exit_code == 0
     assert "Wrote ARIA-ET config" in capsys.readouterr().out
     config_text = config_path.read_text(encoding="utf-8")
-    assert '[display]' in config_text
-    assert 'monitor_name = "EIZO_EV2480"' in config_text
-    assert '[audio]' in config_text
-    assert 'speaker = "EV2480"' in config_text
+    assert "[display]" in config_text
+    assert "monitor_name = 'EIZO_EV2480'" in config_text
+    assert "[audio]" in config_text
+    assert "speaker = 'EV2480'" in config_text
 
 
 def test_init_config_refuses_to_overwrite_existing_file(tmp_path, capsys):
@@ -55,10 +56,12 @@ def test_init_config_can_force_overwrite_existing_file(tmp_path):
     exit_code = main(["init-config", "--path", str(config_path), "--force"])
 
     assert exit_code == 0
-    assert 'monitor_name = "EIZO_EV2480"' in config_path.read_text(encoding="utf-8")
+    assert "monitor_name = 'EIZO_EV2480'" in config_path.read_text(encoding="utf-8")
 
 
-def test_psychopy_task_warns_when_config_is_missing_without_creating_it(tmp_path, capsys):
+def test_psychopy_task_warns_when_config_is_missing_without_creating_it(
+    tmp_path, capsys
+):
     calls = []
 
     def runner(**kwargs):
@@ -486,7 +489,9 @@ def test_demo_calibration_can_request_fullscreen():
         calls.append(kwargs)
         return 0
 
-    exit_code = main(["demo-calibration", "--fullscreen"], demo_calibration_runner=runner)
+    exit_code = main(
+        ["demo-calibration", "--fullscreen"], demo_calibration_runner=runner
+    )
 
     assert exit_code == 0
     assert calls[0]["fullscreen"] is True
