@@ -17,6 +17,7 @@ test = [
     "pre-commit",
     "pytest",
     "ruff",
+    "ty",
 ]
 docs = [
     "sphinx",
@@ -45,6 +46,8 @@ markers = [
     "psychopy_smoke: opt-in GUI smoke tests that open real PsychoPy windows",
     "requires_eyetracker: opt-in hardware smoke tests that require a connected Tobii eye tracker",
 ]
+addopts = "--cov=src --cov-report=term-missing --cov-report=html"
+
 
 [tool.ruff]
 include = ["pyproject.toml", "src/**/*.py"]
@@ -67,3 +70,11 @@ exclude = [
 
 # Set the source directory root for import resolution (isort)
 src = ["src"]
+
+
+[tool.ty.rules]
+
+[tool.ty.environment]
+# TODO: Change this when we setup up Windows PC
+python = "/Users/scotterik/miniforge3/envs/aria-et_310/"
+root = ["./src"]

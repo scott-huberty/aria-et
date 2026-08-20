@@ -6,8 +6,11 @@ dependencies:
   - pip
   - pre_commit
   - pytest
+  - pytest-cov
   - ruff
   - setuptools>=64
+  - ty
+  - vulture
   - wheel
   - pip:
       - bids-validator-deno
