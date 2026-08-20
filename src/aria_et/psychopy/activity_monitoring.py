@@ -6,6 +6,7 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from importlib.resources import as_file
+from pathlib import Path
 from typing import Protocol
 
 from aria_et.activity_monitoring import (
@@ -441,7 +442,7 @@ def run_activity_monitoring_session(
     *,
     tracker: str,
     tracker_address: str | None = None,
-    output_dir: str,
+    output_dir: str | Path,
     subject: str,
     session: str | None = None,
     run: str | None = None,

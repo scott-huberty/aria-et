@@ -6,6 +6,7 @@ import argparse
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING, Protocol
 
 from aria_et.config import (
     AriaEtConfig,
@@ -14,6 +15,9 @@ from aria_et.config import (
     load_config,
 )
 from aria_et.tasks import BATTERY_ORDER
+
+if TYPE_CHECKING:
+    from aria_et.bids import BidsExportResult
 
 DemoCalibrationRunner = Callable[..., int]
 CalibrateEyeTrackerRunner = Callable[..., int]
@@ -27,7 +31,13 @@ RunActivityMonitoringRunner = Callable[..., int]
 RunSocialInteractiveRunner = Callable[..., int]
 RunStaticSocialScenesRunner = Callable[..., int]
 RunPupillaryLightReflexRunner = Callable[..., int]
-ExportBidsRunner = Callable[..., object]
+
+
+# TODO: perhaps this approach is better than above, we define the inputs and the return
+class ExportBidsRunner(Protocol):
+    def __call__(
+        self, *, run_dir: str | Path, bids_root: str | Path
+    ) -> BidsExportResult: ...
 
 
 def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
@@ -478,9 +488,8 @@ def main(
             run_dir=args.run_dir,
             bids_root=args.bids_root or default_bids_root(config),
         )
-        written_files = getattr(result, "written_files", ())
         print(f"Exported BIDS eyetracking files to {result.bids_root}.")
-        for path in written_files:
+        for path in result.written_files:
             print(path)
         return 0
 
@@ -535,16 +544,13 @@ def main(
 
             runner = run_eyetracker_manager_calibration
 
-        kwargs = {
-            "address": args.address,
-            "serial_number": args.serial_number,
-            "screen": args.screen if args.screen is not None else config.etm_screen,
-            "calibration_output_dir": calibration_output_dir,
-        }
-        if args.manager is not None:
-            kwargs["executable"] = args.manager
-
-        return runner(**kwargs)
+        return runner(
+            address=args.address,
+            serial_number=args.serial_number,
+            screen=args.screen if args.screen is not None else config.etm_screen,
+            calibration_output_dir=calibration_output_dir,
+            executable=args.manager,
+        )
 
     if args.command == "demo-calibration":
         warn_if_config_missing()

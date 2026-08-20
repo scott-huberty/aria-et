@@ -64,7 +64,8 @@ class PupillaryLightReflexAssets:
 
 
 def abcct_asset(relative_path: str) -> Traversable:
-    return files(ASSET_PACKAGE).joinpath(ASSET_ROOT, relative_path)
+    # pathlib.Path supports joinpath.(*args) but we type against Traversable.
+    return files(ASSET_PACKAGE).joinpath(ASSET_ROOT).joinpath(relative_path)
 
 
 def gap_overlap_reward_calibration_assets() -> CalibrationRewardAssets:

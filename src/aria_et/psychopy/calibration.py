@@ -8,6 +8,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from importlib.abc import Traversable
 from importlib.resources import as_file
+from pathlib import Path
 from typing import Protocol
 
 from aria_et.calibration import (
@@ -533,7 +534,7 @@ def run_child_friendly_eyetracker_calibration(
     address: str | None = None,
     serial_number: str | None = None,
     screen: int = 1,
-    calibration_output_dir: str = "calibrations",
+    calibration_output_dir: str | Path = "calibrations",
     fullscreen: bool = True,
     window_size: tuple[int, int] = (1024, 768),
     screen_distance_meters: float = 0.65,

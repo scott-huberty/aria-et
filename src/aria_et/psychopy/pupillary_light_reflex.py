@@ -7,6 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from importlib.abc import Traversable
 from importlib.resources import as_file
+from pathlib import Path
 from typing import Protocol
 
 from aria_et.pupillary_light_reflex import (
@@ -399,7 +400,7 @@ def run_pupillary_light_reflex_session(
     *,
     tracker: str,
     tracker_address: str | None = None,
-    output_dir: str,
+    output_dir: str | Path,
     subject: str,
     session: str | None = None,
     run: str | None = None,

@@ -536,7 +536,7 @@ def run_eyetracker_manager_calibration(
     address: str | None = None,
     serial_number: str | None = None,
     screen: int = 1,
-    executable: str = DEFAULT_EYETRACKER_MANAGER_PATH,
+    executable: str | Path | None = None,
     calibration_output_dir: str | Path | None = DEFAULT_CALIBRATION_DIR,
     import_module: ImportModule = importlib.import_module,
     run_command: Callable[..., subprocess.CompletedProcess] = subprocess.run,
@@ -546,6 +546,9 @@ def run_eyetracker_manager_calibration(
 ) -> int:
     output = output_sink or print
     error = error_sink or (lambda message: print(message, file=sys.stderr))
+    executable = (
+        executable if executable is not None else DEFAULT_EYETRACKER_MANAGER_PATH
+    )
     artifact_dir = None
 
     if address is not None and serial_number is not None:

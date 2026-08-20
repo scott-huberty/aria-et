@@ -6,6 +6,7 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from importlib.resources import as_file
+from pathlib import Path
 from typing import Protocol
 
 from aria_et.runtime import Clock, EventSink, RuntimeEvent
@@ -304,7 +305,7 @@ def run_social_interactive_demo(
 def run_social_interactive_session(
     *,
     tracker: str,
-    output_dir: str,
+    output_dir: str | Path,
     subject: str,
     tracker_address: str | None = None,
     session: str | None = None,
