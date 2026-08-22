@@ -7,11 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10.
-    import tomli as tomllib
-
+import tomli as tomllib  # we pin to py 3.10 until tobii ships new SDK wheels.
 
 DEFAULT_DATA_DIR_NAME = "aria-et-data"
 DEFAULT_ETM_SCREEN = 2
