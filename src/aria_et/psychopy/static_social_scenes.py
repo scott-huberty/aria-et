@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from importlib.resources import as_file
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from aria_et.runtime import Clock, EventSink, RuntimeEvent
 from aria_et.static_social_scenes import (
@@ -15,6 +15,9 @@ from aria_et.static_social_scenes import (
     StaticSocialScenesTrial,
     build_static_social_scenes_sequence,
 )
+
+if TYPE_CHECKING:
+    from aria_et.session import TrackerName
 
 
 class WindowLike(Protocol):
@@ -357,7 +360,7 @@ def run_static_social_scenes_demo(
 
 def run_static_social_scenes_session(
     *,
-    tracker: str,
+    tracker: TrackerName,
     tracker_address: str | None = None,
     output_dir: str | Path,
     subject: str,

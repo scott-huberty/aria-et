@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from importlib.abc import Traversable
 from importlib.resources import as_file
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from aria_et.pupillary_light_reflex import (
     PupillaryLightReflexSequence,
@@ -16,6 +16,9 @@ from aria_et.pupillary_light_reflex import (
     build_pupillary_light_reflex_sequence,
 )
 from aria_et.runtime import Clock, EventSink, RuntimeEvent
+
+if TYPE_CHECKING:
+    from aria_et.session import TrackerName
 
 
 class WindowLike(Protocol):
@@ -398,7 +401,7 @@ def run_pupillary_light_reflex_demo(
 
 def run_pupillary_light_reflex_session(
     *,
-    tracker: str,
+    tracker: TrackerName,
     tracker_address: str | None = None,
     output_dir: str | Path,
     subject: str,

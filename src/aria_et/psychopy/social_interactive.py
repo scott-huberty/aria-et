@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from importlib.resources import as_file
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from aria_et.runtime import Clock, EventSink, RuntimeEvent
 from aria_et.social_interactive import (
@@ -15,6 +15,9 @@ from aria_et.social_interactive import (
     SocialInteractiveTrial,
     build_social_interactive_sequence,
 )
+
+if TYPE_CHECKING:
+    from aria_et.session import TrackerName
 
 
 class WindowLike(Protocol):
@@ -304,7 +307,7 @@ def run_social_interactive_demo(
 
 def run_social_interactive_session(
     *,
-    tracker: str,
+    tracker: TrackerName,
     output_dir: str | Path,
     subject: str,
     tracker_address: str | None = None,

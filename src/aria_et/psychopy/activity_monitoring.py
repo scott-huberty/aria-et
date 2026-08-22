@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from importlib.resources import as_file
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from aria_et.activity_monitoring import (
     ActivityMonitoringSequence,
@@ -15,6 +15,9 @@ from aria_et.activity_monitoring import (
     build_activity_monitoring_sequence,
 )
 from aria_et.runtime import Clock, EventSink, RuntimeEvent
+
+if TYPE_CHECKING:
+    from aria_et.session import TrackerName
 
 
 class WindowLike(Protocol):
@@ -440,7 +443,7 @@ def run_activity_monitoring_demo(
 
 def run_activity_monitoring_session(
     *,
-    tracker: str,
+    tracker: TrackerName,
     tracker_address: str | None = None,
     output_dir: str | Path,
     subject: str,
