@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol
 
 from aria_et.eyetracker import (
     TobiiSdkUnavailableError,
@@ -24,7 +24,25 @@ TrackerName = Literal["none", "tobii"]
 StatusSink = Callable[[str], None]
 PresenterRunner = Callable[[EventSink], None]
 EyeTrackerCheck = Callable[..., int]
-RecorderFactory = Callable[..., object]
+
+
+class GazeRecorder(Protocol):
+    """Structural interface for e.g. TobiiGazeRecorder."""
+
+    def __enter__(self) -> object: ...
+    def __exit__(self, exc_type, exc_value, traceback) -> None: ...
+    def writer_health(self) -> dict[str, object]: ...
+
+
+class RecorderFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        gaze_path: str | Path,
+        tracker_metadata_path: str | Path,
+        writer_health_path: str | Path | None = None,
+        address: str | None = None,
+    ) -> GazeRecorder: ...
 
 
 @dataclass(frozen=True)
@@ -355,10 +373,8 @@ def _write_session_metadata(
     )
 
 
-def _record_gaze_writer_health(output_path: Path, recorder: object) -> None:
-    health = _recorder_writer_health(recorder)
-    if health is None:
-        return
+def _record_gaze_writer_health(output_path: Path, recorder: GazeRecorder) -> None:
+    health = recorder.writer_health()
 
     writer_health_path = output_path / "gaze_writer.json"
     if not writer_health_path.exists():
@@ -382,16 +398,6 @@ def _record_gaze_writer_health(output_path: Path, recorder: object) -> None:
         f"flushes={health.get('flush_count')} "
         f"queued={health.get('queued_samples')}"
     )
-
-
-def _recorder_writer_health(recorder: object) -> dict[str, object] | None:
-    writer_health = getattr(recorder, "writer_health", None)
-    if not callable(writer_health):
-        return None
-    health = writer_health()
-    if not isinstance(health, dict):
-        return None
-    return health
 
 
 def _update_session_metadata(path: Path, **updates: object) -> None:
