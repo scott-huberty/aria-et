@@ -163,7 +163,7 @@ def test_export_bids_defaults_to_user_data_bids_root(tmp_path, monkeypatch):
     ]
 
 
-def test_calibrate_eyetracker_invokes_manager_runner_with_production_defaults():
+def test_calibrate_eyetracker_invokes_manager_runner_with_production_defaults(tmp_path):
     calls = []
 
     def runner(**kwargs):
@@ -180,7 +180,7 @@ def test_calibrate_eyetracker_invokes_manager_runner_with_production_defaults():
         {
             "address": None,
             "calibration_output_dir": (
-                Path.home()
+                tmp_path
                 / "aria-et-data"
                 / "sourcedata"
                 / "sub-01"
@@ -189,6 +189,8 @@ def test_calibrate_eyetracker_invokes_manager_runner_with_production_defaults():
             ),
             "serial_number": None,
             "screen": 2,
+            # None means "use eyetracker.DEFAULT_EYETRACKER_MANAGER_PATH".
+            "executable": None,
         }
     ]
 
@@ -266,6 +268,7 @@ def test_calibrate_eyetracker_can_set_output_directory():
             / "calibrations",
             "serial_number": None,
             "screen": 2,
+            "executable": None,
         }
     ]
 
