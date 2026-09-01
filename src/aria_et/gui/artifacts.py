@@ -157,6 +157,20 @@ def apply_events(
     )
 
 
+def read_progress(run: RunDirectory) -> RunProgress:
+    events = JsonLinesTail(run.path / EVENTS_NAME).read_new()
+    return apply_events(RunProgress(), events, run.task_id)
+
+
+def summarize_run(run: RunDirectory) -> tuple[RunStatus, bool]:
+    """Return the finished status of a run on disk and whether it lacks gaze."""
+    status = derive_status(read_progress(run), process_running=False, exit_code=None)
+    no_gaze = is_dry_run_metadata(read_session_metadata(run.path)) or not has_gaze(
+        run.path
+    )
+    return status, no_gaze
+
+
 def derive_status(
     progress: RunProgress, *, process_running: bool, exit_code: int | None
 ) -> RunStatus:

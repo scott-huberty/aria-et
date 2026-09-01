@@ -43,6 +43,10 @@ QWidget {{
     font-size: 13px;
 }}
 
+QLabel, QCheckBox, QRadioButton {{
+    background-color: transparent;
+}}
+
 QLabel#PageHeading {{
     color: {aria_teal};
     font-size: 20px;

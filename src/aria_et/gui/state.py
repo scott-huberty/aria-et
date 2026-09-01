@@ -189,3 +189,41 @@ def build_calibrate_args(state: SessionState, options: CalibrationOptions) -> li
 
 def build_export_args(run_dir: Path, bids_root_dir: Path) -> list[str]:
     return ["export-bids", "--input", str(run_dir), "--output", str(bids_root_dir)]
+
+
+def build_init_config_args() -> list[str]:
+    return ["init-config"]
+
+
+class ExitSeverity(Enum):
+    SUCCESS = "success"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+@dataclass(frozen=True)
+class ExitOutcome:
+    code: int
+    severity: ExitSeverity
+    message: str
+
+
+_EXIT_OUTCOMES: dict[int, tuple[ExitSeverity, str]] = {
+    0: (ExitSeverity.SUCCESS, "Finished successfully."),
+    1: (ExitSeverity.ERROR, "The command failed. See the console output below."),
+    2: (ExitSeverity.ERROR, "Tobii Pro SDK not installed in this environment."),
+    3: (
+        ExitSeverity.WARNING,
+        (
+            "Tracker not found. Check power and the Ethernet link, "
+            "then retry with an explicit address."
+        ),
+    ),
+}
+
+
+def describe_exit_code(code: int) -> ExitOutcome:
+    severity, message = _EXIT_OUTCOMES.get(
+        code, (ExitSeverity.ERROR, f"The command exited with code {code}.")
+    )
+    return ExitOutcome(code=code, severity=severity, message=message)

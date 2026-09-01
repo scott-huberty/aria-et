@@ -13,8 +13,19 @@ def pytest_collection_modifyitems(config, items):
             "to execute Tobii hardware smoke tests."
         )
     )
+    skip_qt_gui = pytest.mark.skip(
+        reason=(
+            "Run with `QT_QPA_PLATFORM=offscreen pytest -m qt_gui` "
+            "to execute Qt widget tests."
+        )
+    )
     for item in items:
-        if "psychopy_smoke" in item.keywords and "psychopy_smoke" not in marker_expression:
+        if "qt_gui" in item.keywords and "qt_gui" not in marker_expression:
+            item.add_marker(skip_qt_gui)
+        if (
+            "psychopy_smoke" in item.keywords
+            and "psychopy_smoke" not in marker_expression
+        ):
             item.add_marker(skip_psychopy_smoke)
         if (
             "requires_eyetracker" in item.keywords
