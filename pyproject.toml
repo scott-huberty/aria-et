@@ -24,9 +24,13 @@ docs = [
     "sphinxcontrib-youtube",
     "furo",
 ]
+gui = [
+    "PySide6>=6.6",
+]
 
 [project.scripts]
 aria-et = "aria_et.cli:main"
+aria-et-gui = "aria_et.gui.__main__:main"
 
 [build-system]
 requires = ["setuptools>=64"]
@@ -45,6 +49,7 @@ testpaths = ["tests"]
 markers = [
     "psychopy_smoke: opt-in GUI smoke tests that open real PsychoPy windows",
     "requires_eyetracker: opt-in hardware smoke tests that require a connected Tobii eye tracker",
+    "qt_gui: opt-in tests that construct real Qt widgets",
 ]
 addopts = "--cov=src --cov-report=term-missing --cov-report=html"
 
