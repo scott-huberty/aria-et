@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from aria_et.config import AriaEtConfig
 from aria_et.gui.pages.battery import BatteryPage
 from aria_et.gui.pages.calibration import CalibrationPage
+from aria_et.gui.pages.export import ExportPage
 from aria_et.gui.pages.hardware import HardwarePage
 from aria_et.gui.pages.setup import SetupPage
 from aria_et.gui.process import CliProcess
@@ -47,7 +48,7 @@ class MainWindow(QMainWindow):
         self._process.output_line.connect(self._on_output_line)
         self._process.finished.connect(self._on_process_finished)
         self._process.failed_to_start.connect(self._on_failed_to_start)
-        self._output_consumer: HardwarePage | None = None
+        self._output_consumer: HardwarePage | ExportPage | None = None
         self._on_exit: Callable[[int], None] | None = None
 
         self._setup_page = SetupPage(config, screen_count)
@@ -65,12 +66,15 @@ class MainWindow(QMainWindow):
         self._calibration_page = CalibrationPage(config)
         self._calibration_page.calibrate_requested.connect(self._run_calibration)
 
+        self._export_page = ExportPage(config)
+        self._export_page.export_requested.connect(self._run_export)
+
         self._pages = QStackedWidget()
         self._pages.addWidget(_scrollable(self._setup_page))
         self._pages.addWidget(_scrollable(self._hardware_page))
         self._pages.addWidget(_scrollable(self._calibration_page))
         self._pages.addWidget(_scrollable(self._battery_page))
-        self._pages.addWidget(_scrollable(_placeholder("Export")))
+        self._pages.addWidget(_scrollable(self._export_page))
 
         self._nav = QListWidget()
         self._nav.setObjectName("NavList")
@@ -144,6 +148,7 @@ class MainWindow(QMainWindow):
         self._mode_banner.setVisible(banner is not None)
         self._battery_page.set_session(session)
         self._calibration_page.set_session(session)
+        self._export_page.set_session(session)
         self._apply_session_gating()
 
     def _on_session_closed(self) -> None:
@@ -152,6 +157,7 @@ class MainWindow(QMainWindow):
         self._mode_banner.setVisible(False)
         self._battery_page.set_session(None)
         self._calibration_page.set_session(None)
+        self._export_page.set_session(None)
         self._apply_session_gating()
 
     def _apply_session_gating(self) -> None:
@@ -178,6 +184,12 @@ class MainWindow(QMainWindow):
         self._log_pane.expand()
         if not self._start(args, on_exit=self._calibration_page.report_exit):
             self._calibration_page.report_exit(1)
+
+    def _run_export(self, args: list[str]) -> None:
+        self._log_pane.expand()
+        self._output_consumer = self._export_page
+        if not self._start(args, on_exit=self._export_page.report_exit):
+            self._export_page.report_exit(1)
 
     def _stop_task(self) -> None:
         self._log_pane.append_line("Stopping — interrupting the task…")
@@ -239,17 +251,3 @@ def _scrollable(page: QWidget) -> QScrollArea:
     area.setFrameShape(QScrollArea.Shape.NoFrame)
     area.setWidget(page)
     return area
-
-
-def _placeholder(name: str) -> QWidget:
-    page = QWidget()
-    layout = QVBoxLayout(page)
-    layout.setContentsMargins(20, 18, 20, 18)
-    heading = QLabel(name)
-    heading.setObjectName("PageHeading")
-    body = QLabel("Not implemented yet.")
-    body.setObjectName("HelperText")
-    layout.addWidget(heading)
-    layout.addWidget(body)
-    layout.addStretch(1)
-    return page
