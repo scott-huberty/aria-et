@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from aria_et.config import AriaEtConfig
+from aria_et.gui.pages.battery import BatteryPage
 from aria_et.gui.pages.hardware import HardwarePage
 from aria_et.gui.pages.setup import SetupPage
 from aria_et.gui.process import CliProcess
@@ -44,6 +45,7 @@ class MainWindow(QMainWindow):
         self._process.finished.connect(self._on_process_finished)
         self._process.failed_to_start.connect(self._on_failed_to_start)
         self._output_consumer: HardwarePage | None = None
+        self._task_running = False
 
         self._setup_page = SetupPage(config, screen_count)
         self._setup_page.session_opened.connect(self._on_session_opened)
@@ -53,11 +55,16 @@ class MainWindow(QMainWindow):
         self._hardware_page = HardwarePage()
         self._hardware_page.check_requested.connect(self._run_tracker_check)
 
+        self._battery_page = BatteryPage(config)
+        self._battery_page.run_requested.connect(self._run_task)
+        self._battery_page.stop_requested.connect(self._stop_task)
+
         self._pages = QStackedWidget()
         self._pages.addWidget(_scrollable(self._setup_page))
         self._pages.addWidget(_scrollable(self._hardware_page))
-        for name in ("Calibration", "Battery", "Export"):
-            self._pages.addWidget(_scrollable(_placeholder(name)))
+        self._pages.addWidget(_scrollable(_placeholder("Calibration")))
+        self._pages.addWidget(_scrollable(self._battery_page))
+        self._pages.addWidget(_scrollable(_placeholder("Export")))
 
         self._nav = QListWidget()
         self._nav.setObjectName("NavList")
@@ -129,12 +136,14 @@ class MainWindow(QMainWindow):
         banner = MODE_BANNERS.get(session.mode)
         self._mode_banner.setText(banner or "")
         self._mode_banner.setVisible(banner is not None)
+        self._battery_page.set_session(session)
         self._apply_session_gating()
 
     def _on_session_closed(self) -> None:
         self._session = None
         self._session_label.setText("No session open")
         self._mode_banner.setVisible(False)
+        self._battery_page.set_session(None)
         self._apply_session_gating()
 
     def _apply_session_gating(self) -> None:
@@ -151,6 +160,15 @@ class MainWindow(QMainWindow):
     def _run_tracker_check(self, args: list[str]) -> None:
         self._output_consumer = self._hardware_page
         self._start(args)
+
+    def _run_task(self, args: list[str]) -> None:
+        self._task_running = True
+        self._log_pane.expand()
+        self._start(args)
+
+    def _stop_task(self) -> None:
+        self._log_pane.append_line("Stopping — interrupting the task…")
+        self._process.request_stop()
 
     def _create_config(self) -> None:
         self._output_consumer = None
@@ -169,9 +187,15 @@ class MainWindow(QMainWindow):
             self._output_consumer.record_output_line(line)
 
     def _on_process_finished(self, exit_code: int) -> None:
-        if self._output_consumer is not None:
+        if self._task_running:
+            self._task_running = False
+            self._battery_page.report_exit(exit_code)
+        elif self._output_consumer is not None:
             self._output_consumer.report_exit(exit_code)
             self._sync_tracker_pill()
+            self._battery_page.set_tracker_checked(
+                self._hardware_page.tracker_connected
+            )
             self._output_consumer = None
         else:
             self._setup_page.refresh_config_banner()
@@ -179,7 +203,10 @@ class MainWindow(QMainWindow):
     def _on_failed_to_start(self, message: str) -> None:
         self._log_pane.expand()
         self._log_pane.append_line(message)
-        if self._output_consumer is not None:
+        if self._task_running:
+            self._task_running = False
+            self._battery_page.report_exit(1)
+        elif self._output_consumer is not None:
             self._output_consumer.report_failed_to_start(message)
             self._output_consumer = None
 

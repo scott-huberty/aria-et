@@ -26,6 +26,10 @@ _TONE_COLORS: dict[PillTone, tuple[str, str]] = {
 }
 
 
+def tone_foreground(tone: PillTone) -> str:
+    return _TONE_COLORS[tone][1]
+
+
 class StatusPill(QLabel):
     def __init__(self, text: str = "", tone: PillTone = PillTone.NEUTRAL, parent=None):
         super().__init__(parent)

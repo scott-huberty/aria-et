@@ -101,6 +101,24 @@ def next_free_session_label(sourcedata_root: Path, subject: str, width: int = 2)
         number += 1
 
 
+def next_run_label(
+    sourcedata_root: Path, subject: str, session: str, task_id: str, width: int = 2
+) -> str:
+    """Predict the label the CLI will assign, for display only.
+
+    The GUI never passes ``--run``; this only labels the Run button so a
+    re-run reads as deliberate.
+    """
+    taken = {
+        run.run_label
+        for run in find_run_directories(sourcedata_root, subject, session, task_id)
+    }
+    number = 1
+    while str(number).zfill(width) in taken:
+        number += 1
+    return str(number).zfill(width)
+
+
 def snapshot_run_directories(
     sourcedata_root: Path, subject: str, session: str, task_id: str
 ) -> set[Path]:
