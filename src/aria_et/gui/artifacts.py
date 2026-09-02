@@ -11,6 +11,8 @@ from pathlib import Path
 
 RUN_DIR_PATTERN = re.compile(r"^task-(?P<task>.+)_run-(?P<run>[A-Za-z0-9]+)$")
 
+CALIBRATIONS_DIR_NAME = "calibrations"
+CALIBRATION_METADATA_NAME = "calibration.json"
 SESSION_METADATA_NAME = "session.json"
 EVENTS_NAME = "events.jsonl"
 GAZE_NAME = "gaze.jsonl"
@@ -53,6 +55,39 @@ class WriterHealth:
     dropped: int
     queued: int
     flush_count: int
+
+
+@dataclass(frozen=True)
+class CalibrationRecord:
+    path: Path
+    calibration_id: str
+    created_at: str | None
+    method: str | None
+
+
+def find_calibrations(
+    sourcedata_root: Path, subject: str, session: str
+) -> list[CalibrationRecord]:
+    """List calibrations newest first, matching how a run resolves provenance."""
+    root = (
+        subject_session_dir(sourcedata_root, subject, session) / CALIBRATIONS_DIR_NAME
+    )
+    if not root.is_dir():
+        return []
+    records = []
+    for child in sorted(root.iterdir(), reverse=True):
+        if not child.is_dir() or not child.name.startswith("calibration-"):
+            continue
+        metadata = _read_json(child / CALIBRATION_METADATA_NAME) or {}
+        records.append(
+            CalibrationRecord(
+                path=child,
+                calibration_id=child.name,
+                created_at=_as_optional_str(metadata.get("created_at")),
+                method=_as_optional_str(metadata.get("method")),
+            )
+        )
+    return records
 
 
 def subject_session_dir(sourcedata_root: Path, subject: str, session: str) -> Path:
@@ -239,15 +274,22 @@ def _parse_json_lines(chunk: bytes) -> list[dict]:
     return records
 
 
-def read_session_metadata(run_dir: Path) -> dict | None:
-    path = run_dir / SESSION_METADATA_NAME
+def _read_json(path: Path) -> dict | None:
     if not path.is_file():
         return None
     try:
-        metadata = json.loads(path.read_text(encoding="utf-8"))
+        parsed = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return None
-    return metadata if isinstance(metadata, dict) else None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _as_optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def read_session_metadata(run_dir: Path) -> dict | None:
+    return _read_json(run_dir / SESSION_METADATA_NAME)
 
 
 def is_dry_run_metadata(metadata: dict | None) -> bool:
@@ -260,14 +302,8 @@ def has_gaze(run_dir: Path) -> bool:
 
 
 def read_writer_health(run_dir: Path) -> WriterHealth | None:
-    path = run_dir / WRITER_HEALTH_NAME
-    if not path.is_file():
-        return None
-    try:
-        health = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(health, dict):
+    health = _read_json(run_dir / WRITER_HEALTH_NAME)
+    if health is None:
         return None
     return WriterHealth(
         received=_as_int(health.get("received_queue_samples")),
