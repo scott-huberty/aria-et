@@ -14,6 +14,11 @@ SIGINT_SUPPORTED = os.name != "nt"
 SIGINT_GRACE_MILLISECONDS = 10_000
 SIGTERM_GRACE_MILLISECONDS = 5_000
 
+TERMINATE_WARNING = (
+    "The task did not stop on its own — terminating it. Buffered gaze samples "
+    "may be lost."
+)
+
 
 class CliProcess(QObject):
     """Runs ``python -m aria_et.cli ...`` and streams its merged output."""
@@ -22,6 +27,7 @@ class CliProcess(QObject):
     output_line = Signal(str)
     finished = Signal(int)
     failed_to_start = Signal(str)
+    escalated = Signal(str)
 
     def __init__(self, parent: QObject | None = None, executable: str | None = None):
         super().__init__(parent)
@@ -62,6 +68,7 @@ class CliProcess(QObject):
     def _escalate_to_terminate(self) -> None:
         if not self.is_running():
             return
+        self.escalated.emit(TERMINATE_WARNING)
         self._process.terminate()
         QTimer.singleShot(SIGTERM_GRACE_MILLISECONDS, self.kill)
 

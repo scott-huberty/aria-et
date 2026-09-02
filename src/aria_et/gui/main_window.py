@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
@@ -25,6 +26,7 @@ from aria_et.gui.pages.hardware import HardwarePage
 from aria_et.gui.pages.setup import SetupPage
 from aria_et.gui.process import CliProcess
 from aria_et.gui.state import RunMode, SessionState, build_init_config_args
+from aria_et.gui.widgets.crash_panel import CRASH_LOG_LINES
 from aria_et.gui.widgets.log_pane import LogPane
 from aria_et.gui.widgets.status_pill import PillTone, StatusPill
 
@@ -48,8 +50,10 @@ class MainWindow(QMainWindow):
         self._process.output_line.connect(self._on_output_line)
         self._process.finished.connect(self._on_process_finished)
         self._process.failed_to_start.connect(self._on_failed_to_start)
+        self._process.escalated.connect(self._log_message)
         self._output_consumer: HardwarePage | ExportPage | None = None
         self._on_exit: Callable[[int], None] | None = None
+        self._recent_lines: deque[str] = deque(maxlen=CRASH_LOG_LINES)
 
         self._setup_page = SetupPage(config, screen_count)
         self._setup_page.session_opened.connect(self._on_session_opened)
@@ -177,8 +181,11 @@ class MainWindow(QMainWindow):
 
     def _run_task(self, args: list[str]) -> None:
         self._log_pane.expand()
-        if not self._start(args, on_exit=self._battery_page.report_exit):
+        if not self._start(args, on_exit=self._finish_task):
             self._battery_page.report_exit(1)
+
+    def _finish_task(self, exit_code: int) -> None:
+        self._battery_page.report_exit(exit_code, list(self._recent_lines))
 
     def _run_calibration(self, args: list[str]) -> None:
         self._log_pane.expand()
@@ -192,8 +199,11 @@ class MainWindow(QMainWindow):
             self._export_page.report_exit(1)
 
     def _stop_task(self) -> None:
-        self._log_pane.append_line("Stopping — interrupting the task…")
+        self._log_message("Stopping — saving data…")
         self._process.request_stop()
+
+    def _log_message(self, message: str) -> None:
+        self._log_pane.append_line(message)
 
     def _create_config(self) -> None:
         self._start(
@@ -206,6 +216,7 @@ class MainWindow(QMainWindow):
             self._log_pane.append_line("A command is already running; ignoring.")
             return False
         self._on_exit = on_exit
+        self._recent_lines.clear()
         self._log_pane.append_line(f"$ aria-et {' '.join(args)}")
         self._process.start(args)
         return True
@@ -217,6 +228,7 @@ class MainWindow(QMainWindow):
 
     def _on_output_line(self, line: str) -> None:
         self._log_pane.append_line(line)
+        self._recent_lines.append(line)
         if self._output_consumer is not None:
             self._output_consumer.record_output_line(line)
 

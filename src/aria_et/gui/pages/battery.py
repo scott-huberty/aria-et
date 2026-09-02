@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -28,12 +29,14 @@ from aria_et.gui.artifacts import (
     apply_events,
     derive_status,
 )
+from aria_et.gui.process import SIGINT_SUPPORTED
 from aria_et.gui.state import (
     PresentationOptions,
     SessionState,
     build_demo_args,
     build_run_args,
 )
+from aria_et.gui.widgets.crash_panel import CrashPanel
 from aria_et.gui.widgets.task_card import TaskCard
 
 POLL_INTERVAL_MILLISECONDS = 500
@@ -42,6 +45,22 @@ PREFLIGHT_MET = "✓"
 PREFLIGHT_UNMET = "○"
 
 NO_TRIAL_LIMIT = 0
+
+BUFFERED_SAMPLE_CAVEAT = (
+    "This platform cannot interrupt the task gently, so up to half a second "
+    "of buffered gaze samples may be lost."
+)
+
+_DISPLAY_NAMES = {task.task_id: task.display_name for task in tasks.BATTERY_ORDER}
+
+
+def describe_stop_confirmation(task_id: str) -> str:
+    """The §10.2 prompt — a misclick mid-acquisition is expensive."""
+    name = _DISPLAY_NAMES.get(task_id, task_id)
+    prompt = f"Stop {name}? The partial run will be saved and marked incomplete."
+    if not SIGINT_SUPPORTED:
+        prompt += f"\n\n{BUFFERED_SAMPLE_CAVEAT}"
+    return prompt
 
 
 def _card(title: str) -> tuple[QFrame, QVBoxLayout]:
@@ -95,6 +114,7 @@ class BatteryPage(QWidget):
         self._events_tail: JsonLinesTail | None = None
         self._progress = RunProgress()
         self._writes_data = True
+        self._stop_requested = False
 
         self._timer = QTimer(self)
         self._timer.setInterval(POLL_INTERVAL_MILLISECONDS)
@@ -141,9 +161,11 @@ class BatteryPage(QWidget):
             card = TaskCard(task.task_id, task.display_name)
             card.run_requested.connect(self._start_run)
             card.preview_requested.connect(self._start_preview)
-            card.stop_requested.connect(lambda _task: self.stop_requested.emit())
+            card.stop_requested.connect(self._request_stop)
             self._cards[task.task_id] = card
             cards_layout.addWidget(card)
+
+        self._crash_panel = CrashPanel()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 18, 20, 18)
@@ -152,6 +174,7 @@ class BatteryPage(QWidget):
         layout.addWidget(preflight_card)
         layout.addWidget(self._options_card)
         layout.addWidget(cards_container)
+        layout.addWidget(self._crash_panel)
         layout.addStretch(1)
 
         self._refresh()
@@ -196,19 +219,36 @@ class BatteryPage(QWidget):
         self._begin(task_id, writes_data=False)
         self.run_requested.emit(build_demo_args(session, task_id))
 
+    def _request_stop(self, task_id: str) -> None:
+        answer = QMessageBox.question(
+            self,
+            "Stop the running task?",
+            describe_stop_confirmation(task_id),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer is QMessageBox.StandardButton.Yes:
+            self._confirm_stop()
+
+    def _confirm_stop(self) -> None:
+        self._stop_requested = True
+        self.stop_requested.emit()
+
     def _begin(self, task_id: str, *, writes_data: bool) -> None:
         self._active_task = task_id
         self._active_run = None
         self._events_tail = None
         self._progress = RunProgress()
         self._writes_data = writes_data
+        self._stop_requested = False
+        self._crash_panel.clear()
         self._cards[task_id].show_running(self._progress)
         self._set_shared_controls_enabled(False)
         self._set_controls_enabled(False)
         if writes_data:
             self._timer.start()
 
-    def report_exit(self, exit_code: int) -> None:
+    def report_exit(self, exit_code: int, log_lines: list[str] | None = None) -> None:
         self._timer.stop()
         if self._active_task is None:
             return
@@ -221,6 +261,7 @@ class BatteryPage(QWidget):
                 self._progress, process_running=False, exit_code=exit_code
             )
             self._show_idle(task_id, status)
+            self._report_crash(task_id, status, exit_code, log_lines or [])
         else:
             # A preview writes nothing, so the card must fall back to whatever
             # the task's real runs on disk say.
@@ -230,6 +271,22 @@ class BatteryPage(QWidget):
         self._events_tail = None
         self._set_shared_controls_enabled(True)
         self._set_controls_enabled(True)
+
+    def _report_crash(
+        self, task_id: str, status: RunStatus, exit_code: int, log_lines: list[str]
+    ) -> None:
+        if status is RunStatus.COMPLETE:
+            return
+        if self._stop_requested and status is RunStatus.INCOMPLETE:
+            # An operator-initiated stop is expected to end incomplete.
+            return
+        self._crash_panel.show_crash(
+            _DISPLAY_NAMES.get(task_id, task_id),
+            run_label=self._active_run.run_label if self._active_run else None,
+            exit_code=exit_code,
+            log_lines=log_lines,
+            run_dir=self._active_run.path if self._active_run else None,
+        )
 
     # -- polling ----------------------------------------------------------
 
