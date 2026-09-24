@@ -36,7 +36,8 @@ def test_demo_calibration_gui_smoke():
     assert "Traceback" not in output
 
 
-def test_demo_activity_monitoring_gui_smoke():
+@pytest.mark.parametrize("trial_limit, timeout", [(1, 60), (16, 420)])
+def test_demo_activity_monitoring_gui_smoke(trial_limit, timeout):
     command = [
         sys.executable,
         "-m",
@@ -48,18 +49,21 @@ def test_demo_activity_monitoring_gui_smoke():
         "--size",
         "800x600",
         "--trial-limit",
-        "1",
+        str(trial_limit),
     ]
     result = subprocess.run(
         command,
         check=False,
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=timeout,
     )
     output = result.stdout + result.stderr
 
     assert result.returncode == 0, output
     assert "Running Activity Monitoring demo." in output
     assert "Activity Monitoring demo finished." in output
+    assert (
+        f"Activity Monitoring ended after {trial_limit} completed trial(s)." in output
+    )
     assert "Traceback" not in output

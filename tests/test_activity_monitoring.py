@@ -48,7 +48,7 @@ def test_activity_monitoring_sequence_has_expected_conditions_and_durations():
         "mutual-gaze": 8,
     }
     assert all(
-        trial.presentation_seconds == 20
+        trial.presentation_seconds is None
         for trial in sequence.trials
         if trial.media_type == "dynamic-video"
     )

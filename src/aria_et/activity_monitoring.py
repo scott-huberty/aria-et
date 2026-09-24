@@ -28,7 +28,7 @@ class ActivityMonitoringTrial:
     gaze_condition: ActivityMonitoringGazeCondition
     stimulus: ActivityMonitoringStimulus
     fixation_seconds: float
-    presentation_seconds: float
+    presentation_seconds: float | None  # None means play the full video.
     post_blank_seconds: float
 
 
@@ -171,7 +171,7 @@ def _build_trial(
             else None,
         ),
         fixation_seconds=1,
-        presentation_seconds=20 if definition.media_type == "dynamic-video" else 10,
+        presentation_seconds=None if definition.media_type == "dynamic-video" else 10,
         post_blank_seconds=0.25 if definition.media_type == "dynamic-video" else 0.5,
     )
 

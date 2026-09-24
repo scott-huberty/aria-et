@@ -2,8 +2,13 @@ import sys
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 
+import pytest
+
 from aria_et.activity_monitoring import build_activity_monitoring_sequence
-from aria_et.psychopy.activity_monitoring import PsychoPyActivityMonitoringPresenter
+from aria_et.psychopy.activity_monitoring import (
+    PsychoPyActivityMonitoringPresenter,
+    video_duration_seconds,
+)
 from aria_et.runtime import ManualClock, RecordingEventSink
 
 
@@ -40,7 +45,7 @@ class FakeMovie:
     def draw(self):
         self.draws.append(self.path)
 
-    def stop(self):
+    def unload(self):
         pass
 
 
@@ -65,6 +70,7 @@ class FakeFactories:
     sound_plays: list[str] = field(default_factory=list)
     sound_stops: list[str] = field(default_factory=list)
     waits: list[float] = field(default_factory=list)
+    elapsed: float = 0.0
 
     def make_image(self, window, image):
         return FakeImage(image, self.image_draws)
@@ -77,10 +83,14 @@ class FakeFactories:
 
     def wait(self, seconds):
         self.waits.append(seconds)
+        self.elapsed += seconds
 
 
 def make_presenter(window, factories, **overrides):
-    defaults = {"frame_duration_seconds": 20}
+    defaults = {
+        "frame_duration_seconds": 20,
+        "movie_duration_reader": lambda path: 20.0,
+    }
     defaults.update(overrides)
     return PsychoPyActivityMonitoringPresenter(
         window=window,
@@ -88,6 +98,7 @@ def make_presenter(window, factories, **overrides):
         movie_factory=factories.make_movie,
         sound_factory=factories.make_sound,
         wait=factories.wait,
+        monotonic=lambda: factories.elapsed,
         **defaults,
     )
 
@@ -108,8 +119,12 @@ def test_activity_monitoring_presenter_presents_trials_in_sequence_order():
     assert [trial.trial_id for trial in result.presented_trials] == [
         f"am-{index:02d}" for index in range(1, 17)
     ]
-    assert [event.name for event in event_sink.events][0] == "activity-monitoring.started"
-    assert [event.name for event in event_sink.events][-1] == "activity-monitoring.ended"
+    assert [event.name for event in event_sink.events][
+        0
+    ] == "activity-monitoring.started"
+    assert [event.name for event in event_sink.events][
+        -1
+    ] == "activity-monitoring.ended"
 
 
 def test_activity_monitoring_presenter_uses_image_and_movie_factories():
@@ -158,6 +173,173 @@ def test_activity_monitoring_presenter_draws_movie_frames_through_duration():
 
     assert len(factories.movie_draws) == 4
     assert factories.waits == [1, 5, 5, 5, 5, 0.25]
+
+
+@pytest.mark.parametrize(
+    "draw_seconds, flip_seconds, expected_frames, expected_waits",
+    [
+        (0.125, 0.125, 4, [0.25] * 4),
+        (0.75, 0.25, 2, []),
+    ],
+)
+def test_activity_monitoring_duration_includes_drawing_and_flip_time(
+    draw_seconds, flip_seconds, expected_frames, expected_waits
+):
+    factories = FakeFactories()
+    draws = []
+
+    def draw():
+        draws.append(factories.elapsed)
+        factories.elapsed += draw_seconds
+
+    def flip():
+        factories.elapsed += flip_seconds
+
+    presenter = make_presenter(
+        SimpleNamespace(flip=flip), factories, frame_duration_seconds=0.5
+    )
+    presenter._draw_for_duration(SimpleNamespace(draw=draw), 2.0)
+
+    assert factories.elapsed == 2.0
+    assert len(draws) == expected_frames
+    assert factories.waits == expected_waits
+
+
+def test_activity_monitoring_does_not_draw_again_after_a_decoder_stall():
+    factories = FakeFactories()
+    draws = []
+
+    def draw():
+        draws.append(factories.elapsed)
+        factories.elapsed += 3.0
+
+    presenter = make_presenter(FakeWindow(), factories, frame_duration_seconds=0.5)
+    presenter._draw_for_duration(SimpleNamespace(draw=draw), 2.0)
+
+    assert draws == [0.0]
+    assert factories.waits == []
+
+
+@pytest.mark.parametrize("failure_stage", [None, "play", "draw"])
+def test_activity_monitoring_unloads_movie_even_when_playback_fails(failure_stage):
+    factories = FakeFactories()
+    unloaded = []
+
+    def play():
+        if failure_stage == "play":
+            raise RuntimeError("playback failed")
+
+    def draw():
+        if failure_stage == "draw":
+            raise RuntimeError("playback failed")
+
+    movie = SimpleNamespace(play=play, draw=draw, unload=lambda: unloaded.append(True))
+    presenter = PsychoPyActivityMonitoringPresenter(
+        window=FakeWindow(),
+        movie_factory=lambda window, path: movie,
+        wait=factories.wait,
+        monotonic=lambda: factories.elapsed,
+        frame_duration_seconds=20,
+        movie_duration_reader=lambda path: 20.0,
+    )
+    trial = build_activity_monitoring_sequence().trials[0]
+
+    if failure_stage:
+        with pytest.raises(RuntimeError, match="playback failed"):
+            presenter._present_movie_trial(trial)
+    else:
+        presenter._present_movie_trial(trial)
+
+    assert unloaded == [True]
+
+
+@pytest.mark.parametrize(
+    "video_duration, expected_seconds", [(12.5, 12.5), (25.0, 25.0)]
+)
+def test_activity_monitoring_movie_plays_to_video_endpoint(
+    video_duration, expected_seconds
+):
+    window = FakeWindow()
+    factories = FakeFactories()
+    presenter = make_presenter(
+        window,
+        factories,
+        frame_duration_seconds=2.5,
+        movie_duration_reader=lambda path: video_duration,
+    )
+
+    presenter._present_movie_trial(build_activity_monitoring_sequence().trials[0])
+
+    assert factories.elapsed == expected_seconds
+    assert len(factories.movie_plays) == 1
+    assert len(factories.movie_draws) == expected_seconds / 2.5
+    # Clear the last movie frame immediately, before the post-trial wait.
+    assert window.flips == len(factories.movie_draws) + 1
+    assert window.colors[-1] == "black"
+
+
+def test_activity_monitoring_movie_deadline_includes_play_startup_time():
+    factories = FakeFactories()
+    draws = []
+    unloaded = []
+    movie = SimpleNamespace(
+        play=lambda: setattr(factories, "elapsed", factories.elapsed + 0.5),
+        draw=lambda: draws.append(factories.elapsed),
+        unload=lambda: unloaded.append(True),
+    )
+    presenter = PsychoPyActivityMonitoringPresenter(
+        window=FakeWindow(),
+        movie_factory=lambda window, path: movie,
+        movie_duration_reader=lambda path: 1.0,
+        frame_duration_seconds=0.25,
+        wait=factories.wait,
+        monotonic=lambda: factories.elapsed,
+    )
+
+    presenter._present_movie_trial(build_activity_monitoring_sequence().trials[0])
+
+    assert draws == [0.5, 0.75]
+    assert factories.elapsed == 1.0
+    assert unloaded == [True]
+
+
+@pytest.mark.parametrize(
+    "opened, frame_count, frame_rate, expected",
+    [
+        (True, 546, 30000 / 1001, 18.2182),
+        (False, 546, 30, None),
+        (True, 0, 30, None),
+        (True, 546, 0, None),
+        (True, float("nan"), 30, None),
+        (True, 546, float("inf"), None),
+    ],
+)
+def test_video_duration_metadata_is_validated_and_capture_released(
+    monkeypatch, opened, frame_count, frame_rate, expected
+):
+    released = []
+    capture = SimpleNamespace(
+        isOpened=lambda: opened,
+        get=lambda prop: {1: frame_count, 2: frame_rate}[prop],
+        release=lambda: released.append(True),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "cv2",
+        SimpleNamespace(
+            VideoCapture=lambda path: capture,
+            CAP_PROP_FRAME_COUNT=1,
+            CAP_PROP_FPS=2,
+        ),
+    )
+
+    if expected is None:
+        with pytest.raises(ValueError, match="video"):
+            video_duration_seconds("clip.mp4")
+    else:
+        assert video_duration_seconds("clip.mp4") == pytest.approx(expected)
+
+    assert released == [True]
 
 
 def test_activity_monitoring_presenter_shows_blank_inter_trial_interval_between_trials():

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 import sys
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from importlib.resources import as_file
@@ -40,8 +42,8 @@ class MovieLike(Protocol):
     def draw(self) -> None:
         """Draw the current movie frame."""
 
-    def stop(self) -> None:
-        """Stop movie playback."""
+    def unload(self) -> None:
+        """Stop playback and release movie resources."""
 
 
 class SoundLike(Protocol):
@@ -57,6 +59,32 @@ MovieFactory = Callable[[WindowLike, str], MovieLike]
 SoundFactory = Callable[[str], SoundLike]
 Wait = Callable[[float], None]
 StatusSink = Callable[[str], None]
+
+
+def video_duration_seconds(path: str) -> float:
+    """Read the video endpoint for the bundled constant-frame-rate AM assets.
+
+    MovieStim reports container duration, which can include an audio tail after
+    the last video frame. Do not ask the movie decoder for frames in that tail.
+    """
+    import cv2
+
+    capture = cv2.VideoCapture(path)
+    try:
+        if not capture.isOpened():
+            raise ValueError(f"Could not read video metadata: {path}")
+        frame_count = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+        frame_rate = capture.get(cv2.CAP_PROP_FPS)
+        if not all(
+            math.isfinite(value) and value > 0 for value in (frame_count, frame_rate)
+        ):
+            raise ValueError(f"Invalid video frame count or frame rate: {path}")
+        duration = frame_count / frame_rate
+        if not math.isfinite(duration) or duration <= 0:
+            raise ValueError(f"Invalid video duration: {path}")
+        return duration
+    finally:
+        capture.release()
 
 
 @dataclass(frozen=True)
@@ -91,6 +119,8 @@ class PsychoPyActivityMonitoringPresenter:
     frame_duration_seconds: float = 1 / 30
     inter_trial_interval_seconds: float = 1.0
     render_status: StatusSink | None = None
+    monotonic: Callable[[], float] = time.perf_counter
+    movie_duration_reader: Callable[[str], float] = video_duration_seconds
     _active_sounds: list[SoundLike] = field(
         default_factory=list, init=False, repr=False
     )
@@ -181,6 +211,8 @@ class PsychoPyActivityMonitoringPresenter:
         )
 
     def _present_image_trial(self, trial: ActivityMonitoringTrial) -> None:
+        if trial.presentation_seconds is None:
+            raise ValueError("Static-image trials require a presentation duration.")
         self._play_soundtrack(trial)
         self._render_status(
             f"Image trial: {trial.trial_id} {trial.stimulus.media.name}"
@@ -197,23 +229,41 @@ class PsychoPyActivityMonitoringPresenter:
             f"Movie trial: {trial.trial_id} {trial.stimulus.media.name}"
         )
         with as_file(trial.stimulus.media) as media_path:
+            duration = self.movie_duration_reader(str(media_path))
+            if not math.isfinite(duration) or duration <= 0:
+                raise ValueError(f"Invalid video duration: {media_path}")
             movie = self._movie_factory()(self.window, str(media_path))
-            movie.play()
             try:
-                self._draw_for_duration(movie, trial.presentation_seconds)
+                started_at = self.monotonic()
+                movie.play()
+                self._draw_for_duration(movie, duration, started_at=started_at)
             finally:
-                movie.stop()
+                # MovieStim.stop() reloads the file for replay. Each trial owns
+                # a disposable movie, so release its decoder and texture instead.
+                movie.unload()
+            self.window.color = "black"
+            self.window.flip()
 
     def _draw_for_duration(
-        self, drawable: DrawableLike, duration_seconds: float
+        self,
+        drawable: DrawableLike,
+        duration_seconds: float,
+        *,
+        started_at: float | None = None,
     ) -> None:
-        remaining_seconds = duration_seconds
-        while remaining_seconds > 0:
-            frame_seconds = min(self.frame_duration_seconds, remaining_seconds)
+        deadline = (
+            self.monotonic() if started_at is None else started_at
+        ) + duration_seconds
+        while (frame_started := self.monotonic()) < deadline:
             drawable.draw()
             self.window.flip()
-            self._wait()(frame_seconds)
-            remaining_seconds -= frame_seconds
+            # Drawing, decoding, and waiting for the screen refresh all consume
+            # trial time. Waiting a full frame after them extends the stimulus
+            # and can drive a movie reader past its last available video frame.
+            frame_deadline = min(frame_started + self.frame_duration_seconds, deadline)
+            remaining_seconds = frame_deadline - self.monotonic()
+            if remaining_seconds > 0:
+                self._wait()(remaining_seconds)
 
     def _play_soundtrack(self, trial: ActivityMonitoringTrial) -> None:
         if not self.play_sound or trial.stimulus.soundtrack is None:
