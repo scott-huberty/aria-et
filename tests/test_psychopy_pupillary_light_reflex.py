@@ -1,5 +1,6 @@
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from aria_et.psychopy.pupillary_light_reflex import (
     PsychoPyPupillaryLightReflexPresenter,
@@ -106,8 +107,9 @@ def test_pupillary_light_reflex_presenter_uses_frame_and_sound_factories_with_pl
         ("PLR-B02-O1", "plr65"),
     ]
     assert len(factories.images) == 374
-    assert factories.images[0].path.endswith("plr78/frame_001.png")
-    assert factories.images[187].path.endswith("plr65/frame_001.png")
+    # compare parts instead of strings to avoid OS-specific path separators
+    assert Path(factories.images[0].path).parts[-2:] == ("plr78", "frame_001.png")
+    assert Path(factories.images[187].path).parts[-2:] == ("plr65", "frame_001.png")
     assert factories.sound_plays[0].endswith("plr78.wav")
     assert factories.sound_plays[1].endswith("plr65.wav")
     assert event_sink.events[1].payload["frame_count"] == 187
@@ -128,9 +130,10 @@ def test_pupillary_light_reflex_presenter_reuses_preloaded_stimulus_images():
 
     assert len(factories.images) == 187 * 3
     assert len(factories.image_draws) == 187 * 5
-    assert sum("plr78/frame_001.png" in path for path in factories.image_draws) == 2
-    assert sum("plr65/frame_001.png" in path for path in factories.image_draws) == 2
-    assert sum("plr71/frame_001.png" in path for path in factories.image_draws) == 1
+    drawn_frames = [Path(path).parts[-2:] for path in factories.image_draws]
+    assert drawn_frames.count(("plr78", "frame_001.png")) == 2
+    assert drawn_frames.count(("plr65", "frame_001.png")) == 2
+    assert drawn_frames.count(("plr71", "frame_001.png")) == 1
 
 
 def test_pupillary_light_reflex_presenter_runs_trials_without_attention_cues():
