@@ -136,6 +136,7 @@ def test_export_bids_invokes_injected_runner(capsys):
 
 def test_export_bids_defaults_to_user_data_bids_root(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     calls = []
 
     def runner(**kwargs):
