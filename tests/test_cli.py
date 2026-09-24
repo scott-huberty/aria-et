@@ -6,12 +6,6 @@ import pytest
 from aria_et.cli import main, parse_float_pair, parse_window_size
 
 
-@pytest.fixture(autouse=True)
-def isolated_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path))
-
-
 def test_list_tasks_prints_battery_order(capsys):
     exit_code = main(["list-tasks"])
 
@@ -135,7 +129,7 @@ def test_export_bids_invokes_injected_runner(capsys):
     assert "Exported BIDS eyetracking files to bids-out" in capsys.readouterr().out
 
 
-def test_export_bids_defaults_to_user_data_bids_root(tmp_path, monkeypatch):
+def test_export_bids_defaults_to_user_data_bids_root(tmp_path):
     calls = []
 
     def runner(**kwargs):
@@ -622,10 +616,7 @@ def test_run_activity_monitoring_invokes_injected_runner():
     ]
 
 
-def test_run_activity_monitoring_defaults_to_user_data_sourcedata_root(
-    tmp_path, monkeypatch
-):
-    monkeypatch.setenv("HOME", str(tmp_path))
+def test_run_activity_monitoring_defaults_to_user_data_sourcedata_root(tmp_path):
     calls = []
 
     def runner(**kwargs):

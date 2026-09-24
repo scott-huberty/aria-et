@@ -1,6 +1,13 @@
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path, monkeypatch):
+    """Isolate home-directory lookups on Unix and Windows."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+
 def pytest_collection_modifyitems(config, items):
     marker_expression = config.getoption("-m")
 

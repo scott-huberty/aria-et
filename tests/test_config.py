@@ -3,9 +3,7 @@ import pytest
 from aria_et.config import load_config
 
 
-def test_load_config_uses_defaults_when_file_is_missing(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-
+def test_load_config_uses_defaults_when_file_is_missing(tmp_path):
     config = load_config()
 
     assert config.data_root == tmp_path / "aria-et-data"
@@ -19,8 +17,7 @@ def test_load_config_uses_defaults_when_file_is_missing(tmp_path, monkeypatch):
     assert config.eye_tracker_manager is None
 
 
-def test_load_config_reads_user_toml(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
+def test_load_config_reads_user_toml(tmp_path):
     config_path = tmp_path / ".aria-et" / "config.toml"
     config_path.parent.mkdir()
     config_path.write_text(
