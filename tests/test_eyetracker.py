@@ -1,6 +1,7 @@
 import json
 import math
 import subprocess
+import sys
 from datetime import datetime, timezone
 
 from aria_et.eyetracker import (
@@ -475,19 +476,29 @@ def test_run_eyetracker_manager_calibration_saves_successful_calibration(tmp_pat
     assert "Saved calibration data to" in capsys.readouterr().out
 
 
-def test_run_eyetracker_manager_calibration_captures_manager_output(tmp_path, capsys):
+def test_run_eyetracker_manager_calibration_captures_manager_output(
+    tmp_path, capsys, monkeypatch
+):
     def installed_sdk(name):
         return FakeTobiiResearch((FakeEyeTracker(),))
 
-    manager = tmp_path / "fake-etm"
+    manager = tmp_path / "fake-etm.py"
     manager.write_text(
-        "#!/bin/sh\n"
-        "echo 'etm stdout line'\n"
-        "echo 'etm stderr line' >&2\n"
-        "exit 0\n",
+        "import sys\n"
+        "print('etm stdout line', flush=True)\n"
+        "print('etm stderr line', file=sys.stderr, flush=True)\n",
         encoding="utf-8",
     )
-    manager.chmod(0o755)
+
+    # Launch the fake manager with Python on every platform, retaining the real
+    # subprocess and production output-capture behavior.
+    popen = subprocess.Popen
+
+    def launch_python_manager(command, **kwargs):
+        assert command[0] == str(manager)
+        return popen([sys.executable, *command], **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", launch_python_manager)
 
     exit_code = run_eyetracker_manager_calibration(
         address="tobii-prp://169.254.10.180",
