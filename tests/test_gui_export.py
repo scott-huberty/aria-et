@@ -243,3 +243,47 @@ def test_export_does_nothing_without_a_selection(qapp, config, session):
     page._start_export()
 
     assert emitted == []
+
+
+@pytest.mark.parametrize("exit_codes, succeeded", [((0, 0), True), ((0, 1), False)])
+def test_export_reports_success_only_when_every_run_exported(
+    qapp, config, session, exit_codes, succeeded
+):
+    for task_id in ("activity-monitoring", "social-interactive"):
+        _write_run(session, task_id, "01", events=_complete(task_id))
+    page = ExportPage(config)
+    page.set_session(session)
+    assert not page.export_succeeded
+
+    page._start_export()
+    for code in exit_codes:
+        page.report_exit(code)
+
+    assert page.export_succeeded is succeeded
+
+
+def test_export_success_resets_for_a_new_session(qapp, config, session):
+    _write_run(
+        session, "activity-monitoring", "01", events=_complete("activity-monitoring")
+    )
+    page = ExportPage(config)
+    page.set_session(session)
+    page._start_export()
+    page.report_exit(0)
+    assert page.export_succeeded
+
+    page.set_session(state.SessionState(subject="bobby", data_root=config.data_root))
+
+    assert not page.export_succeeded
+
+
+def test_export_is_not_a_success_when_the_command_fails_to_start(
+    qapp, config, session
+):
+    page = ExportPage(config)
+    page.set_session(session)
+
+    page.report_failed_to_start("aria-et could not be started")
+
+    assert not page.export_succeeded
+

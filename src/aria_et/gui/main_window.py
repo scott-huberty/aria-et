@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -25,12 +26,15 @@ from aria_et.gui.pages.export import ExportPage
 from aria_et.gui.pages.hardware import HardwarePage
 from aria_et.gui.pages.setup import SetupPage
 from aria_et.gui.process import CliProcess
+from aria_et.gui.progress import PageProgress, page_progress
 from aria_et.gui.state import RunMode, SessionState, build_init_config_args
+from aria_et.gui.theme import PALETTE
 from aria_et.gui.widgets.crash_panel import CRASH_LOG_LINES
 from aria_et.gui.widgets.log_pane import LogPane
 from aria_et.gui.widgets.status_pill import PillTone, StatusPill
 
 NAV_ITEMS = ("1  Setup", "2  Hardware", "3  Calibration", "4  Battery", "5  Export")
+NAV_ICON_SIZE = 16
 
 MODE_BANNERS = {
     RunMode.DRY_RUN: "DRY RUN — NO GAZE DATA IS BEING RECORDED",
@@ -83,7 +87,10 @@ class MainWindow(QMainWindow):
         self._nav = QListWidget()
         self._nav.setObjectName("NavList")
         self._nav.addItems(NAV_ITEMS)
-        self._nav.setFixedWidth(170)
+        self._nav.setFixedWidth(190)
+        self._nav.setIconSize(QSize(NAV_ICON_SIZE, NAV_ICON_SIZE))
+        self._done_icon = _progress_icon(done=True)
+        self._pending_icon = _progress_icon(done=False)
         self._nav.currentRowChanged.connect(self._pages.setCurrentIndex)
         self._nav.setCurrentRow(0)
 
@@ -112,6 +119,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
 
         self._apply_session_gating()
+        self._refresh_nav_progress()
 
     def _build_header(self) -> QWidget:
         header = QWidget()
@@ -154,6 +162,7 @@ class MainWindow(QMainWindow):
         self._calibration_page.set_session(session)
         self._export_page.set_session(session)
         self._apply_session_gating()
+        self._refresh_nav_progress()
 
     def _on_session_closed(self) -> None:
         self._session = None
@@ -163,6 +172,7 @@ class MainWindow(QMainWindow):
         self._calibration_page.set_session(None)
         self._export_page.set_session(None)
         self._apply_session_gating()
+        self._refresh_nav_progress()
 
     def _apply_session_gating(self) -> None:
         open_session = self._session is not None
@@ -172,6 +182,21 @@ class MainWindow(QMainWindow):
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEnabled)
             else:
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+
+    def _refresh_nav_progress(self) -> None:
+        """Mark each sidebar page done or not, from real state; never gates."""
+        progress = page_progress(
+            self._session,
+            tracker_connected=self._hardware_page.tracker_connected,
+            export_succeeded=self._export_page.export_succeeded,
+        )
+        for row, (label, page) in enumerate(zip(NAV_ITEMS, progress, strict=True)):
+            self._apply_nav_progress(self._nav.item(row), label, page)
+
+    def _apply_nav_progress(self, item, label: str, page: PageProgress) -> None:
+        item.setIcon(self._done_icon if page.done else self._pending_icon)
+        item.setText(f"{label}   {page.detail}" if page.detail else label)
+        item.setToolTip("Complete" if page.done else "Not complete yet")
 
     # -- CLI dispatch -----------------------------------------------------
 
@@ -237,6 +262,7 @@ class MainWindow(QMainWindow):
         self._output_consumer = None
         if handler is not None:
             handler(exit_code)
+        self._refresh_nav_progress()
 
     def _on_failed_to_start(self, message: str) -> None:
         self._log_pane.expand()
@@ -245,10 +271,11 @@ class MainWindow(QMainWindow):
             self._output_consumer.report_failed_to_start(message)
             self._output_consumer = None
             self._on_exit = None
-            return
-        handler, self._on_exit = self._on_exit, None
-        if handler is not None:
-            handler(1)
+        else:
+            handler, self._on_exit = self._on_exit, None
+            if handler is not None:
+                handler(1)
+        self._refresh_nav_progress()
 
     def _sync_tracker_pill(self) -> None:
         if self._hardware_page.tracker_connected:
@@ -263,3 +290,34 @@ def _scrollable(page: QWidget) -> QScrollArea:
     area.setFrameShape(QScrollArea.Shape.NoFrame)
     area.setWidget(page)
     return area
+
+
+def _progress_icon(*, done: bool) -> QIcon:
+    """A filled green check disc when done, a grey ring otherwise."""
+    scale = 2  # draw at 2x so the icon stays crisp on high-DPI displays
+    size = NAV_ICON_SIZE * scale
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    circle = QRectF(1.5 * scale, 1.5 * scale, size - 3 * scale, size - 3 * scale)
+    if done:
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(PALETTE["aria_teal"]))
+        painter.drawEllipse(circle)
+        tick = QPainterPath(QPointF(size * 0.28, size * 0.52))
+        tick.lineTo(QPointF(size * 0.44, size * 0.67))
+        tick.lineTo(QPointF(size * 0.73, size * 0.36))
+        pen = QPen(QColor(PALETTE["surface"]), 2.2 * scale)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(tick)
+    else:
+        painter.setPen(QPen(QColor(PALETTE["border"]), 1.5 * scale))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(circle)
+    painter.end()
+    pixmap.setDevicePixelRatio(scale)
+    return QIcon(pixmap)

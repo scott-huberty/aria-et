@@ -115,6 +115,7 @@ class ExportPage(QWidget):
         self._active: ExportCandidate | None = None
         self._output_lines: list[str] = []
         self._results: list[str] = []
+        self._export_succeeded = False
 
         heading = QLabel("Export")
         heading.setObjectName("PageHeading")
@@ -174,8 +175,14 @@ class ExportPage(QWidget):
     def set_session(self, session: SessionState | None) -> None:
         self._session = session
         self._results = []
+        self._export_succeeded = False
         self._results_label.setText("")
         self.refresh()
+
+    @property
+    def export_succeeded(self) -> bool:
+        """Whether the last export for this session finished with no failures."""
+        return self._export_succeeded
 
     def selected_candidates(self) -> list[ExportCandidate]:
         return [candidate for box, candidate in self._boxes if box.isChecked()]
@@ -207,6 +214,7 @@ class ExportPage(QWidget):
             return
         self._queue = list(selected)
         self._results = []
+        self._export_succeeded = False
         self._progress.setRange(0, len(self._queue))
         self._progress.setValue(0)
         self._progress.setVisible(True)
@@ -244,6 +252,7 @@ class ExportPage(QWidget):
         self._queue = []
         self._results.append(message)
         self._finish()
+        self._export_succeeded = False
 
     def _record_result(self, exit_code: int) -> None:
         name = self._active.run.path.name
@@ -255,6 +264,9 @@ class ExportPage(QWidget):
         self._results.extend(f"      {path}" for path in written)
 
     def _finish(self) -> None:
+        self._export_succeeded = bool(self._results) and not any(
+            line.startswith(FAILURE_MARKER) for line in self._results
+        )
         self._active = None
         self._queue = []
         self._progress.setVisible(False)

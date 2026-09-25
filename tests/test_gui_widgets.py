@@ -144,6 +144,66 @@ def test_main_window_enables_later_pages_once_a_session_opens(qapp, config):
     assert window._nav.item(3).flags() & _ENABLED
 
 
+def _nav_done(window):
+    return [window._nav.item(row).toolTip() == "Complete" for row in range(5)]
+
+
+def test_sidebar_marks_nothing_done_before_a_session(qapp, config):
+    window = MainWindow(config)
+
+    assert _nav_done(window) == [False] * 5
+    assert window._nav.item(3).text() == "4  Battery"
+
+
+def test_sidebar_marks_setup_done_and_counts_tasks_once_a_session_opens(
+    qapp, config
+):
+    window = MainWindow(config)
+
+    window._on_session_opened(
+        state.SessionState(subject="abby", data_root=config.data_root)
+    )
+
+    assert _nav_done(window) == [True, False, False, False, False]
+    assert window._nav.item(3).text().endswith("0/4")
+
+
+def test_sidebar_clears_when_the_session_closes(qapp, config):
+    window = MainWindow(config)
+    window._on_session_opened(
+        state.SessionState(subject="abby", data_root=config.data_root)
+    )
+
+    window._on_session_closed()
+
+    assert _nav_done(window) == [False] * 5
+
+
+def test_sidebar_updates_when_a_command_finishes(qapp, config):
+    session = state.SessionState(subject="abby", data_root=config.data_root)
+    window = MainWindow(config)
+    window._on_session_opened(session)
+    calibration = (
+        session.sourcedata_root / "sub-abby" / "ses-01" / "calibrations"
+        / "calibration-20260925T120000"
+    )
+    calibration.mkdir(parents=True)
+
+    window._on_process_finished(0)  # e.g. a calibration command just exited
+
+    assert _nav_done(window)[2]
+
+
+def test_sidebar_never_disables_pages_it_marks_not_done(qapp, config):
+    window = MainWindow(config)
+    window._on_session_opened(
+        state.SessionState(subject="abby", data_root=config.data_root)
+    )
+
+    for row in range(5):
+        assert window._nav.item(row).flags() & _ENABLED
+
+
 def test_main_window_shows_the_dry_run_banner(qapp, config):
     window = MainWindow(config)
 
