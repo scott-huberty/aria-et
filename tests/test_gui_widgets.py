@@ -204,6 +204,147 @@ def test_sidebar_never_disables_pages_it_marks_not_done(qapp, config):
         assert window._nav.item(row).flags() & _ENABLED
 
 
+SETUP_NEXT, HARDWARE_NEXT, CALIBRATION_NEXT, BATTERY_NEXT = range(4)
+
+
+def _next_enabled(window):
+    return [button.isEnabled() for button in window._next_buttons]
+
+
+def test_next_buttons_are_labelled_with_the_page_they_lead_to(qapp, config):
+    window = MainWindow(config)
+
+    assert [button.text() for button in window._next_buttons] == [
+        "Next: Hardware  →",
+        "Next: Calibration  →",
+        "Next: Battery  →",
+        "Next: Export  →",
+    ]
+
+
+def test_next_buttons_use_the_next_style(qapp, config):
+    # The theme styles #Next: teal when clickable, locked-input grey when not.
+    window = MainWindow(config)
+
+    assert {button.objectName() for button in window._next_buttons} == {"Next"}
+
+
+def test_theme_styles_next_buttons_in_both_states():
+    from aria_et.gui.theme import PALETTE, stylesheet
+
+    css = stylesheet()
+    enabled = css.split("QPushButton#Next {", 1)[1].split("}", 1)[0]
+    disabled = css.split("QPushButton#Next:disabled {", 1)[1].split("}", 1)[0]
+    assert PALETTE["aria_teal"] in enabled
+    assert PALETTE["surface_alt"] in disabled
+    assert PALETTE["text_disabled"] in disabled
+
+
+def test_next_buttons_start_greyed_out(qapp, config):
+    window = MainWindow(config)
+
+    assert _next_enabled(window) == [False] * 4
+
+
+def test_setup_next_unlocks_once_a_session_opens_and_moves_to_hardware(
+    qapp, config
+):
+    window = MainWindow(config)
+    window._on_session_opened(
+        state.SessionState(subject="abby", data_root=config.data_root)
+    )
+
+    assert _next_enabled(window) == [True, False, False, False]
+
+    window._next_buttons[SETUP_NEXT].click()
+    assert window._nav.currentRow() == 1
+    assert window._pages.currentIndex() == 1
+
+
+def test_hardware_next_respects_the_existing_session_gate(qapp, config):
+    window = MainWindow(config)
+    window._hardware_page._connected = True  # stand-in for a passed tracker check
+
+    window._refresh_nav_progress()
+    # Hardware is done, but Calibration stays locked until a session opens.
+    assert not window._next_buttons[HARDWARE_NEXT].isEnabled()
+
+    window._on_session_opened(
+        state.SessionState(subject="abby", data_root=config.data_root)
+    )
+    assert window._next_buttons[HARDWARE_NEXT].isEnabled()
+
+
+def test_next_is_only_a_shortcut_the_sidebar_still_reaches_every_page(
+    qapp, config
+):
+    window = MainWindow(config)
+    window._on_session_opened(
+        state.SessionState(subject="abby", data_root=config.data_root)
+    )
+    assert not window._next_buttons[HARDWARE_NEXT].isEnabled()
+
+    window._nav.setCurrentRow(2)  # Calibration, without a tracker check
+
+    assert window._pages.currentIndex() == 2
+
+
+def _window_after_a_successful_export(config):
+    window = MainWindow(config)
+    # Open through the Setup page, as the operator does.
+    window._setup_page._subject_field.setText("abby")
+    window._setup_page._open_session()
+    window._export_page._export_succeeded = True  # stand-in for a clean export
+    window._refresh_nav_progress()
+    return window
+
+
+def test_export_offers_close_session_instead_of_next(qapp, config):
+    window = MainWindow(config)
+
+    button = window._close_session_button
+    assert button.text() == "Close session"
+    assert button.objectName() == "Next"  # same teal/grey states as Next
+    assert not button.isEnabled()
+
+
+def test_close_session_unlocks_only_after_a_successful_export(qapp, config):
+    window = MainWindow(config)
+    window._on_session_opened(
+        state.SessionState(subject="abby", data_root=config.data_root)
+    )
+    assert not window._close_session_button.isEnabled()
+
+    window._export_page._export_succeeded = True
+    window._refresh_nav_progress()
+
+    assert window._close_session_button.isEnabled()
+
+
+def test_close_session_ends_the_session_and_returns_to_setup(qapp, config):
+    window = _window_after_a_successful_export(config)
+    window._nav.setCurrentRow(4)
+
+    window._close_session_button.click()
+
+    assert window._session is None
+    assert window._setup_page.session is None
+    assert not window._setup_page._open_button.isHidden()
+    assert window._nav.currentRow() == 0
+    assert not window._close_session_button.isEnabled()
+
+
+def test_close_session_is_greyed_out_while_a_command_runs(
+    qapp, config, monkeypatch
+):
+    window = _window_after_a_successful_export(config)
+    monkeypatch.setattr(window._process, "is_running", lambda: True)
+
+    window._refresh_nav_progress()
+
+    assert not window._close_session_button.isEnabled()
+
+
 def test_main_window_shows_the_dry_run_banner(qapp, config):
     window = MainWindow(config)
 

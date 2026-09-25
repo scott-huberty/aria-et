@@ -141,6 +141,26 @@ QPushButton#Primary:hover {{
     border: 1px solid {aria_teal_dark};
 }}
 
+QPushButton#Next {{
+    background-color: {aria_teal};
+    border: 1px solid {aria_teal};
+    color: {surface};
+    font-weight: 600;
+}}
+
+QPushButton#Next:hover {{
+    background-color: {aria_teal_dark};
+    border: 1px solid {aria_teal_dark};
+}}
+
+/* Greyed out like a locked input, so "not yet" reads clearly against teal. */
+QPushButton#Next:disabled {{
+    background-color: {surface_alt};
+    border: 1px solid {border};
+    color: {text_disabled};
+    font-weight: 400;
+}}
+
 QPushButton#Primary:disabled {{
     background-color: {border};
     border: 1px solid {border};

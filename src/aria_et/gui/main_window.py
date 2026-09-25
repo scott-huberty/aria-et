@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QMainWindow,
+    QPushButton,
     QScrollArea,
     QSplitter,
     QStackedWidget,
@@ -78,11 +79,29 @@ class MainWindow(QMainWindow):
         self._export_page.export_requested.connect(self._run_export)
 
         self._pages = QStackedWidget()
-        self._pages.addWidget(_scrollable(self._setup_page))
-        self._pages.addWidget(_scrollable(self._hardware_page))
-        self._pages.addWidget(_scrollable(self._calibration_page))
-        self._pages.addWidget(_scrollable(self._battery_page))
-        self._pages.addWidget(_scrollable(self._export_page))
+        pages = (
+            self._setup_page,
+            self._hardware_page,
+            self._calibration_page,
+            self._battery_page,
+            self._export_page,
+        )
+        # A Next shortcut under every page but the last, and Close session on
+        # the last. They never gate: the sidebar still reaches any page the
+        # session allows. Both are pinned below the scroll area so they stay
+        # visible on long pages.
+        self._next_buttons: list[QPushButton] = []
+        for row, page in enumerate(pages):
+            if row + 1 < len(pages):
+                button = QPushButton(f"Next: {_nav_name(NAV_ITEMS[row + 1])}  →")
+                button.clicked.connect(lambda _checked, r=row: self._go_to(r + 1))
+                self._next_buttons.append(button)
+            else:
+                button = QPushButton("Close session")
+                button.clicked.connect(self._close_session_from_export)
+                self._close_session_button = button
+            button.setObjectName("Next")
+            self._pages.addWidget(_with_footer(_scrollable(page), button))
 
         self._nav = QListWidget()
         self._nav.setObjectName("NavList")
@@ -192,6 +211,28 @@ class MainWindow(QMainWindow):
         )
         for row, (label, page) in enumerate(zip(NAV_ITEMS, progress, strict=True)):
             self._apply_nav_progress(self._nav.item(row), label, page)
+        for row, button in enumerate(self._next_buttons):
+            # Clickable exactly when the page's check mark shows, and only
+            # toward a page the sidebar already allows.
+            next_item = self._nav.item(row + 1)
+            button.setEnabled(
+                progress[row].done
+                and bool(next_item.flags() & Qt.ItemFlag.ItemIsEnabled)
+            )
+
+        # Closing ends the participant's session, so never mid-command.
+        self._close_session_button.setEnabled(
+            progress[-1].done and not self._process.is_running()
+        )
+
+    def _go_to(self, row: int) -> None:
+        self._nav.setCurrentRow(row)
+
+    def _close_session_from_export(self) -> None:
+        if self._process.is_running():
+            return
+        self._setup_page.close_session()
+        self._go_to(0)
 
     def _apply_nav_progress(self, item, label: str, page: PageProgress) -> None:
         item.setIcon(self._done_icon if page.done else self._pending_icon)
@@ -244,6 +285,7 @@ class MainWindow(QMainWindow):
         self._recent_lines.clear()
         self._log_pane.append_line(f"$ aria-et {' '.join(args)}")
         self._process.start(args)
+        self._refresh_nav_progress()
         return True
 
     def _finish_tracker_check(self, exit_code: int) -> None:
@@ -282,6 +324,25 @@ class MainWindow(QMainWindow):
             self._tracker_pill.set_status("Tracker connected", PillTone.GOOD)
         else:
             self._tracker_pill.set_status("Tracker not found", PillTone.WARNING)
+
+
+def _nav_name(label: str) -> str:
+    """'2  Hardware' -> 'Hardware'."""
+    return label.split(maxsplit=1)[1]
+
+
+def _with_footer(view: QWidget, button: QPushButton) -> QWidget:
+    footer = QHBoxLayout()
+    footer.setContentsMargins(20, 8, 20, 12)
+    footer.addStretch(1)
+    footer.addWidget(button)
+    container = QWidget()
+    layout = QVBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(0)
+    layout.addWidget(view, 1)
+    layout.addLayout(footer)
+    return container
 
 
 def _scrollable(page: QWidget) -> QScrollArea:

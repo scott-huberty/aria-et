@@ -364,6 +364,11 @@ class SetupPage(QWidget):
         for widget in (self._subject_field, self._session_field, self._mode_selector):
             widget.setEnabled(False)
 
+    def close_session(self) -> None:
+        """Close the open session, as the Close session button does."""
+        if self._session is not None:
+            self._close_session()
+
     def _close_session(self) -> None:
         self._session = None
         self._session_path_label.setVisible(False)
