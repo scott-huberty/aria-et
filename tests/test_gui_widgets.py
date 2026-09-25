@@ -2,9 +2,10 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from aria_et.config import AriaEtConfig
 from aria_et.gui import state
@@ -95,6 +96,35 @@ def test_setup_page_offers_dry_run_when_gated_on(qapp, config, monkeypatch):
     ]
     assert modes == [state.RunMode.ACQUISITION, state.RunMode.DRY_RUN]
     assert page.selected_mode() is state.RunMode.ACQUISITION
+
+
+def test_setup_mode_ignores_the_mouse_wheel(qapp, config, monkeypatch):
+    monkeypatch.setenv(state.DRY_RUN_ENV_VAR, "1")
+    # Switching to dry run opens a modal confirmation; record it instead of
+    # blocking, so a regression fails here rather than hanging the test run.
+    prompts = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args, **kwargs: prompts.append(args) or QMessageBox.StandardButton.No,
+    )
+    page = SetupPage(config)
+
+    wheel = QWheelEvent(
+        QPointF(5, 5),
+        QPointF(5, 5),
+        QPoint(0, 0),
+        QPoint(0, -120),  # scrolling down would select the next mode, dry run
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    QApplication.sendEvent(page._mode_selector, wheel)
+
+    assert prompts == []
+    assert page.selected_mode() is state.RunMode.ACQUISITION
+    assert not wheel.isAccepted()  # left for the page's scroll area
 
 
 def test_main_window_disables_later_pages_until_a_session_is_open(qapp, config):

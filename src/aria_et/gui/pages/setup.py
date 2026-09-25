@@ -7,7 +7,6 @@ from pathlib import Path
 from PySide6.QtCore import QRegularExpression, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QRegularExpressionValidator
 from PySide6.QtWidgets import (
-    QComboBox,
     QFormLayout,
     QFrame,
     QGridLayout,
@@ -29,6 +28,7 @@ from aria_et.gui.state import (
     dry_run_allowed,
     sourcedata_root,
 )
+from aria_et.gui.widgets.inputs import WheelSafeComboBox
 
 LABEL_HELPER_TEXT = "Letters and numbers only — no hyphens or spaces."
 
@@ -131,7 +131,8 @@ class SetupPage(QWidget):
         form.addRow("Session", self._session_field)
         form.addRow("", _helper("Defaults to 01 — the first visit."))
 
-        self._mode_selector = QComboBox()
+        # Wheel-safe: scrolling past it must never switch where data is written.
+        self._mode_selector = WheelSafeComboBox()
         for mode in (RunMode.ACQUISITION, RunMode.DRY_RUN):
             if mode is RunMode.DRY_RUN and not dry_run_allowed():
                 continue

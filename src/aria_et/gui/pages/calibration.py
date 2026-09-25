@@ -7,14 +7,11 @@ from pathlib import Path
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
-    QDoubleSpinBox,
     QFormLayout,
     QFrame,
     QLabel,
     QLineEdit,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -23,6 +20,11 @@ from aria_et.config import AriaEtConfig
 from aria_et.eyetracker import DEFAULT_EYETRACKER_MANAGER_PATH
 from aria_et.gui import artifacts
 from aria_et.gui.state import CalibrationOptions, SessionState, build_calibrate_args
+from aria_et.gui.widgets.inputs import (
+    WheelSafeComboBox,
+    WheelSafeDoubleSpinBox,
+    WheelSafeSpinBox,
+)
 
 ETM_ROUTINE = "etm"
 CHILD_FRIENDLY_ROUTINE = "child-friendly"
@@ -81,7 +83,7 @@ class CalibrationPage(QWidget):
         heading.setObjectName("PageHeading")
 
         routine_card, routine_layout = _card("Routine")
-        self._routine = QComboBox()
+        self._routine = WheelSafeComboBox()
         self._routine.addItem("Eye Tracker Manager", ETM_ROUTINE)
         self._routine.addItem("Child-friendly", CHILD_FRIENDLY_ROUTINE)
         self._routine.currentIndexChanged.connect(self._on_routine_changed)
@@ -97,7 +99,7 @@ class CalibrationPage(QWidget):
         self._child_options, child_layout = _card("Child-friendly options")
         child_form = QFormLayout()
         child_form.setVerticalSpacing(6)
-        self._point_duration = QDoubleSpinBox()
+        self._point_duration = WheelSafeDoubleSpinBox()
         self._point_duration.setRange(0.5, 30.0)
         self._point_duration.setSingleStep(0.5)
         self._point_duration.setValue(3.0)
@@ -119,7 +121,7 @@ class CalibrationPage(QWidget):
         child_layout.addWidget(_helper(ESCAPE_NOTE))
 
         tracker_card, tracker_layout = _card("Tracker")
-        self._screen = QSpinBox()
+        self._screen = WheelSafeSpinBox()
         self._screen.setRange(0, 8)
         self._screen.setValue(config.etm_screen)
         self._serial = QLineEdit()

@@ -4,7 +4,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtWidgets import QApplication, QComboBox
 
 from aria_et.cli import build_parser
 from aria_et.config import AriaEtConfig
@@ -166,3 +168,29 @@ def test_calibration_re_enables_its_button_after_a_refused_start(qapp, config, s
     page.report_exit(1)
 
     assert page._calibrate_button.isEnabled()
+
+
+@pytest.mark.parametrize("field", ["_routine", "_point_duration", "_screen"])
+def test_mouse_wheel_does_not_change_calibration_inputs(qapp, config, field):
+    page = CalibrationPage(config)
+    widget = getattr(page, field)
+
+    def current():
+        return widget.currentIndex() if isinstance(widget, QComboBox) else widget.value()
+
+    before = current()
+    for delta in (120, -120):  # both directions, so neither end of a range hides it
+        wheel = QWheelEvent(
+            QPointF(5, 5),
+            QPointF(5, 5),
+            QPoint(0, 0),
+            QPoint(0, delta),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False,
+        )
+        QApplication.sendEvent(widget, wheel)
+        assert not wheel.isAccepted()  # left for the page's scroll area
+
+    assert current() == before
