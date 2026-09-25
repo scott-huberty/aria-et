@@ -12,6 +12,7 @@ dependencies:
   - ty
   - vulture
   - wheel
+  - pyside>=6.6
   - pip:
       - bids-validator-deno
       - psychopy==2026.2.1
