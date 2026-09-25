@@ -19,6 +19,7 @@ PALETTE: dict[str, str] = {
     "surface_alt": "#F4F6F7",
     "surface_selected": "#E6F0EF",
     "border": "#D8DEE1",
+    "text_disabled": "#9AA3A8",
     "amber": "#B37A00",
     "amber_surface": "#FFF6E0",
     "red": "#B3261E",
@@ -90,6 +91,11 @@ QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
 
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border: 1px solid {aria_teal};
+}}
+
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{
+    background-color: {surface_alt};
+    color: {text_disabled};
 }}
 
 QLineEdit[invalid="true"] {{

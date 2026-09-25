@@ -128,6 +128,31 @@ def test_battery_refuses_to_run_when_preflight_fails(qapp, config, session):
     assert emitted == []
 
 
+def test_window_size_is_locked_while_fullscreen_is_checked(qapp, config):
+    page = BatteryPage(config)
+
+    assert page._fullscreen.isChecked()
+    assert not page._window_size.isEnabled()
+
+    page._fullscreen.setChecked(False)
+    assert page._window_size.isEnabled()
+
+    page._fullscreen.setChecked(True)
+    assert not page._window_size.isEnabled()
+
+
+def test_window_size_stays_locked_after_a_run_unlocks_the_options(
+    qapp, config, session
+):
+    page = _open(BatteryPage(config), session)
+
+    page._set_shared_controls_enabled(False)
+    page._set_shared_controls_enabled(True)
+
+    assert page._options_card.isEnabled()
+    assert not page._window_size.isEnabled()
+
+
 def test_battery_locks_the_other_cards_while_a_task_runs(qapp, config, session):
     page = _open(BatteryPage(config), session)
 

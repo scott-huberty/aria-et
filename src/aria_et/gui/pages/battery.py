@@ -151,6 +151,9 @@ class BatteryPage(QWidget):
         form.addRow("Sound", self._sound)
         form.addRow("Diagnostics", self._debug_render)
         options_layout.addLayout(form)
+        # Fullscreen ignores the window size, so don't let it look editable.
+        self._fullscreen.toggled.connect(self._sync_window_size_enabled)
+        self._sync_window_size_enabled()
 
         self._cards: dict[str, TaskCard] = {}
         cards_container = QWidget()
@@ -339,6 +342,9 @@ class BatteryPage(QWidget):
 
     def _set_shared_controls_enabled(self, enabled: bool) -> None:
         self._options_card.setEnabled(enabled)
+
+    def _sync_window_size_enabled(self) -> None:
+        self._window_size.setEnabled(not self._fullscreen.isChecked())
 
     def _set_controls_enabled(self, idle: bool) -> None:
         for card in self._cards.values():
