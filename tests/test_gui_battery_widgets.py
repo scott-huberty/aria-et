@@ -4,12 +4,26 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtWidgets import (
+    QApplication,
+    QLineEdit,
+    QStyle,
+    QStyleFactory,
+    QStyleOptionSpinBox,
+)
 
 from aria_et.cli import build_parser
 from aria_et.config import AriaEtConfig
 from aria_et.gui import state
-from aria_et.gui.pages.battery import BatteryPage
+from aria_et.gui.pages.battery import (
+    CUSTOM_SETTINGS_NOTICE,
+    EDIT_SETTINGS_TEXT,
+    LOCK_SETTINGS_TEXT,
+    BatteryPage,
+)
+from aria_et.gui.theme import stylesheet
 from aria_et.gui.widgets.task_card import PREVIEW_BUTTON_TEXT
 
 pytestmark = pytest.mark.qt_gui
@@ -130,6 +144,7 @@ def test_battery_refuses_to_run_when_preflight_fails(qapp, config, session):
 
 def test_window_size_is_locked_while_fullscreen_is_checked(qapp, config):
     page = BatteryPage(config)
+    page._edit_settings_button.click()
 
     assert page._fullscreen.isChecked()
     assert not page._window_size.isEnabled()
@@ -145,12 +160,124 @@ def test_window_size_stays_locked_after_a_run_unlocks_the_options(
     qapp, config, session
 ):
     page = _open(BatteryPage(config), session)
+    page._edit_settings_button.click()
 
     page._set_shared_controls_enabled(False)
     page._set_shared_controls_enabled(True)
 
     assert page._options_card.isEnabled()
+    assert page._screen.isEnabled()
     assert not page._window_size.isEnabled()
+
+
+def test_presentation_settings_start_locked_at_the_defaults(qapp, config):
+    page = BatteryPage(config)
+
+    assert not page._settings_fields.isEnabled()
+    assert page._edit_settings_button.text() == EDIT_SETTINGS_TEXT
+    assert page.presentation_options() == page.default_presentation_options()
+    assert page._custom_notice.isHidden()
+    assert not page._restore_defaults_button.isEnabled()
+
+
+def test_change_settings_unlocks_and_relocks_the_fields(qapp, config):
+    page = BatteryPage(config)
+
+    page._edit_settings_button.click()
+    assert page._settings_fields.isEnabled()
+    assert page._edit_settings_button.text() == LOCK_SETTINGS_TEXT
+
+    page._edit_settings_button.click()
+    assert not page._settings_fields.isEnabled()
+    assert page._edit_settings_button.text() == EDIT_SETTINGS_TEXT
+
+
+def test_finishing_a_task_does_not_unlock_the_settings(qapp, config, session):
+    page = _open(BatteryPage(config), session)
+
+    page._set_shared_controls_enabled(False)
+    page._set_shared_controls_enabled(True)
+
+    assert not page._settings_fields.isEnabled()
+
+
+@pytest.fixture
+def windows11_style(qapp):
+    """The overlap only happens with Qt's windows11 style (side-by-side arrows)."""
+    available_styles = QStyleFactory.keys()  # a list, not a dict
+    if "windows11" not in available_styles:
+        pytest.skip("Qt's windows11 style is only available on Windows")
+    original = qapp.style().name()
+    qapp.setStyle("windows11")
+    yield
+    qapp.setStyle(original)
+
+
+@pytest.mark.parametrize("field", ["_screen", "_trial_limit"])
+def test_spin_box_text_does_not_cover_the_arrow_buttons(
+    qapp, windows11_style, config, field
+):
+    # With the app stylesheet, Qt's windows11 style let the text field cover
+    # the up arrow, so clicks on it edited text instead of stepping the value.
+    page = BatteryPage(config)
+    page.setStyleSheet(stylesheet())
+    page.resize(700, 1000)
+    page.show()
+    page._edit_settings_button.click()
+    qapp.processEvents()
+    spin_box = getattr(page, field)
+
+    option = QStyleOptionSpinBox()
+    spin_box.initStyleOption(option)
+
+    def arrow(sub_control):
+        return spin_box.style().subControlRect(
+            QStyle.ComplexControl.CC_SpinBox, option, sub_control, spin_box
+        )
+
+    text_field = spin_box.findChild(QLineEdit).geometry()
+    assert not text_field.intersects(arrow(QStyle.SubControl.SC_SpinBoxUp))
+    assert not text_field.intersects(arrow(QStyle.SubControl.SC_SpinBoxDown))
+    page.close()
+
+
+@pytest.mark.parametrize("field", ["_screen", "_trial_limit"])
+def test_mouse_wheel_does_not_change_spin_boxes(qapp, config, field):
+    page = BatteryPage(config)
+    page._edit_settings_button.click()
+    spin_box = getattr(page, field)
+    before = spin_box.value()
+
+    wheel = QWheelEvent(
+        QPointF(5, 5),
+        QPointF(5, 5),
+        QPoint(0, 0),
+        QPoint(0, 120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    QApplication.sendEvent(spin_box, wheel)
+
+    assert spin_box.value() == before
+    assert not wheel.isAccepted()  # left for the page's scroll area
+
+
+def test_custom_settings_show_a_notice_until_defaults_are_restored(qapp, config):
+    page = BatteryPage(config)
+    page._edit_settings_button.click()
+
+    page._trial_limit.setValue(2)
+    assert not page._custom_notice.isHidden()
+    assert page._custom_notice.text() == CUSTOM_SETTINGS_NOTICE
+    assert page._restore_defaults_button.isEnabled()
+
+    page._restore_defaults_button.click()
+    assert page.presentation_options() == page.default_presentation_options()
+    assert page.presentation_options().trial_limit is None
+    assert page._custom_notice.isHidden()
+    assert not page._settings_fields.isEnabled()
 
 
 def test_battery_locks_the_other_cards_while_a_task_runs(qapp, config, session):

@@ -44,8 +44,12 @@ QWidget {{
     font-size: 13px;
 }}
 
-QLabel, QCheckBox, QRadioButton {{
+QLabel, QCheckBox, QRadioButton, QWidget#CardFields {{
     background-color: transparent;
+}}
+
+QCheckBox:disabled, QRadioButton:disabled {{
+    color: {text_disabled};
 }}
 
 QLabel#PageHeading {{
@@ -96,6 +100,13 @@ QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
 QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{
     background-color: {surface_alt};
     color: {text_disabled};
+}}
+
+QSpinBox, QDoubleSpinBox {{
+    /* Qt's windows11 style draws the up/down arrows side by side, but with a
+       stylesheet it only reserves room for one; the text field then covers
+       the up arrow and swallows its clicks. Reserve room for both. */
+    padding-right: 36px;
 }}
 
 QLineEdit[invalid="true"] {{

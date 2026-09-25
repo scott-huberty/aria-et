@@ -10,10 +10,11 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
     QFrame,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
-    QSpinBox,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -37,6 +38,7 @@ from aria_et.gui.state import (
     build_run_args,
 )
 from aria_et.gui.widgets.crash_panel import CrashPanel
+from aria_et.gui.widgets.inputs import WheelSafeSpinBox
 from aria_et.gui.widgets.task_card import TaskCard
 
 POLL_INTERVAL_MILLISECONDS = 500
@@ -45,6 +47,13 @@ PREFLIGHT_MET = "✓"
 PREFLIGHT_UNMET = "○"
 
 NO_TRIAL_LIMIT = 0
+
+EDIT_SETTINGS_TEXT = "Change settings"
+LOCK_SETTINGS_TEXT = "Lock settings"
+CUSTOM_SETTINGS_NOTICE = (
+    "Custom presentation settings are in use. Restore defaults before "
+    "collecting data unless you mean to change them."
+)
 
 BUFFERED_SAMPLE_CAVEAT = (
     "This platform cannot interrupt the task gently, so up to half a second "
@@ -130,18 +139,20 @@ class BatteryPage(QWidget):
         preflight_layout.addWidget(self._preflight)
 
         self._options_card, options_layout = _card("Presentation")
-        form = QFormLayout()
+        # Production runs want the defaults, so the fields start locked and
+        # must be unlocked deliberately.
+        self._settings_fields = QWidget()
+        self._settings_fields.setObjectName("CardFields")
+        form = QFormLayout(self._settings_fields)
+        form.setContentsMargins(0, 0, 0, 0)
         form.setVerticalSpacing(6)
         self._fullscreen = QCheckBox("Fullscreen")
-        self._fullscreen.setChecked(True)
         self._sound = QCheckBox("Play sound")
-        self._sound.setChecked(True)
         self._debug_render = QCheckBox("Debug render overlay")
-        self._window_size = QLineEdit("1024x768")
-        self._screen = QSpinBox()
+        self._window_size = QLineEdit()
+        self._screen = WheelSafeSpinBox()
         self._screen.setRange(0, 8)
-        self._screen.setValue(config.psychopy_screen)
-        self._trial_limit = QSpinBox()
+        self._trial_limit = WheelSafeSpinBox()
         self._trial_limit.setRange(NO_TRIAL_LIMIT, 999)
         self._trial_limit.setSpecialValueText("All trials")
         form.addRow("Display", self._fullscreen)
@@ -150,10 +161,35 @@ class BatteryPage(QWidget):
         form.addRow("Trial limit", self._trial_limit)
         form.addRow("Sound", self._sound)
         form.addRow("Diagnostics", self._debug_render)
-        options_layout.addLayout(form)
+        options_layout.addWidget(self._settings_fields)
+
+        self._custom_notice = QLabel(CUSTOM_SETTINGS_NOTICE)
+        self._custom_notice.setObjectName("ModeBanner")
+        self._custom_notice.setWordWrap(True)
+        options_layout.addWidget(self._custom_notice)
+
+        self._edit_settings_button = QPushButton(EDIT_SETTINGS_TEXT)
+        self._edit_settings_button.clicked.connect(self._toggle_settings_lock)
+        self._restore_defaults_button = QPushButton("Restore defaults")
+        self._restore_defaults_button.clicked.connect(self._restore_defaults)
+        settings_buttons = QHBoxLayout()
+        settings_buttons.addWidget(self._edit_settings_button)
+        settings_buttons.addWidget(self._restore_defaults_button)
+        settings_buttons.addStretch(1)
+        options_layout.addLayout(settings_buttons)
+
         # Fullscreen ignores the window size, so don't let it look editable.
         self._fullscreen.toggled.connect(self._sync_window_size_enabled)
-        self._sync_window_size_enabled()
+        for changed in (
+            self._fullscreen.toggled,
+            self._sound.toggled,
+            self._debug_render.toggled,
+            self._window_size.textChanged,
+            self._screen.valueChanged,
+            self._trial_limit.valueChanged,
+        ):
+            changed.connect(self._sync_settings_state)
+        self._restore_defaults()
 
         self._cards: dict[str, TaskCard] = {}
         cards_container = QWidget()
@@ -345,6 +381,37 @@ class BatteryPage(QWidget):
 
     def _sync_window_size_enabled(self) -> None:
         self._window_size.setEnabled(not self._fullscreen.isChecked())
+
+    def default_presentation_options(self) -> PresentationOptions:
+        return PresentationOptions(screen=self._config.psychopy_screen)
+
+    def _restore_defaults(self) -> None:
+        defaults = self.default_presentation_options()
+        self._fullscreen.setChecked(defaults.fullscreen)
+        self._window_size.setText(defaults.window_size)
+        self._screen.setValue(defaults.screen)
+        self._trial_limit.setValue(
+            NO_TRIAL_LIMIT if defaults.trial_limit is None else defaults.trial_limit
+        )
+        self._sound.setChecked(defaults.play_sound)
+        self._debug_render.setChecked(defaults.debug_render)
+        self._set_settings_locked(True)
+
+    def _toggle_settings_lock(self) -> None:
+        self._set_settings_locked(self._settings_fields.isEnabled())
+
+    def _set_settings_locked(self, locked: bool) -> None:
+        self._settings_fields.setEnabled(not locked)
+        self._edit_settings_button.setText(
+            EDIT_SETTINGS_TEXT if locked else LOCK_SETTINGS_TEXT
+        )
+        self._sync_window_size_enabled()
+        self._sync_settings_state()
+
+    def _sync_settings_state(self) -> None:
+        customised = self.presentation_options() != self.default_presentation_options()
+        self._custom_notice.setVisible(customised)
+        self._restore_defaults_button.setEnabled(customised)
 
     def _set_controls_enabled(self, idle: bool) -> None:
         for card in self._cards.values():
