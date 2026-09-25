@@ -12,10 +12,13 @@ from aria_et.social_interactive import build_social_interactive_sequence
 @dataclass
 class FakeWindow:
     size: tuple[float, float] = (1000, 800)
+    color: str | None = None
     flips: int = 0
+    flip_colors: list[str | None] = field(default_factory=list)
 
     def flip(self):
         self.flips += 1
+        self.flip_colors.append(self.color)
 
 
 @dataclass
@@ -24,7 +27,7 @@ class FakeMovie:
     play_sound: bool
     draws: list[str]
     plays: list[tuple[str, bool]]
-    stops: list[str]
+    unloads: list[str]
 
     def play(self):
         self.plays.append((self.path, self.play_sound))
@@ -32,16 +35,17 @@ class FakeMovie:
     def draw(self):
         self.draws.append(self.path)
 
-    def stop(self):
-        self.stops.append(self.path)
+    def unload(self):
+        self.unloads.append(self.path)
 
 
 @dataclass
 class FakeFactories:
     movie_draws: list[str] = field(default_factory=list)
     movie_plays: list[tuple[str, bool]] = field(default_factory=list)
-    movie_stops: list[str] = field(default_factory=list)
+    movie_unloads: list[str] = field(default_factory=list)
     waits: list[float] = field(default_factory=list)
+    elapsed: float = 0.0
 
     def make_movie(self, window, movie, play_sound):
         return FakeMovie(
@@ -49,11 +53,12 @@ class FakeFactories:
             play_sound,
             self.movie_draws,
             self.movie_plays,
-            self.movie_stops,
+            self.movie_unloads,
         )
 
     def wait(self, seconds):
         self.waits.append(seconds)
+        self.elapsed += seconds
 
 
 def make_presenter(window, factories, **overrides):
@@ -63,6 +68,7 @@ def make_presenter(window, factories, **overrides):
         window=window,
         movie_factory=factories.make_movie,
         wait=factories.wait,
+        monotonic=lambda: factories.elapsed,
         **defaults,
     )
 
@@ -139,7 +145,49 @@ def test_social_interactive_presenter_draws_movie_frames_through_duration():
 
     assert len(factories.movie_draws) == 3
     assert factories.waits == [1, 5, 5, 5, 0.25]
-    assert len(factories.movie_stops) == 1
+    assert len(factories.movie_unloads) == 1
+
+
+def test_social_interactive_duration_includes_drawing_and_flip_time():
+    factories = FakeFactories()
+
+    class SlowFlipWindow(FakeWindow):
+        def flip(self):
+            super().flip()
+            factories.elapsed += 0.5  # e.g. decoding plus waiting for vsync
+
+    window = SlowFlipWindow()
+    make_presenter(window, factories, trial_limit=1, frame_duration_seconds=1).present(
+        build_social_interactive_sequence(),
+        ManualClock(),
+        RecordingEventSink(),
+    )
+
+    # 1 s fixation + 15 s movie + 0.5 s clearing flip + 0.25 s blank: flip
+    # time must not extend the movie past 15 s, which previously stretched
+    # trials to ~22 s.
+    assert factories.elapsed == 16.75
+    assert window.flips == 16
+    assert factories.waits == [1, *[0.5] * 15, 0.25]
+    assert len(factories.movie_unloads) == 1
+
+
+def test_social_interactive_clears_last_movie_frame_before_blank():
+    window = FakeWindow()
+    factories = FakeFactories()
+
+    make_presenter(window, factories, trial_limit=2, frame_duration_seconds=5).present(
+        build_social_interactive_sequence(),
+        ManualClock(),
+        RecordingEventSink(),
+    )
+
+    # Each trial is three movie flips then one clearing flip; the clearing flip
+    # must be black so the blank and next fixation don't show a frozen frame.
+    assert window.flips == 8
+    assert window.flip_colors[3] == "black"
+    assert window.flip_colors[7] == "black"
+    assert factories.waits == [1, 5, 5, 5, 0.25] * 2
 
 
 def test_social_interactive_presenter_can_disable_movie_audio():

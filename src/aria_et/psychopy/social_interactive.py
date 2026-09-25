@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from importlib.resources import as_file
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 
 class WindowLike(Protocol):
     size: Sequence[float]
+    color: str | tuple[float, float, float]
 
     def flip(self) -> None:
         """Present the next frame."""
@@ -34,8 +36,8 @@ class MovieLike(Protocol):
     def draw(self) -> None:
         """Draw the current movie frame."""
 
-    def stop(self) -> None:
-        """Stop movie playback."""
+    def unload(self) -> None:
+        """Stop playback and release movie resources."""
 
 
 MovieFactory = Callable[[WindowLike, str, bool], MovieLike]
@@ -69,6 +71,7 @@ class PsychoPySocialInteractivePresenter:
     trial_limit: int | None = None
     frame_duration_seconds: float = 1 / 30
     render_status: StatusSink | None = None
+    monotonic: Callable[[], float] = time.perf_counter
 
     def present(
         self,
@@ -137,11 +140,21 @@ class PsychoPySocialInteractivePresenter:
         self._render_status(f"SI trial: {trial.trial_id} {trial.stimulus.video.name}")
         with as_file(trial.stimulus.video) as video_path:
             movie = self._movie_factory()(self.window, str(video_path), self.play_sound)
-            movie.play()
             try:
-                self._draw_for_duration(movie, trial.presentation_seconds)
+                started_at = self.monotonic()
+                movie.play()
+                self._draw_for_duration(
+                    movie, trial.presentation_seconds, started_at=started_at
+                )
             finally:
-                movie.stop()
+                # MovieStim.stop() reloads the file for replay, which costs a
+                # full movie load. Each trial owns a disposable movie, so
+                # release its decoder and texture instead.
+                movie.unload()
+            # Clear the last movie frame so the post-trial blank and the next
+            # trial's fixation are black, not a frozen frame of footage.
+            self.window.color = "black"
+            self.window.flip()
         self._wait()(trial.post_blank_seconds)
 
         ended_at = clock.now()
@@ -161,14 +174,20 @@ class PsychoPySocialInteractivePresenter:
             ended_at=ended_at,
         )
 
-    def _draw_for_duration(self, movie: MovieLike, duration_seconds: float) -> None:
-        remaining_seconds = duration_seconds
-        while remaining_seconds > 0:
-            frame_seconds = min(self.frame_duration_seconds, remaining_seconds)
+    def _draw_for_duration(
+        self, movie: MovieLike, duration_seconds: float, *, started_at: float
+    ) -> None:
+        deadline = started_at + duration_seconds
+        while (frame_started := self.monotonic()) < deadline:
             movie.draw()
             self.window.flip()
-            self._wait()(frame_seconds)
-            remaining_seconds -= frame_seconds
+            # Drawing, decoding, and waiting for the screen refresh all consume
+            # trial time. Waiting a full frame after them stretches a 15 s
+            # trial to ~22 s and freezes the last movie frame on screen.
+            frame_deadline = min(frame_started + self.frame_duration_seconds, deadline)
+            remaining_seconds = frame_deadline - self.monotonic()
+            if remaining_seconds > 0:
+                self._wait()(remaining_seconds)
 
     def _selected_trials(
         self,
