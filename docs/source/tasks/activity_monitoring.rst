@@ -19,8 +19,7 @@ Description
 Activity Monitoring presents 16 trials across four blocks. Trials alternate
 between dynamic videos and static images depicting activity-gaze and mutual-gaze
 conditions. Dynamic-video trials play to the end of their video stream, including
-clips longer than 20 seconds. They do not loop or hold the final frame to
-fill a fixed interval; an audio tail does not extend the video presentation.
+clips longer than 20 seconds, plus 0.3 seconds buffer time.
 Static-image trials are presented for 10 seconds, and a one-second blank inter-trial interval
 is inserted between trials.
 

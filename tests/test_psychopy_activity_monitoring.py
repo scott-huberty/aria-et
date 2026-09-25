@@ -156,8 +156,8 @@ def test_activity_monitoring_presenter_honors_trial_timing():
         RecordingEventSink(),
     )
 
-    assert factories.waits[:4] == [1, 20, 0.25, 1.0]
-    assert factories.waits[4:8] == [1, 10, 0.5, 1.0]
+    assert factories.waits[:5] == [1, 20, 0.3, 0.25, 1.0]
+    assert factories.waits[5:9] == pytest.approx([1, 10, 0.5, 1.0])
 
 
 def test_activity_monitoring_presenter_draws_movie_frames_through_duration():
@@ -172,7 +172,7 @@ def test_activity_monitoring_presenter_draws_movie_frames_through_duration():
     )
 
     assert len(factories.movie_draws) == 4
-    assert factories.waits == [1, 5, 5, 5, 5, 0.25]
+    assert factories.waits == [1, 5, 5, 5, 5, 0.3, 0.25]
 
 
 @pytest.mark.parametrize(
@@ -270,7 +270,7 @@ def test_activity_monitoring_movie_plays_to_video_endpoint(
 
     presenter._present_movie_trial(build_activity_monitoring_sequence().trials[0])
 
-    assert factories.elapsed == expected_seconds
+    assert factories.elapsed == pytest.approx(expected_seconds + 0.3)
     assert len(factories.movie_plays) == 1
     assert len(factories.movie_draws) == expected_seconds / 2.5
     # Clear the last movie frame immediately, before the post-trial wait.
@@ -299,8 +299,38 @@ def test_activity_monitoring_movie_deadline_includes_play_startup_time():
     presenter._present_movie_trial(build_activity_monitoring_sequence().trials[0])
 
     assert draws == [0.5, 0.75]
-    assert factories.elapsed == 1.0
+    assert factories.elapsed == pytest.approx(1.3)
     assert unloaded == [True]
+
+
+def test_activity_monitoring_movie_holds_last_frame_while_audio_drains():
+    calls = []
+    factories = FakeFactories()
+    # Advance the fake clock on each flip so the one-frame movie ends.
+    window = SimpleNamespace(
+        color=None,
+        flip=lambda: (calls.append("flip"), setattr(factories, "elapsed", 1.0)),
+    )
+    movie = SimpleNamespace(
+        play=lambda: calls.append("play"),
+        draw=lambda: calls.append("draw"),
+        unload=lambda: calls.append("unload"),
+    )
+    presenter = PsychoPyActivityMonitoringPresenter(
+        window=window,
+        movie_factory=lambda window, path: movie,
+        movie_duration_reader=lambda path: 1.0,
+        frame_duration_seconds=1.0,
+        movie_audio_drain_seconds=0.3,
+        wait=lambda seconds: calls.append(("wait", seconds)),
+        monotonic=lambda: factories.elapsed,
+    )
+
+    presenter._present_movie_trial(build_activity_monitoring_sequence().trials[0])
+
+    # No draw or flip between the last movie frame and the drain, so the last
+    # frame stays up and the decoder is not asked for frames past the video end.
+    assert calls == ["play", "draw", "flip", ("wait", 0.3), "unload", "flip"]
 
 
 @pytest.mark.parametrize(
@@ -362,7 +392,7 @@ def test_activity_monitoring_presenter_shows_blank_inter_trial_interval_between_
     assert len(factories.movie_draws) == 40
     assert len(factories.image_draws) == 20
     assert len(factories.sound_plays) == 1
-    assert factories.waits[42] == 1.0
+    assert factories.waits[43] == 1.0
     assert window.colors[40] == "black"
 
     event_names = [event.name for event in event_sink.events]
