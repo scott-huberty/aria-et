@@ -5,12 +5,12 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
 
 from aria_et.config import AriaEtConfig
 from aria_et.gui import state
 from aria_et.gui.main_window import MainWindow
-from aria_et.gui.pages.setup import SetupPage
+from aria_et.gui.pages.setup import SetupPage, required_display_count
 
 pytestmark = pytest.mark.qt_gui
 
@@ -165,3 +165,41 @@ def test_main_window_hides_the_banner_in_acquisition_mode(qapp, config):
     )
 
     assert not window._mode_banner.isVisibleTo(window)
+
+
+@pytest.mark.parametrize(
+    "psychopy_screen, etm_screen, expected",
+    [
+        (1, 2, 2),  # lab defaults: both mean the second display
+        (0, 1, 1),  # both on the primary display
+        (1, 3, 3),  # ETM on the third display
+        (2, 1, 3),  # stimulus on the third display
+    ],
+)
+def test_required_display_count_uses_each_screen_numbering(
+    tmp_path, psychopy_screen, etm_screen, expected
+):
+    config = AriaEtConfig(
+        data_root=tmp_path, psychopy_screen=psychopy_screen, etm_screen=etm_screen
+    )
+
+    assert required_display_count(config) == expected
+
+
+def _display_warning(page):
+    return next(
+        label
+        for label in page.findChildren(QLabel)
+        if "display(s) detected" in label.text()
+    )
+
+
+@pytest.mark.parametrize("screen_count, shown", [(1, True), (2, False)])
+def test_setup_warns_only_when_the_default_screens_need_more_displays(
+    qapp, config, screen_count, shown
+):
+    page = SetupPage(config, screen_count=screen_count)
+
+    warning = _display_warning(page)
+    assert warning.isHidden() is not shown
+    assert "expects at least 2" in warning.text()

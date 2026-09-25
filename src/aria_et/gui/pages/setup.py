@@ -62,6 +62,17 @@ def _helper(text: str) -> QLabel:
     return label
 
 
+def required_display_count(config: AriaEtConfig) -> int:
+    """How many displays the configured screens need.
+
+    The two screen numbers are counted differently: PsychoPy counts from 0,
+    while Tobii Eye Tracker Manager's ``--screen`` counts from 1 (it picks
+    ``availableDisplays[screen - 1]``). So the defaults, PsychoPy 1 and ETM 2,
+    both mean the second display and need two displays, not three.
+    """
+    return max(config.psychopy_screen + 1, config.etm_screen)
+
+
 class SetupPage(QWidget):
     session_opened = Signal(object)
     session_closed = Signal()
@@ -211,11 +222,12 @@ class SetupPage(QWidget):
         return card
 
     def _build_display_warning(self) -> QWidget:
-        required = max(self._config.psychopy_screen, self._config.etm_screen) + 1
+        required = required_display_count(self._config)
         warning = QLabel(
             f"Only {self._screen_count} display(s) detected, but the config "
-            f"expects at least {required} (stimulus screen "
-            f"{self._config.psychopy_screen}, ETM screen {self._config.etm_screen}). "
+            f"expects at least {required} (stimulus: PsychoPy screen "
+            f"{self._config.psychopy_screen}; calibration: ETM "
+            f"screen {self._config.etm_screen}). "
             "This is fine for development but not for acquisition."
         )
         warning.setObjectName("ModeBanner")
