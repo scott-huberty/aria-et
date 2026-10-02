@@ -28,7 +28,7 @@ class AriaEtConfig:
     screen_resolution: str = DEFAULT_EIZO_SCREEN_RESOLUTION
     screen_size_meters: str = DEFAULT_EIZO_SCREEN_SIZE_METERS
     monitor_name: str = DEFAULT_MONITOR_NAME
-    audio_speaker: str | None = None
+    audio_speaker: str | None = DEFAULT_AUDIO_SPEAKER
     eye_tracker_manager: str | None = None
 
 

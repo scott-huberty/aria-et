@@ -442,8 +442,11 @@ def run_activity_monitoring_demo(
         demo_movie_factory,
         effective_window_size,
         open_window,
+        resolve_audio_speaker,
     )
     from aria_et.runtime import RecordingEventSink
+
+    audio_speaker = resolve_audio_speaker(audio_speaker)
 
     effective_size = effective_window_size(
         fullscreen=fullscreen,
@@ -529,7 +532,13 @@ def run_activity_monitoring_session(
         status("Importing PsychoPy...")
         from psychopy import core, monitors, prefs, visual
 
-        from aria_et.psychopy.environment import effective_window_size, open_window
+        from aria_et.psychopy.environment import (
+            effective_window_size,
+            open_window,
+            resolve_audio_speaker,
+        )
+
+        speaker = resolve_audio_speaker(audio_speaker)
 
         effective_size = effective_window_size(
             fullscreen=fullscreen,
@@ -551,14 +560,14 @@ def run_activity_monitoring_session(
             screen_resolution_pixels=screen_resolution_pixels,
             screen_size_meters=screen_size_meters,
             monitor_name=monitor_name,
-            audio_speaker=audio_speaker,
+            audio_speaker=speaker,
         )
         try:
             status("Running Activity Monitoring session.")
             presenter = PsychoPyActivityMonitoringPresenter(
                 window=window,
                 play_sound=play_sound,
-                audio_speaker=audio_speaker,
+                audio_speaker=speaker,
                 trial_limit=trial_limit,
                 render_status=status if debug_render else None,
             )

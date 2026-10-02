@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from typing import Any
 
 
@@ -111,13 +112,47 @@ def configure_monitor(
     return monitor
 
 
+def available_speaker_names() -> list[str]:
+    from psychopy.hardware.speaker import SpeakerDevice
+
+    return [device["deviceName"] for device in SpeakerDevice.getAvailableDevices()]
+
+
+def resolve_audio_speaker(
+    audio_speaker: str | None,
+    *,
+    speaker_names: Callable[[], Sequence[str]] = available_speaker_names,
+) -> str | None:
+    """Expand a configured speaker name to the full name PsychoPy reports.
+
+    PsychoPy matches speaker names exactly, and an unmatched name silently falls
+    back to the first speaker found (e.g. "EV2480" vs. "EV2480 (HD Audio Driver
+    for Display Audio)"). Accept a unique case-insensitive substring instead.
+    """
+    if not audio_speaker:
+        return audio_speaker
+    try:
+        names = list(speaker_names())
+    except Exception:  # noqa: BLE001 - leave unresolved; PsychoPy reports later
+        return audio_speaker
+    if audio_speaker in names:
+        return audio_speaker
+    matches = [name for name in names if audio_speaker.casefold() in name.casefold()]
+    if len(matches) == 1:
+        return matches[0]
+    return audio_speaker
+
+
 def configure_audio(
     *,
     prefs_module: Any,
     audio_speaker: str | None,
-) -> None:
+    speaker_names: Callable[[], Sequence[str]] = available_speaker_names,
+) -> str | None:
+    audio_speaker = resolve_audio_speaker(audio_speaker, speaker_names=speaker_names)
     if audio_speaker:
         prefs_module.hardware["audioDevice"] = [audio_speaker]
+    return audio_speaker
 
 
 def open_window(
@@ -133,8 +168,13 @@ def open_window(
     screen_size_meters: tuple[float, float],
     monitor_name: str,
     audio_speaker: str | None,
+    speaker_names: Callable[[], Sequence[str]] = available_speaker_names,
 ) -> object:
-    configure_audio(prefs_module=prefs_module, audio_speaker=audio_speaker)
+    configure_audio(
+        prefs_module=prefs_module,
+        audio_speaker=audio_speaker,
+        speaker_names=speaker_names,
+    )
     monitor = configure_monitor(
         monitors_module=monitors_module,
         monitor_name=monitor_name,

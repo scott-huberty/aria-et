@@ -13,7 +13,7 @@ def test_load_config_uses_defaults_when_file_is_missing(tmp_path):
     assert config.screen_resolution == "1920x1080"
     assert config.screen_size_meters == "0.527x0.296"
     assert config.monitor_name == "EIZO_EV2480"
-    assert config.audio_speaker is None
+    assert config.audio_speaker == "EV2480"
     assert config.eye_tracker_manager is None
 
 

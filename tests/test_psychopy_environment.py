@@ -5,7 +5,11 @@ from aria_et.psychopy.environment import (
     demo_sound_factory,
     effective_window_size,
     open_window,
+    resolve_audio_speaker,
 )
+
+EIZO_SPEAKER = "EV2480 (HD Audio Driver for Display Audio)"
+SPEAKER_NAMES = ("Speakers (2- Realtek XU)", EIZO_SPEAKER)
 
 
 class FakeMonitor:
@@ -85,9 +89,41 @@ def test_configure_monitor_creates_saved_psychopy_monitor_profile():
 def test_configure_audio_sets_psychopy_default_speaker():
     prefs = FakePrefs()
 
-    configure_audio(prefs_module=prefs, audio_speaker="EV2480")
+    resolved = configure_audio(
+        prefs_module=prefs,
+        audio_speaker="EV2480",
+        speaker_names=lambda: SPEAKER_NAMES,
+    )
 
-    assert prefs.hardware["audioDevice"] == ["EV2480"]
+    assert resolved == EIZO_SPEAKER
+    assert prefs.hardware["audioDevice"] == [EIZO_SPEAKER]
+
+
+def test_resolve_audio_speaker_prefers_exact_then_unique_substring():
+    assert (
+        resolve_audio_speaker(EIZO_SPEAKER, speaker_names=lambda: SPEAKER_NAMES)
+        == EIZO_SPEAKER
+    )
+    assert (
+        resolve_audio_speaker("ev2480", speaker_names=lambda: SPEAKER_NAMES)
+        == EIZO_SPEAKER
+    )
+
+
+def test_resolve_audio_speaker_keeps_name_when_ambiguous_or_missing():
+    def names():
+        return ("EV2480 (A)", "EV2480 (B)")
+
+    assert resolve_audio_speaker("EV2480", speaker_names=names) == "EV2480"
+    assert resolve_audio_speaker("Missing", speaker_names=names) == "Missing"
+    assert resolve_audio_speaker(None, speaker_names=names) is None
+
+
+def test_resolve_audio_speaker_keeps_name_when_listing_fails():
+    def names():
+        raise RuntimeError("no audio backend")
+
+    assert resolve_audio_speaker("EV2480", speaker_names=names) == "EV2480"
 
 
 def test_open_window_uses_monitor_audio_and_effective_fullscreen_size():
@@ -107,9 +143,10 @@ def test_open_window_uses_monitor_audio_and_effective_fullscreen_size():
         screen_size_meters=(0.527, 0.296),
         monitor_name="EIZO_EV2480",
         audio_speaker="EV2480",
+        speaker_names=lambda: SPEAKER_NAMES,
     )
 
-    assert prefs.hardware["audioDevice"] == ["EV2480"]
+    assert prefs.hardware["audioDevice"] == [EIZO_SPEAKER]
     assert window["size"] == (1920, 1080)
     assert window["fullscr"] is True
     assert window["screen"] == 1
