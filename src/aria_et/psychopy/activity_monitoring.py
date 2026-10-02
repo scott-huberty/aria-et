@@ -117,7 +117,6 @@ class PsychoPyActivityMonitoringPresenter:
     sound_error_sink: StatusSink | None = None
     trial_limit: int | None = None
     frame_duration_seconds: float = 1 / 30
-    movie_audio_drain_seconds: float = 0.3
     inter_trial_interval_seconds: float = 1.0
     render_status: StatusSink | None = None
     monotonic: Callable[[], float] = time.perf_counter
@@ -238,12 +237,6 @@ class PsychoPyActivityMonitoringPresenter:
                 started_at = self.monotonic()
                 movie.play()
                 self._draw_for_duration(movie, duration, started_at=started_at)
-                # Movie audio lags the video by ~170 ms on Windows/SDL, and
-                # unloading mid-buffer can replay the tail. Let the audio drain
-                # without flipping, so the last frame stays on screen and the
-                # decoder is not asked for frames past the end of the video.
-                if self.movie_audio_drain_seconds > 0:
-                    self._wait()(self.movie_audio_drain_seconds)
             finally:
                 # MovieStim.stop() reloads the file for replay. Each trial owns
                 # a disposable movie, so release its decoder and texture instead.
