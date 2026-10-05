@@ -5,14 +5,15 @@ from __future__ import annotations
 import importlib
 import json
 import math
+import os
 import queue
 import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from types import ModuleType
 from typing import Any
 
@@ -21,11 +22,53 @@ from typing_extensions import Self
 ImportModule = Callable[[str], ModuleType]
 StatusSink = Callable[[str], None]
 _QUEUE_STOP = object()
-DEFAULT_EYETRACKER_MANAGER_PATH = (
+MACOS_EYETRACKER_MANAGER_PATH = (
     "/Applications/TobiiProEyeTrackerManager.app/Contents/MacOS/"
     "TobiiProEyeTrackerManager"
 )
+LINUX_EYETRACKER_MANAGER_PATH = (
+    "/opt/TobiiProEyeTrackerManager/TobiiProEyeTrackerManager"
+)
 DEFAULT_CALIBRATION_DIR = "calibrations"
+
+
+def default_eyetracker_manager_path(
+    platform: str = sys.platform,
+    environ: Mapping[str, str] = os.environ,
+) -> str:
+    """Return where Tobii Pro Eye Tracker Manager is installed by default.
+
+    On Windows ETM installs per user under ``%LOCALAPPDATA%\\Programs`` or, for
+    an all-users install, under ``%ProgramFiles%``. The first candidate that
+    exists wins; otherwise the per-user location is returned so the "not
+    found" message points somewhere sensible.
+    """
+    if platform.startswith("win"):
+        install_dirs = (
+            ("LOCALAPPDATA", "Programs"),
+            ("ProgramFiles", ""),
+        )
+        candidates = [
+            str(
+                PureWindowsPath(
+                    environ[root],
+                    subdir,
+                    "TobiiProEyeTrackerManager",
+                    "TobiiProEyeTrackerManager.exe",
+                )
+            )
+            for root, subdir in install_dirs
+            if environ.get(root)
+        ]
+        for candidate in candidates:
+            if Path(candidate).exists():
+                return candidate
+        if candidates:
+            return candidates[0]
+        return "TobiiProEyeTrackerManager.exe"
+    if platform == "darwin":
+        return MACOS_EYETRACKER_MANAGER_PATH
+    return LINUX_EYETRACKER_MANAGER_PATH
 
 
 class TobiiSdkUnavailableError(RuntimeError):
@@ -675,7 +718,7 @@ def run_eyetracker_manager_calibration(
     output = output_sink or print
     error = error_sink or (lambda message: print(message, file=sys.stderr))
     executable = (
-        executable if executable is not None else DEFAULT_EYETRACKER_MANAGER_PATH
+        executable if executable is not None else default_eyetracker_manager_path()
     )
     artifact_dir = None
 

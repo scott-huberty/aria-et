@@ -312,7 +312,7 @@ def test_calibrate_eyetracker_invokes_manager_runner_with_production_defaults(tm
             ),
             "serial_number": None,
             "screen": 2,
-            # None means "use eyetracker.DEFAULT_EYETRACKER_MANAGER_PATH".
+            # None means "use eyetracker.default_eyetracker_manager_path()".
             "executable": None,
         }
     ]

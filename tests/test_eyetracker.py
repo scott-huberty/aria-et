@@ -9,6 +9,7 @@ from aria_et.eyetracker import (
     TobiiGazeRecorder,
     check_eyetracker,
     create_tobii_gaze_recorder,
+    default_eyetracker_manager_path,
     find_eyetracker,
     open_eyetracker,
     run_eyetracker_manager_calibration,
@@ -158,6 +159,39 @@ def test_check_eyetracker_reports_explicit_address_connection_failure(capsys):
     captured = capsys.readouterr()
     assert exit_code == 3
     assert "No Tobii eye tracker could be opened at tobii-prp://missing" in captured.err
+
+
+def test_default_manager_path_uses_per_user_windows_install(tmp_path):
+    environ = {"LOCALAPPDATA": "C:\\Users\\lab\\AppData\\Local"}
+
+    assert default_eyetracker_manager_path("win32", environ) == (
+        "C:\\Users\\lab\\AppData\\Local\\Programs\\TobiiProEyeTrackerManager"
+        "\\TobiiProEyeTrackerManager.exe"
+    )
+
+
+def test_default_manager_path_prefers_an_existing_windows_install(tmp_path):
+    # Only the all-users install exists, so it wins over the per-user default.
+    etm_dir = tmp_path / "Program Files" / "TobiiProEyeTrackerManager"
+    etm_dir.mkdir(parents=True)
+    executable = etm_dir / "TobiiProEyeTrackerManager.exe"
+    executable.write_text("", encoding="utf-8")
+    environ = {
+        "LOCALAPPDATA": str(tmp_path / "Local"),
+        "ProgramFiles": str(tmp_path / "Program Files"),
+    }
+
+    assert default_eyetracker_manager_path("win32", environ) == str(executable)
+
+
+def test_default_manager_path_on_macos_and_linux():
+    assert default_eyetracker_manager_path("darwin", {}) == (
+        "/Applications/TobiiProEyeTrackerManager.app/Contents/MacOS/"
+        "TobiiProEyeTrackerManager"
+    )
+    assert default_eyetracker_manager_path("linux", {}) == (
+        "/opt/TobiiProEyeTrackerManager/TobiiProEyeTrackerManager"
+    )
 
 
 def test_check_eyetracker_reports_firmware_version(capsys):

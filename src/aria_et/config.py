@@ -78,8 +78,8 @@ def default_config_text(config: AriaEtConfig | None = None) -> str:
         f"speaker = '{audio_speaker}'",
         "",
         "[tobii]",
-        # TODO: Change this default when we get the Production Windows Laptop.
-        "# eye_tracker_manager = '/Applications/TobiiProEyeTrackerManager.app/Contents/MacOS/TobiiProEyeTrackerManager'",
+        "# Defaults to the standard Eye Tracker Manager install for this OS.",
+        "# eye_tracker_manager = 'path/to/TobiiProEyeTrackerManager'",
         "# Set per site with `aria-et find-eyetracker --save`.",
         "# address = 'tobii-prp://169.254.x.x'",
         "# serial_number = 'TPSP1-...'",

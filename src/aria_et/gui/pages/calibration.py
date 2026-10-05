@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from aria_et.config import AriaEtConfig
-from aria_et.eyetracker import DEFAULT_EYETRACKER_MANAGER_PATH
+from aria_et.eyetracker import default_eyetracker_manager_path
 from aria_et.gui import artifacts
 from aria_et.gui.state import CalibrationOptions, SessionState, build_calibrate_args
 from aria_et.gui.widgets.inputs import (
@@ -43,7 +43,7 @@ HISTORY_PREAMBLE = (
 
 def resolve_manager_path(config: AriaEtConfig) -> tuple[str, bool]:
     """Return the manager executable the CLI will use and whether it exists."""
-    path = config.eye_tracker_manager or DEFAULT_EYETRACKER_MANAGER_PATH
+    path = config.eye_tracker_manager or default_eyetracker_manager_path()
     return path, Path(path).exists()
 
 

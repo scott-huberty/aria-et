@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication, QComboBox
 
 from aria_et.cli import build_parser
 from aria_et.config import AriaEtConfig
+from aria_et.eyetracker import default_eyetracker_manager_path
 from aria_et.gui import state
 from aria_et.gui.artifacts import find_calibrations
 from aria_et.gui.pages.calibration import (
@@ -56,7 +57,7 @@ def _write_calibration(session, calibration_id, method):
 def test_manager_path_falls_back_to_the_bundled_default(config):
     path, _ = resolve_manager_path(config)
 
-    assert path.endswith("TobiiProEyeTrackerManager")
+    assert path == default_eyetracker_manager_path()
 
 
 def test_manager_path_prefers_the_configured_executable(tmp_path):
