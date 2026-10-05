@@ -1,5 +1,7 @@
 import gzip
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -19,25 +21,23 @@ def _write_jsonl(path: Path, rows: list[dict]) -> None:
     )
 
 
-def test_bids_task_labels_cover_all_aria_tasks():
-    assert TASK_BIDS_LABELS == {
-        "activity-monitoring": "ActivityMonitoring",
-        "pupillary-light-reflex": "PupillaryLightReflex",
-        "social-interactive": "SocialInteractive",
-        "static-social-scenes": "StaticSocialScenes",
-    }
-
-
-def test_export_run_to_bids_writes_binocular_physio_and_events(tmp_path):
-    run_dir = tmp_path / "run"
-    run_dir.mkdir()
+def _write_run(
+    run_dir: Path,
+    *,
+    task_id: str = "pupillary-light-reflex",
+    subject: str = "01",
+    session: str = "baseline",
+    run: str = "02",
+) -> Path:
+    """Write a minimal two-sample acquisition run, as the session recorder would."""
+    run_dir.mkdir(parents=True)
     _write_json(
         run_dir / "session.json",
         {
-            "task_id": "pupillary-light-reflex",
+            "task_id": task_id,
             "tracker": "tobii",
             "started_at": "2026-07-29T12:00:00+00:00",
-            "bids": {"subject": "01", "session": "baseline", "run": "02"},
+            "bids": {"subject": subject, "session": session, "run": run},
             "stimulus_display": {
                 "screen_distance_meters": 0.6,
                 "screen_origin": ["top", "left"],
@@ -58,17 +58,17 @@ def test_export_run_to_bids_writes_binocular_physio_and_events(tmp_path):
         run_dir / "events.jsonl",
         [
             {
-                "name": "pupillary-light-reflex.started",
+                "name": f"{task_id}.started",
                 "timestamp": 10.0,
-                "payload": {"sequence_id": "pupillary-light-reflex"},
+                "payload": {"sequence_id": task_id},
             },
             {
-                "name": "pupillary-light-reflex.trial.started",
+                "name": f"{task_id}.trial.started",
                 "timestamp": 11.0,
                 "payload": {"trial_id": "plr-01", "stimulus_id": "plr65"},
             },
             {
-                "name": "pupillary-light-reflex.trial.ended",
+                "name": f"{task_id}.trial.ended",
                 "timestamp": 13.5,
                 "payload": {"trial_id": "plr-01"},
             },
@@ -107,6 +107,20 @@ def test_export_run_to_bids_writes_binocular_physio_and_events(tmp_path):
             },
         ],
     )
+    return run_dir
+
+
+def test_bids_task_labels_cover_all_aria_tasks():
+    assert TASK_BIDS_LABELS == {
+        "activity-monitoring": "ActivityMonitoring",
+        "pupillary-light-reflex": "PupillaryLightReflex",
+        "social-interactive": "SocialInteractive",
+        "static-social-scenes": "StaticSocialScenes",
+    }
+
+
+def test_export_run_to_bids_writes_binocular_physio_and_events(tmp_path):
+    run_dir = _write_run(tmp_path / "run")
 
     written = export_run_to_bids(run_dir=run_dir, bids_root=tmp_path / "bids")
 
@@ -149,9 +163,8 @@ def test_export_run_to_bids_writes_binocular_physio_and_events(tmp_path):
     assert sidecar["SamplingFrequency"] == 500.0
     assert sidecar["pupil_size"]["Description"].endswith("diameter in millimeters.")
 
-    events_sidecar = json.loads(
-        (tmp_path / "bids" / "task-PupillaryLightReflex_events.json").read_text()
-    )
+    assert not (tmp_path / "bids" / "task-PupillaryLightReflex_events.json").exists()
+    events_sidecar = json.loads(base.with_name(base.name + "_events.json").read_text())
     assert events_sidecar["onset"]["Format"] == "number"
     assert events_sidecar["duration"]["Format"] == "number"
     assert events_sidecar["StimulusPresentation"] == {
@@ -187,3 +200,50 @@ def test_export_run_to_bids_requires_acquisition_metadata(tmp_path):
     )
     with pytest.raises(ValueError, match="stimulus display metadata"):
         export_run_to_bids(run_dir=run_dir, bids_root=tmp_path / "bids")
+
+
+def _run_bids_validator(bids_root: Path) -> list[dict]:
+    """Run the bundled BIDS validator and return its reported issues."""
+    pytest.importorskip("bids_validator_deno")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import bids_validator_deno; bids_validator_deno.cli()",
+            str(bids_root),
+            "--format",
+            "json",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    try:
+        report = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        pytest.fail(
+            f"BIDS validator did not produce a JSON report "
+            f"(exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
+        )
+    return report["issues"]["issues"]
+
+
+def test_exported_dataset_passes_bids_validator(tmp_path):
+    bids_root = tmp_path / "bids"
+    # Every task, across two subjects and sessions, so the dataset exercises
+    # the per-run sidecars rather than a single exported run.
+    for subject, session in (("01", "baseline"), ("02", "followup")):
+        for task_id in TASK_BIDS_LABELS:
+            run_dir = _write_run(
+                tmp_path / "runs" / f"{subject}-{session}-{task_id}",
+                task_id=task_id,
+                subject=subject,
+                session=session,
+                run="01",
+            )
+            export_run_to_bids(run_dir=run_dir, bids_root=bids_root)
+
+    issues = _run_bids_validator(bids_root)
+
+    errors = [issue for issue in issues if issue["severity"] == "error"]
+    assert errors == [], json.dumps(errors, indent=2)

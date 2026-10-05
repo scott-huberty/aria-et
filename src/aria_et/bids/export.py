@@ -46,8 +46,10 @@ def export_run_to_bids(
 
     written: list[Path] = []
     written.append(_write_events_tsv(beh_dir / f"{base_name}_events.tsv", events))
+    # Written per run rather than once at the root, so a mid-study change to
+    # the sidecar contents doesn't silently apply to earlier runs via inheritance.
     written.append(
-        _write_events_json(root / f"task-{task_label}_events.json", task_label, display)
+        _write_events_json(beh_dir / f"{base_name}_events.json", task_label, display)
     )
 
     for recording, eye in (("eye1", "left"), ("eye2", "right")):
