@@ -16,7 +16,7 @@ def pytest_collection_modifyitems(config, items):
     )
     skip_requires_eyetracker = pytest.mark.skip(
         reason=(
-            "Run with `ARIA_ET_HARDWARE=1 pytest -m requires_eyetracker` "
+            "Run with `pytest -m requires_eyetracker` "
             "to execute Tobii hardware smoke tests."
         )
     )

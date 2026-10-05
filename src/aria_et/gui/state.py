@@ -151,6 +151,10 @@ def build_check_args(address: str | None = None) -> list[str]:
     return args
 
 
+def build_save_tracker_args(serial_number: str) -> list[str]:
+    return ["find-eyetracker", "--save", "--serial-number", serial_number]
+
+
 def build_calibrate_args(state: SessionState, options: CalibrationOptions) -> list[str]:
     args = [
         "calibrate-eyetracker",

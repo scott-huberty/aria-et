@@ -42,6 +42,7 @@ class RecorderFactory(Protocol):
         tracker_metadata_path: str | Path,
         writer_health_path: str | Path | None = None,
         address: str | None = None,
+        serial_number: str | None = None,
     ) -> GazeRecorder: ...
 
 
@@ -173,6 +174,7 @@ def run_recording_session(
     bids: BidsSessionMetadata | None = None,
     stimulus_display: StimulusDisplayMetadata | None = None,
     tracker_address: str | None = None,
+    tracker_serial_number: str | None = None,
     check_eyetracker: EyeTrackerCheck = default_check_eyetracker,
     recorder_factory: RecorderFactory = create_tobii_gaze_recorder,
     error_sink: StatusSink | None = None,
@@ -197,7 +199,10 @@ def run_recording_session(
 
     with _SessionLog(output_path / "session.log"):
         if tracker == "tobii":
-            check_exit_code = check_eyetracker(address=tracker_address)
+            check_exit_code = check_eyetracker(
+                address=tracker_address,
+                serial_number=tracker_serial_number,
+            )
             if check_exit_code != 0:
                 return check_exit_code
 
@@ -222,6 +227,7 @@ def run_recording_session(
                         tracker_metadata_path=output_path / "tracker.json",
                         writer_health_path=output_path / "gaze_writer.json",
                         address=tracker_address,
+                        serial_number=tracker_serial_number,
                     )
                 except TobiiSdkUnavailableError as error_message:
                     error(str(error_message))

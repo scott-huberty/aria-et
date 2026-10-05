@@ -362,6 +362,7 @@ def run_static_social_scenes_session(
     *,
     tracker: TrackerName,
     tracker_address: str | None = None,
+    tracker_serial_number: str | None = None,
     output_dir: str | Path,
     subject: str,
     session: str | None = None,
@@ -435,6 +436,7 @@ def run_static_social_scenes_session(
         task_id="static-social-scenes",
         tracker=tracker,
         tracker_address=tracker_address,
+        tracker_serial_number=tracker_serial_number,
         output_dir=output_dir,
         bids=_bids_metadata(subject, session, run),
         stimulus_display=_stimulus_display_metadata(

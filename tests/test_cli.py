@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from aria_et.cli import main, parse_float_pair, parse_window_size
+from aria_et.config import load_config, set_config
 
 
 def test_list_tasks_prints_battery_order(capsys):
@@ -84,7 +85,7 @@ def test_check_eyetracker_invokes_injected_runner():
     exit_code = main(["check-eyetracker"], check_eyetracker_runner=runner)
 
     assert exit_code == 3
-    assert calls == [{"address": None}]
+    assert calls == [{"address": None, "serial_number": None}]
 
 
 def test_check_eyetracker_passes_explicit_address_to_injected_runner():
@@ -100,7 +101,135 @@ def test_check_eyetracker_passes_explicit_address_to_injected_runner():
     )
 
     assert exit_code == 0
-    assert calls == [{"address": "tobii-prp://169.254.10.180"}]
+    assert calls == [{"address": "tobii-prp://169.254.10.180", "serial_number": None}]
+
+
+@pytest.fixture
+def saved_tracker():
+    set_config("tobii.address", "tobii-prp://169.254.10.180")
+    set_config("tobii.serial_number", "TPSP1-010214213025")
+
+
+def _record_calls(calls, exit_code=0):
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return exit_code
+
+    return runner
+
+
+def test_check_eyetracker_uses_tracker_saved_in_config(saved_tracker, capsys):
+    calls = []
+
+    exit_code = main(["check-eyetracker"], check_eyetracker_runner=_record_calls(calls))
+
+    assert exit_code == 0
+    assert calls == [
+        {
+            "address": "tobii-prp://169.254.10.180",
+            "serial_number": "TPSP1-010214213025",
+        }
+    ]
+    assert "Using tracker saved in" in capsys.readouterr().out
+
+
+def test_check_eyetracker_explicit_address_overrides_config(saved_tracker):
+    calls = []
+
+    main(
+        ["check-eyetracker", "--address", "tobii-prp://169.254.99.99"],
+        check_eyetracker_runner=_record_calls(calls),
+    )
+
+    assert calls == [{"address": "tobii-prp://169.254.99.99", "serial_number": None}]
+
+
+def test_check_eyetracker_tells_user_how_to_save_a_tracker(capsys):
+    main(["check-eyetracker"], check_eyetracker_runner=_record_calls([]))
+
+    assert "aria-et find-eyetracker --save" in capsys.readouterr().out
+
+
+def test_run_command_uses_tracker_saved_in_config(saved_tracker):
+    calls = []
+
+    main(
+        ["run-plr", "--subject", "01", "--output", "runs"],
+        run_pupillary_light_reflex_runner=_record_calls(calls),
+    )
+
+    assert calls[0]["tracker_address"] == "tobii-prp://169.254.10.180"
+    assert calls[0]["tracker_serial_number"] == "TPSP1-010214213025"
+
+
+def test_calibrate_eyetracker_targets_saved_serial_number(saved_tracker):
+    calls = []
+
+    main(
+        ["calibrate-eyetracker", "--subject", "1", "--session", "smoke"],
+        calibrate_eyetracker_runner=_record_calls(calls),
+    )
+
+    assert calls[0]["address"] is None
+    assert calls[0]["serial_number"] == "TPSP1-010214213025"
+
+
+def test_calibrate_eyetracker_explicit_address_ignores_saved_serial(saved_tracker):
+    calls = []
+
+    main(
+        [
+            "calibrate-eyetracker",
+            "--subject",
+            "1",
+            "--session",
+            "smoke",
+            "--address",
+            "tobii-prp://169.254.99.99",
+        ],
+        calibrate_eyetracker_runner=_record_calls(calls),
+    )
+
+    assert calls[0]["address"] == "tobii-prp://169.254.99.99"
+    assert calls[0]["serial_number"] is None
+
+
+def test_find_eyetracker_invokes_injected_runner():
+    calls = []
+
+    exit_code = main(
+        ["find-eyetracker", "--save", "--serial-number", "SN"],
+        find_eyetracker_runner=_record_calls(calls),
+    )
+
+    assert exit_code == 0
+    assert calls == [{"save": True, "serial_number": "SN"}]
+
+
+def test_config_set_get_show_unset(capsys):
+    assert main(["config", "show"]) == 0
+    assert "not created yet" in capsys.readouterr().out
+
+    assert main(["config", "set", "tobii.address", "tobii-prp://169.254.1.2"]) == 0
+    assert load_config().tracker_address == "tobii-prp://169.254.1.2"
+    capsys.readouterr()
+
+    assert main(["config", "get", "tobii.address"]) == 0
+    assert capsys.readouterr().out.strip() == "tobii-prp://169.254.1.2"
+
+    assert main(["config", "show"]) == 0
+    assert 'address = "tobii-prp://169.254.1.2"' in capsys.readouterr().out
+
+    assert main(["config", "unset", "tobii.address"]) == 0
+    assert main(["config", "get", "tobii.address"]) == 1
+
+
+def test_config_set_rejects_unknown_key_and_bad_value(capsys):
+    with pytest.raises(SystemExit):
+        main(["config", "set", "tobii.adress", "x"])
+
+    assert main(["config", "set", "display.etm_screen", "two"]) == 2
+    assert "display.etm_screen" in capsys.readouterr().err
 
 
 def test_export_bids_invokes_injected_runner(capsys):
@@ -597,6 +726,7 @@ def test_run_activity_monitoring_invokes_injected_runner():
         {
             "tracker": "none",
             "tracker_address": None,
+            "tracker_serial_number": None,
             "output_dir": "runs/test-am",
             "subject": "01",
             "session": None,
@@ -720,6 +850,7 @@ def test_run_social_interactive_invokes_injected_runner():
         {
             "tracker": "none",
             "tracker_address": None,
+            "tracker_serial_number": None,
             "output_dir": "runs/test-si",
             "subject": "01",
             "session": "baseline",
@@ -820,6 +951,7 @@ def test_run_static_social_scenes_invokes_injected_runner():
         {
             "tracker": "none",
             "tracker_address": None,
+            "tracker_serial_number": None,
             "output_dir": "runs/test-ss",
             "subject": "01",
             "session": None,
@@ -915,6 +1047,7 @@ def test_run_pupillary_light_reflex_invokes_injected_runner():
         {
             "tracker": "none",
             "tracker_address": None,
+            "tracker_serial_number": None,
             "output_dir": "runs/test-plr",
             "subject": "01",
             "session": "baseline",

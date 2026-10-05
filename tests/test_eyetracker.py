@@ -4,10 +4,13 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
+from aria_et.config import load_config
 from aria_et.eyetracker import (
     TobiiGazeRecorder,
     check_eyetracker,
     create_tobii_gaze_recorder,
+    find_eyetracker,
+    open_eyetracker,
     run_eyetracker_manager_calibration,
     save_current_calibration,
 )
@@ -155,6 +158,130 @@ def test_check_eyetracker_reports_explicit_address_connection_failure(capsys):
     captured = capsys.readouterr()
     assert exit_code == 3
     assert "No Tobii eye tracker could be opened at tobii-prp://missing" in captured.err
+
+
+def test_check_eyetracker_reports_firmware_version(capsys):
+    def installed_sdk(name):
+        return FakeTobiiResearch((FakeEyeTracker(),))
+
+    check_eyetracker(import_module=installed_sdk)
+
+    assert "firmware=2.6.2" in capsys.readouterr().out
+
+
+def test_check_eyetracker_falls_back_to_saved_serial_when_address_moved(capsys):
+    def installed_sdk(name):
+        return FakeTobiiResearch((FakeEyeTracker(),))
+
+    exit_code = check_eyetracker(
+        address="tobii-prp://missing",
+        serial_number="TPS-123",
+        import_module=installed_sdk,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Connected to Tobii eye tracker at tet-tcp://169.254.0.1" in captured.out
+    assert "was not reachable at tobii-prp://missing" in captured.err
+    assert "aria-et find-eyetracker --save" in captured.err
+
+
+def test_check_eyetracker_fails_when_address_and_serial_both_miss(capsys):
+    def installed_sdk(name):
+        return FakeTobiiResearch((FakeEyeTracker(),))
+
+    exit_code = check_eyetracker(
+        address="tobii-prp://missing",
+        serial_number="OTHER",
+        import_module=installed_sdk,
+    )
+
+    assert exit_code == 3
+    assert "no tracker with serial number OTHER" in capsys.readouterr().err
+
+
+def test_check_eyetracker_warns_when_connected_serial_differs(capsys):
+    def installed_sdk(name):
+        return FakeTobiiResearch(())
+
+    exit_code = check_eyetracker(
+        address="tobii-prp://169.254.10.180",
+        serial_number="OTHER",
+        import_module=installed_sdk,
+    )
+
+    assert exit_code == 0
+    assert "OTHER is saved for this laptop" in capsys.readouterr().err
+
+
+def test_open_eyetracker_discovery_matches_serial_number():
+    first = FakeEyeTracker()
+    second = FakeEyeTracker()
+    second.serial_number = "TPS-456"
+
+    def installed_sdk(name):
+        return FakeTobiiResearch((first, second))
+
+    assert open_eyetracker(serial_number="TPS-456", import_module=installed_sdk) is second
+
+
+def test_find_eyetracker_lists_trackers_without_saving(tmp_path, capsys):
+    config_path = tmp_path / "config.toml"
+
+    def installed_sdk(name):
+        return FakeTobiiResearch((FakeEyeTracker(),))
+
+    exit_code = find_eyetracker(config_path=config_path, import_module=installed_sdk)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "serial=TPS-123 address=tet-tcp://169.254.0.1" in captured.out
+    assert "No tracker is saved for this laptop yet" in captured.out
+    assert not config_path.exists()
+
+
+def test_find_eyetracker_saves_single_tracker(tmp_path, capsys):
+    config_path = tmp_path / "config.toml"
+
+    def installed_sdk(name):
+        return FakeTobiiResearch((FakeEyeTracker(),))
+
+    exit_code = find_eyetracker(
+        save=True, config_path=config_path, import_module=installed_sdk
+    )
+
+    assert exit_code == 0
+    config = load_config(config_path)
+    assert config.tracker_address == "tet-tcp://169.254.0.1"
+    assert config.tracker_serial_number == "TPS-123"
+    assert "Saved tracker TPS-123" in capsys.readouterr().out
+
+
+def test_find_eyetracker_requires_serial_to_save_one_of_several(tmp_path, capsys):
+    config_path = tmp_path / "config.toml"
+    second = FakeEyeTracker()
+    second.serial_number = "TPS-456"
+    second.address = "tet-tcp://169.254.0.2"
+
+    def installed_sdk(name):
+        return FakeTobiiResearch((FakeEyeTracker(), second))
+
+    assert (
+        find_eyetracker(save=True, config_path=config_path, import_module=installed_sdk)
+        == 4
+    )
+    assert "Pass --serial-number" in capsys.readouterr().err
+    assert not config_path.exists()
+
+    exit_code = find_eyetracker(
+        save=True,
+        serial_number="TPS-456",
+        config_path=config_path,
+        import_module=installed_sdk,
+    )
+
+    assert exit_code == 0
+    assert load_config(config_path).tracker_address == "tet-tcp://169.254.0.2"
 
 
 def test_tobii_gaze_recorder_writes_tracker_metadata_and_gaze_samples(tmp_path):

@@ -245,11 +245,22 @@ Use BIDS-safe session labels such as `flushtest`, not `flush-test`.
 - Use normal Terminal for tracker operations. Codex sandboxed runs may not see
   tracker network discovery.
 - For dry runs, use `--tracker none`.
-- For real runs, use the explicit tracker address:
+- Each laptop saves its own tracker in `~/.aria-et/config.toml`
+  (`[tobii] address` and `serial_number`). On a new laptop, with the tracker
+  connected, run:
 
 ```bash
---tracker tobii --address tobii-prp://169.254.10.180
+aria-et find-eyetracker          # list discovered trackers (serial, address, firmware)
+aria-et find-eyetracker --save   # save it; add --serial-number SN if several are found
+aria-et config show              # or: aria-et config set tobii.address tobii-prp://...
 ```
+
+  The GUI Hardware page does the same via "Check tracker" then "Save as this
+  laptop's tracker". From Python: `aria_et.set_config("tobii.address", ...)`.
+- Tracker resolution for `check-eyetracker`, `calibrate-eyetracker` and
+  `run-*`: explicit `--address` > saved config > discovery. If the saved
+  address is unreachable, the tracker is found by its saved serial number and a
+  warning asks you to re-save. ETM calibration targets the saved serial number.
 
 - Avoid hyphens in BIDS entity labels for subject/session/run.
 - Treat incomplete runs as exportable but not analytically complete.
@@ -271,15 +282,19 @@ row counts match raw gaze sample counts.
 Run on the lab machine with:
 
 ```bash
-ARIA_ET_HARDWARE=1 \
-ARIA_ET_TRACKER_ADDRESS=tobii-prp://169.254.10.180 \
-/Users/scotterik/miniforge3/envs/aria-et_310/bin/python -m pytest \
-  -m requires_eyetracker tests/test_hardware_smoke.py
+pytest -m requires_eyetracker tests/test_hardware_smoke.py
+# connection checks only:
+pytest -m requires_eyetracker -k "check_eyetracker or find_eyetracker"
 ```
+
+The tests use the tracker saved in the real `~/.aria-et/config.toml` (they do
+not isolate the home directory), else discovery.
 
 Useful optional environment variables:
 
 ```bash
+ARIA_ET_TRACKER_ADDRESS=tobii-prp://169.254.10.180  # override the saved tracker
+ARIA_ET_TRACKER_SERIAL=TPSP1-010214213025           # assert this serial is connected
 ARIA_ET_SMOKE_SUBJECT=smoke
 ARIA_ET_SMOKE_SESSION=hardware
 ARIA_ET_SMOKE_TRIAL_LIMIT=2

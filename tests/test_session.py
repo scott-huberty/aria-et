@@ -235,13 +235,16 @@ def test_run_recording_session_records_events_and_gaze_for_tobii(tmp_path):
     )
 
     assert exit_code == 0
-    assert check_calls == [{"address": "tobii-prp://169.254.10.180"}]
+    assert check_calls == [
+        {"address": "tobii-prp://169.254.10.180", "serial_number": None}
+    ]
     assert recorder_calls == [
         {
             "gaze_path": output_dir / "gaze.jsonl",
             "tracker_metadata_path": output_dir / "tracker.json",
             "writer_health_path": output_dir / "gaze_writer.json",
             "address": "tobii-prp://169.254.10.180",
+            "serial_number": None,
         }
     ]
     assert recorders[0].entered is True

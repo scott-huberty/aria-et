@@ -65,8 +65,9 @@ class MainWindow(QMainWindow):
         self._setup_page.session_closed.connect(self._on_session_closed)
         self._setup_page.create_config_requested.connect(self._create_config)
 
-        self._hardware_page = HardwarePage()
+        self._hardware_page = HardwarePage(config)
         self._hardware_page.check_requested.connect(self._run_tracker_check)
+        self._hardware_page.save_requested.connect(self._save_tracker)
 
         self._battery_page = BatteryPage(config)
         self._battery_page.run_requested.connect(self._run_task)
@@ -244,6 +245,10 @@ class MainWindow(QMainWindow):
     def _run_tracker_check(self, args: list[str]) -> None:
         self._output_consumer = self._hardware_page
         self._start(args, on_exit=self._finish_tracker_check)
+
+    def _save_tracker(self, args: list[str]) -> None:
+        if not self._start(args, on_exit=self._hardware_page.report_save_exit):
+            self._hardware_page.report_save_exit(1)
 
     def _run_task(self, args: list[str]) -> None:
         self._log_pane.expand()

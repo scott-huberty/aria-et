@@ -9,10 +9,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from aria_et.config import (
+    CONFIG_KEYS,
     AriaEtConfig,
     default_config_path,
     default_config_text,
+    get_config_value,
     load_config,
+    set_config,
+    unset_config,
 )
 from aria_et.tasks import BATTERY_ORDER
 
@@ -27,6 +31,7 @@ DemoSocialInteractiveRunner = Callable[..., int]
 DemoStaticSocialScenesRunner = Callable[..., int]
 DemoPupillaryLightReflexRunner = Callable[..., int]
 CheckEyeTrackerRunner = Callable[..., int]
+FindEyeTrackerRunner = Callable[..., int]
 RunActivityMonitoringRunner = Callable[..., int]
 RunSocialInteractiveRunner = Callable[..., int]
 RunStaticSocialScenesRunner = Callable[..., int]
@@ -84,6 +89,35 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
         help=f"BIDS dataset root directory to write. Defaults to {config.data_root / 'bids'}.",
     )
 
+    config_parser = subparsers.add_parser(
+        "config",
+        help=f"Show or edit the ARIA-ET config at {default_config_path()}.",
+    )
+    config_actions = config_parser.add_subparsers(dest="config_action", required=True)
+    config_actions.add_parser("show", help="Print the config file path and contents.")
+    config_set = config_actions.add_parser("set", help="Set a config value.")
+    config_set.add_argument("key", choices=sorted(CONFIG_KEYS), metavar="KEY")
+    config_set.add_argument("value")
+    config_get = config_actions.add_parser("get", help="Print a config value.")
+    config_get.add_argument("key", choices=sorted(CONFIG_KEYS), metavar="KEY")
+    config_unset = config_actions.add_parser("unset", help="Remove a config value.")
+    config_unset.add_argument("key", choices=sorted(CONFIG_KEYS), metavar="KEY")
+
+    find_eyetracker = subparsers.add_parser(
+        "find-eyetracker",
+        help="Discover connected Tobii trackers and optionally save one to the config.",
+    )
+    find_eyetracker.add_argument(
+        "--save",
+        action="store_true",
+        help="Save the discovered tracker's address and serial number to the config.",
+    )
+    find_eyetracker.add_argument(
+        "--serial-number",
+        default=None,
+        help="With --save, the serial number of the tracker to save when several are found.",
+    )
+
     check_eyetracker = subparsers.add_parser(
         "check-eyetracker",
         help="Check Tobii SDK availability and connected eye tracker discovery.",
@@ -91,7 +125,10 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
     check_eyetracker.add_argument(
         "--address",
         default=None,
-        help="Optional Tobii tracker URI to connect to directly, bypassing discovery.",
+        help=(
+            "Tobii tracker URI to connect to. Defaults to the tracker saved in "
+            "the ARIA-ET config (tobii.address), else discovery."
+        ),
     )
 
     calibrate_eyetracker = subparsers.add_parser(
@@ -107,7 +144,10 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
     calibrate_eyetracker.add_argument(
         "--address",
         default=None,
-        help="Optional Tobii tracker URI to calibrate directly.",
+        help=(
+            "Tobii tracker URI to calibrate. Defaults to the tracker saved in "
+            "the ARIA-ET config, else discovery."
+        ),
     )
     calibrate_eyetracker.add_argument(
         "--serial-number",
@@ -460,6 +500,7 @@ def main(
     demo_static_social_scenes_runner: DemoStaticSocialScenesRunner | None = None,
     demo_pupillary_light_reflex_runner: DemoPupillaryLightReflexRunner | None = None,
     check_eyetracker_runner: CheckEyeTrackerRunner | None = None,
+    find_eyetracker_runner: FindEyeTrackerRunner | None = None,
     run_activity_monitoring_runner: RunActivityMonitoringRunner | None = None,
     run_social_interactive_runner: RunSocialInteractiveRunner | None = None,
     run_static_social_scenes_runner: RunStaticSocialScenesRunner | None = None,
@@ -468,6 +509,9 @@ def main(
 ) -> int:
     config = load_config()
     args = build_parser(config).parse_args(argv)
+    tracker_address, tracker_serial_number = resolve_tracker(
+        getattr(args, "address", None), config
+    )
 
     if args.command == "list-tasks":
         for task in BATTERY_ORDER:
@@ -500,9 +544,38 @@ def main(
 
             runner = check_eyetracker
 
-        return runner(address=args.address)
+        if args.address is None:
+            if tracker_address is not None:
+                print(
+                    f"Using tracker saved in {default_config_path()}: "
+                    f"{tracker_address}."
+                )
+            else:
+                print(
+                    "No tracker is saved in the ARIA-ET config; discovering. "
+                    "Run `aria-et find-eyetracker --save` to save one."
+                )
+        return runner(address=tracker_address, serial_number=tracker_serial_number)
+
+    if args.command == "find-eyetracker":
+        runner = find_eyetracker_runner
+        if runner is None:
+            from aria_et.eyetracker import find_eyetracker
+
+            runner = find_eyetracker
+
+        return runner(save=args.save, serial_number=args.serial_number)
+
+    if args.command == "config":
+        return config_command(args)
 
     if args.command == "calibrate-eyetracker":
+        calibration_address, calibration_serial = args.address, args.serial_number
+        if calibration_address is None and calibration_serial is None:
+            # Prefer the saved serial number: it survives address changes.
+            calibration_serial = config.tracker_serial_number
+            if calibration_serial is None:
+                calibration_address = config.tracker_address
         calibration_output_dir = calibration_artifact_root(
             output_dir=args.output or default_sourcedata_root(config),
             subject=args.subject,
@@ -519,8 +592,8 @@ def main(
                 runner = run_child_friendly_eyetracker_calibration
 
             return runner(
-                address=args.address,
-                serial_number=args.serial_number,
+                address=calibration_address,
+                serial_number=calibration_serial,
                 screen=args.screen
                 if args.screen is not None
                 else config.psychopy_screen,
@@ -545,8 +618,8 @@ def main(
             runner = run_eyetracker_manager_calibration
 
         return runner(
-            address=args.address,
-            serial_number=args.serial_number,
+            address=calibration_address,
+            serial_number=calibration_serial,
             screen=args.screen if args.screen is not None else config.etm_screen,
             calibration_output_dir=calibration_output_dir,
             executable=args.manager,
@@ -613,7 +686,8 @@ def main(
 
         return runner(
             tracker=args.tracker,
-            tracker_address=args.address,
+            tracker_address=tracker_address,
+            tracker_serial_number=tracker_serial_number,
             output_dir=args.output or default_sourcedata_root(config),
             subject=args.subject,
             session=args.session,
@@ -665,7 +739,8 @@ def main(
 
         return runner(
             tracker=args.tracker,
-            tracker_address=args.address,
+            tracker_address=tracker_address,
+            tracker_serial_number=tracker_serial_number,
             output_dir=args.output or default_sourcedata_root(config),
             subject=args.subject,
             session=args.session,
@@ -719,7 +794,8 @@ def main(
 
         return runner(
             tracker=args.tracker,
-            tracker_address=args.address,
+            tracker_address=tracker_address,
+            tracker_serial_number=tracker_serial_number,
             output_dir=args.output or default_sourcedata_root(config),
             subject=args.subject,
             session=args.session,
@@ -773,7 +849,8 @@ def main(
 
         return runner(
             tracker=args.tracker,
-            tracker_address=args.address,
+            tracker_address=tracker_address,
+            tracker_serial_number=tracker_serial_number,
             output_dir=args.output or default_sourcedata_root(config),
             subject=args.subject,
             session=args.session,
@@ -811,7 +888,10 @@ def _add_run_presentation_arguments(
     parser.add_argument(
         "--address",
         default=None,
-        help="Optional Tobii tracker URI to connect to directly, bypassing discovery.",
+        help=(
+            "Tobii tracker URI to connect to. Defaults to the tracker saved in "
+            "the ARIA-ET config (tobii.address), else discovery."
+        ),
     )
     parser.add_argument(
         "--output",
@@ -915,6 +995,52 @@ def calibration_artifact_root(
         bids_subject_session_dir(output_dir, subject=subject, session=session)
         / "calibrations"
     )
+
+
+def resolve_tracker(
+    address: str | None, config: AriaEtConfig
+) -> tuple[str | None, str | None]:
+    """Return the tracker address and serial number to connect with.
+
+    An explicit ``--address`` wins. Otherwise the tracker saved in the config
+    is used, and its serial number lets the connection survive address
+    changes. With neither, both are None and discovery picks the tracker.
+    """
+    if address is not None:
+        return address, None
+    return config.tracker_address, config.tracker_serial_number
+
+
+def config_command(args: argparse.Namespace) -> int:
+    config_path = default_config_path()
+    if args.config_action == "show":
+        print(f"ARIA-ET config: {config_path}")
+        if not config_path.exists():
+            print("(not created yet; built-in defaults are in use)")
+            return 0
+        print(config_path.read_text(encoding="utf-8"), end="")
+        return 0
+
+    if args.config_action == "get":
+        value = get_config_value(args.key)
+        if value is None:
+            print(f"{args.key} is not set.", file=sys.stderr)
+            return 1
+        print(value)
+        return 0
+
+    if args.config_action == "set":
+        try:
+            set_config(args.key, args.value)
+        except TypeError as error:
+            print(error, file=sys.stderr)
+            return 2
+        print(f"Set {args.key} = {get_config_value(args.key)} in {config_path}.")
+        return 0
+
+    unset_config(args.key)
+    print(f"Unset {args.key} in {config_path}.")
+    return 0
 
 
 def init_config_file(path: str | Path | None = None, *, force: bool = False) -> int:

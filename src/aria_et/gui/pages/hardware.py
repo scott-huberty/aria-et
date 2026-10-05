@@ -19,20 +19,40 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from aria_et.gui.state import ExitSeverity, build_check_args, describe_exit_code
+from aria_et.config import AriaEtConfig, load_config
+from aria_et.gui.state import (
+    ExitSeverity,
+    build_check_args,
+    build_save_tracker_args,
+    describe_exit_code,
+)
 from aria_et.gui.widgets.status_pill import PillTone, StatusPill
 
-DEFAULT_TRACKER_ADDRESS = "tobii-prp://169.254.10.180"
+ADDRESS_PLACEHOLDER = "tobii-prp://169.254.x.x"
 
 TROUBLESHOOTING_TEXT = (
     "Confirm the tracker is powered on, confirm the Ethernet link is up, and "
-    "allow a minute for the link-local address to be assigned. Then tick "
-    "“Connect directly to this address” and retry."
+    "allow a minute for the link-local address to be assigned. If you know "
+    "the tracker's address, tick “Connect to this address instead” and retry."
+)
+
+NO_SAVED_TRACKER_TEXT = (
+    "No tracker is saved for this laptop yet. Click “Check tracker” to find "
+    "it, then “Save as this laptop's tracker”."
 )
 
 _TRACKER_LINE = re.compile(
     r"^\s*\d+\.\s*(?P<name>.+?)\s+model=(?P<model>.+?)"
-    r"\s+serial=(?P<serial>\S+)\s+address=(?P<address>\S+)\s*$"
+    r"\s+serial=(?P<serial>\S+)\s+address=(?P<address>\S+)"
+    r"(?:\s+firmware=(?P<firmware>\S+))?\s*$"
+)
+
+_COLUMNS = (
+    ("name", "Name"),
+    ("model", "Model"),
+    ("serial", "Serial"),
+    ("address", "Address"),
+    ("firmware", "Firmware"),
 )
 
 
@@ -42,16 +62,31 @@ def parse_tracker_lines(lines: list[str]) -> list[dict[str, str]]:
     for line in lines:
         match = _TRACKER_LINE.match(line)
         if match is not None:
-            trackers.append(match.groupdict())
+            tracker = match.groupdict()
+            tracker["firmware"] = tracker["firmware"] or "unknown"
+            trackers.append(tracker)
     return trackers
+
+
+def saved_tracker_text(config: AriaEtConfig) -> str:
+    if not config.tracker_address and not config.tracker_serial_number:
+        return NO_SAVED_TRACKER_TEXT
+    return (
+        "Saved tracker for this laptop: "
+        f"{config.tracker_serial_number or 'unknown serial'} at "
+        f"{config.tracker_address or 'unknown address'}."
+    )
 
 
 class HardwarePage(QWidget):
     check_requested = Signal(list)
+    save_requested = Signal(list)
 
-    def __init__(self, parent=None):
+    def __init__(self, config: AriaEtConfig | None = None, parent=None):
         super().__init__(parent)
+        self._config = config or load_config()
         self._output_lines: list[str] = []
+        self._trackers: list[dict[str, str]] = []
         self._connected = False
 
         heading = QLabel("Hardware")
@@ -67,23 +102,34 @@ class HardwarePage(QWidget):
         status_row.addStretch(1)
         status_row.addWidget(self._check_button)
 
-        self._address_field = QLineEdit(DEFAULT_TRACKER_ADDRESS)
-        self._use_address = QCheckBox(
-            "Connect directly to this address (skip discovery)"
-        )
+        self._saved_tracker = QLabel()
+        self._saved_tracker.setObjectName("HelperText")
+        self._saved_tracker.setWordWrap(True)
+
+        self._address_field = QLineEdit(self._config.tracker_address or "")
+        self._address_field.setPlaceholderText(ADDRESS_PLACEHOLDER)
+        self._use_address = QCheckBox("Connect to this address instead")
 
         self._message = QLabel()
         self._message.setObjectName("HelperText")
         self._message.setWordWrap(True)
 
-        self._table = QTableWidget(0, 4)
-        self._table.setHorizontalHeaderLabels(["Name", "Model", "Serial", "Address"])
+        self._table = QTableWidget(0, len(_COLUMNS))
+        self._table.setHorizontalHeaderLabels([label for _, label in _COLUMNS])
         self._table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch
         )
         self._table.verticalHeader().setVisible(False)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self._table.itemSelectionChanged.connect(self._refresh_save_button)
         self._table.setVisible(False)
+
+        self._save_button = QPushButton("Save as this laptop's tracker")
+        self._save_button.clicked.connect(self._request_save)
+        self._save_button.setVisible(False)
+        self._refresh_saved_tracker()
 
         card = QFrame()
         card.setObjectName("Card")
@@ -94,11 +140,13 @@ class HardwarePage(QWidget):
         address_heading.setObjectName("SubsectionHeading")
 
         card_layout.addLayout(status_row)
+        card_layout.addWidget(self._saved_tracker)
         card_layout.addWidget(address_heading)
         card_layout.addWidget(self._address_field)
         card_layout.addWidget(self._use_address)
         card_layout.addWidget(self._message)
         card_layout.addWidget(self._table)
+        card_layout.addWidget(self._save_button, 0, Qt.AlignmentFlag.AlignRight)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 18, 20, 18)
@@ -116,9 +164,50 @@ class HardwarePage(QWidget):
             return self._address_field.text().strip() or None
         return None
 
+    def _selected_tracker(self) -> dict[str, str] | None:
+        """The selected row, or the only discovered tracker."""
+        rows = {index.row() for index in self._table.selectedIndexes()}
+        if len(rows) == 1:
+            return self._trackers[rows.pop()]
+        if len(self._trackers) == 1:
+            return self._trackers[0]
+        return None
+
+    def report_save_exit(self, exit_code: int) -> None:
+        self._config = load_config()
+        self._refresh_saved_tracker()
+        self._refresh_save_button()
+        if exit_code == 0:
+            self._address_field.setText(self._config.tracker_address or "")
+            self._use_address.setChecked(False)
+        else:
+            self._message.setText("Saving the tracker failed. See the log for details.")
+
+    def _refresh_saved_tracker(self) -> None:
+        self._saved_tracker.setText(saved_tracker_text(self._config))
+
+    def _refresh_save_button(self) -> None:
+        tracker = self._selected_tracker()
+        already_saved = tracker is not None and (
+            tracker["serial"] == self._config.tracker_serial_number
+            and tracker["address"] == self._config.tracker_address
+        )
+        self._save_button.setVisible(bool(self._trackers))
+        self._save_button.setEnabled(tracker is not None and not already_saved)
+
+    def _request_save(self) -> None:
+        tracker = self._selected_tracker()
+        if tracker is None:
+            self._message.setText("Select the tracker to save.")
+            return
+        self._save_button.setEnabled(False)
+        self.save_requested.emit(build_save_tracker_args(tracker["serial"]))
+
     def _request_check(self) -> None:
         self._output_lines = []
+        self._trackers = []
         self._connected = False
+        self._save_button.setVisible(False)
         self._table.setVisible(False)
         self._message.setText("")
         self._pill.set_status("Checking", PillTone.BUSY)
@@ -163,10 +252,12 @@ class HardwarePage(QWidget):
         self._message.setText(message)
 
     def _populate_table(self, trackers: list[dict[str, str]]) -> None:
+        self._trackers = trackers
         self._table.setRowCount(len(trackers))
         for row, tracker in enumerate(trackers):
-            for column, key in enumerate(("name", "model", "serial", "address")):
+            for column, (key, _label) in enumerate(_COLUMNS):
                 item = QTableWidgetItem(tracker[key])
                 item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter)
                 self._table.setItem(row, column, item)
         self._table.setVisible(bool(trackers))
+        self._refresh_save_button()

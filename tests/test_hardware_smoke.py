@@ -8,13 +8,26 @@ from pathlib import Path
 import pytest
 
 
-pytestmark = [
-    pytest.mark.requires_eyetracker,
-    pytest.mark.skipif(
-        os.environ.get("ARIA_ET_HARDWARE") != "1",
-        reason="Set ARIA_ET_HARDWARE=1 to run Tobii hardware smoke tests.",
-    ),
-]
+from aria_et.config import load_config
+
+pytestmark = pytest.mark.requires_eyetracker
+
+
+@pytest.fixture(autouse=True)
+def isolated_home():
+    """Use the real home so the laptop's saved tracker config is visible."""
+
+
+def _tracker_address_args() -> list[str]:
+    """Explicit ``--address`` from the environment, else rely on the config."""
+    address = os.environ.get("ARIA_ET_TRACKER_ADDRESS")
+    return ["--address", address] if address else []
+
+
+def _expected_serial_number() -> str | None:
+    if os.environ.get("ARIA_ET_TRACKER_ADDRESS"):
+        return os.environ.get("ARIA_ET_TRACKER_SERIAL")
+    return os.environ.get("ARIA_ET_TRACKER_SERIAL") or load_config().tracker_serial_number
 
 
 TASKS = [
@@ -54,26 +67,33 @@ def _gzip_line_count(path: Path) -> int:
 
 
 def test_check_eyetracker_hardware_smoke():
-    tracker_address = _env_value(
-        "ARIA_ET_TRACKER_ADDRESS",
-        "tobii-prp://169.254.10.180",
-    )
-
     output = _run_command(
         [
             sys.executable,
             "-m",
             "aria_et.cli",
             "check-eyetracker",
-            "--address",
-            tracker_address,
+            *_tracker_address_args(),
         ],
         timeout=30,
     )
 
     assert "Tobii Pro SDK" in output
-    assert "Connected to Tobii eye tracker" in output
     assert "Found 1 Tobii eye tracker" in output
+    serial_number = _expected_serial_number()
+    if serial_number is not None:
+        assert f"serial={serial_number}" in output
+
+
+def test_find_eyetracker_hardware_smoke():
+    output = _run_command(
+        [sys.executable, "-m", "aria_et.cli", "find-eyetracker"],
+        timeout=30,
+    )
+
+    assert "Tobii Pro SDK" in output
+    assert "Tobii eye tracker" in output
+    assert "address=tobii-prp://" in output
 
 
 @pytest.mark.parametrize(
@@ -87,10 +107,6 @@ def test_task_acquisition_and_bids_export_hardware_smoke(
     task_id,
     task_label,
 ):
-    tracker_address = _env_value(
-        "ARIA_ET_TRACKER_ADDRESS",
-        "tobii-prp://169.254.10.180",
-    )
     subject = _env_value("ARIA_ET_SMOKE_SUBJECT", "smoke")
     session = _env_value("ARIA_ET_SMOKE_SESSION", "hardware")
     screen = _env_value("ARIA_ET_PSYCHOPY_SCREEN", "1")
@@ -111,8 +127,7 @@ def test_task_acquisition_and_bids_export_hardware_smoke(
             command_name,
             "--tracker",
             "tobii",
-            "--address",
-            tracker_address,
+            *_tracker_address_args(),
             "--output",
             str(output_root),
             "--subject",

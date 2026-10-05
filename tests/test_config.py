@@ -1,6 +1,63 @@
 import pytest
 
-from aria_et.config import load_config
+import aria_et
+from aria_et.config import (
+    default_config_path,
+    get_config_value,
+    load_config,
+    set_config,
+    unset_config,
+)
+
+
+def test_set_config_creates_missing_file_with_defaults(tmp_path):
+    config = aria_et.set_config("tobii.address", "tobii-prp://169.254.10.180")
+
+    assert default_config_path().exists()
+    assert config.tracker_address == "tobii-prp://169.254.10.180"
+    assert config.tracker_serial_number is None
+    assert config.monitor_name == "EIZO_EV2480"
+    assert load_config().tracker_address == "tobii-prp://169.254.10.180"
+
+
+def test_set_config_round_trips_and_keeps_other_values(tmp_path):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "[display]\npsychopy_screen = 3\n\n[tobii]\neye_tracker_manager = 'C:\\ETM\\etm.exe'\n",
+        encoding="utf-8",
+    )
+
+    set_config("tobii.serial_number", "TPSP1-010214213025", config_path)
+    config = set_config("display.screen_distance_meters", "0.7", config_path)
+
+    assert config.psychopy_screen == 3
+    assert config.eye_tracker_manager == "C:\\ETM\\etm.exe"
+    assert config.tracker_serial_number == "TPSP1-010214213025"
+    assert config.screen_distance_meters == 0.7
+    assert get_config_value("tobii.serial_number", config_path) == "TPSP1-010214213025"
+
+
+def test_set_config_coerces_and_validates_types(tmp_path):
+    config_path = tmp_path / "config.toml"
+
+    assert set_config("display.etm_screen", "4", config_path).etm_screen == 4
+    with pytest.raises(TypeError, match="display.etm_screen"):
+        set_config("display.etm_screen", "two", config_path)
+
+
+def test_set_config_rejects_unknown_keys(tmp_path):
+    with pytest.raises(KeyError, match="tobii.adress"):
+        set_config("tobii.adress", "x", tmp_path / "config.toml")
+
+
+def test_unset_config_removes_value(tmp_path):
+    config_path = tmp_path / "config.toml"
+    set_config("tobii.address", "tobii-prp://169.254.10.180", config_path)
+
+    config = unset_config("tobii.address", config_path)
+
+    assert config.tracker_address is None
+    assert get_config_value("tobii.address", config_path) is None
 
 
 def test_load_config_uses_defaults_when_file_is_missing(tmp_path):

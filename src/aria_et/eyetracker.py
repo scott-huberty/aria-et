@@ -52,16 +52,39 @@ def load_tobii_research(
 def open_eyetracker(
     *,
     address: str | None = None,
+    serial_number: str | None = None,
     import_module: ImportModule = importlib.import_module,
+    error_sink: StatusSink | None = None,
 ) -> object:
+    """Open a tracker by address, falling back to discovery by serial number.
+
+    Link-local tracker addresses can change, so when ``address`` cannot be
+    opened and ``serial_number`` is known, the tracker with that serial number
+    is looked up by discovery instead.
+    """
     tobii_research = load_tobii_research(import_module=import_module)
     if address is not None:
         try:
             return tobii_research.EyeTracker(address)
         except Exception as error:
-            raise TobiiTrackerUnavailableError(
-                f"No Tobii eye tracker could be opened at {address}: {error}"
-            ) from error
+            if serial_number is None:
+                raise TobiiTrackerUnavailableError(
+                    f"No Tobii eye tracker could be opened at {address}: {error}"
+                ) from error
+            eyetracker = _find_by_serial_number(tobii_research, serial_number)
+            if eyetracker is None:
+                raise TobiiTrackerUnavailableError(
+                    f"No Tobii eye tracker could be opened at {address} "
+                    f"({error}), and no tracker with serial number "
+                    f"{serial_number} was found by discovery."
+                ) from error
+            warn = error_sink or (lambda message: print(message, file=sys.stderr))
+            warn(
+                f"Warning: tracker {serial_number} was not reachable at {address} "
+                f"but was found at {eyetracker.address}. Run "
+                "`aria-et find-eyetracker --save` to update the saved address."
+            )
+            return eyetracker
 
     eyetrackers = tobii_research.find_all_eyetrackers()
     if not eyetrackers:
@@ -69,12 +92,28 @@ def open_eyetracker(
             "No Tobii eye tracker was found. Connect and power on the tracker."
         )
 
+    if serial_number is not None:
+        for eyetracker in eyetrackers:
+            if eyetracker.serial_number == serial_number:
+                return eyetracker
+        raise TobiiTrackerUnavailableError(
+            f"No Tobii eye tracker with serial number {serial_number} was found."
+        )
+
     return eyetrackers[0]
+
+
+def _find_by_serial_number(tobii_research: ModuleType, serial_number: str):
+    for eyetracker in tobii_research.find_all_eyetrackers():
+        if eyetracker.serial_number == serial_number:
+            return eyetracker
+    return None
 
 
 def check_eyetracker(
     *,
     address: str | None = None,
+    serial_number: str | None = None,
     import_module: ImportModule = importlib.import_module,
     output_sink: StatusSink | None = None,
     error_sink: StatusSink | None = None,
@@ -93,14 +132,17 @@ def check_eyetracker(
         try:
             eyetracker = open_eyetracker(
                 address=address,
+                serial_number=serial_number,
                 import_module=import_module,
+                error_sink=error,
             )
         except TobiiTrackerUnavailableError as error_message:
             error(str(error_message))
             return 3
 
-        output(f"Connected to Tobii eye tracker at {address}.")
+        output(f"Connected to Tobii eye tracker at {eyetracker.address}.")
         _report_eyetrackers((eyetracker,), output)
+        _warn_on_serial_mismatch(eyetracker, serial_number, error)
         return 0
 
     eyetrackers = tobii_research.find_all_eyetrackers()
@@ -110,6 +152,86 @@ def check_eyetracker(
 
     _report_eyetrackers(eyetrackers, output)
     return 0
+
+
+def find_eyetracker(
+    *,
+    save: bool = False,
+    serial_number: str | None = None,
+    config_path: str | Path | None = None,
+    import_module: ImportModule = importlib.import_module,
+    output_sink: StatusSink | None = None,
+    error_sink: StatusSink | None = None,
+) -> int:
+    """Discover connected trackers and optionally save one to the user config."""
+    from aria_et.config import load_config, set_config
+
+    output = output_sink or print
+    error = error_sink or (lambda message: print(message, file=sys.stderr))
+
+    try:
+        tobii_research = load_tobii_research(import_module=import_module)
+    except TobiiSdkUnavailableError as error_message:
+        error(str(error_message))
+        return 2
+
+    output(f"Tobii Pro SDK {tobii_research.__version__} is available.")
+    eyetrackers = tuple(tobii_research.find_all_eyetrackers())
+    if not eyetrackers:
+        error("No Tobii eye tracker was found. Connect and power on the tracker.")
+        return 3
+    _report_eyetrackers(eyetrackers, output)
+
+    config = load_config(config_path)
+    if config.tracker_address or config.tracker_serial_number:
+        output(
+            "Saved tracker for this laptop: "
+            f"serial={config.tracker_serial_number or 'unset'} "
+            f"address={config.tracker_address or 'unset'}"
+        )
+    else:
+        output("No tracker is saved for this laptop yet.")
+
+    if not save:
+        if not config.tracker_address:
+            output("Run `aria-et find-eyetracker --save` to save it.")
+        return 0
+
+    if serial_number is not None:
+        selected = [e for e in eyetrackers if e.serial_number == serial_number]
+        if not selected:
+            error(f"No Tobii eye tracker with serial number {serial_number} was found.")
+            return 3
+    elif len(eyetrackers) > 1:
+        error(
+            "More than one Tobii eye tracker was found. Pass --serial-number "
+            "to choose which one to save."
+        )
+        return 4
+    else:
+        selected = list(eyetrackers)
+
+    eyetracker = selected[0]
+    set_config("tobii.address", eyetracker.address, config_path)
+    set_config("tobii.serial_number", eyetracker.serial_number, config_path)
+    output(
+        f"Saved tracker {eyetracker.serial_number} at {eyetracker.address} "
+        "to the ARIA-ET config."
+    )
+    return 0
+
+
+def _warn_on_serial_mismatch(
+    eyetracker: object,
+    serial_number: str | None,
+    error: StatusSink,
+) -> None:
+    if serial_number is not None and eyetracker.serial_number != serial_number:
+        error(
+            f"Warning: connected tracker has serial number "
+            f"{eyetracker.serial_number}, but {serial_number} is saved for this "
+            "laptop. Run `aria-et find-eyetracker --save` if the tracker changed."
+        )
 
 
 def _report_eyetrackers(
@@ -124,7 +246,8 @@ def _report_eyetrackers(
             f"{index}. {getattr(eyetracker, 'device_name', eyetracker.model)} "
             f"model={eyetracker.model} "
             f"serial={eyetracker.serial_number} "
-            f"address={eyetracker.address}"
+            f"address={eyetracker.address} "
+            f"firmware={getattr(eyetracker, 'firmware_version', 'unknown')}"
         )
 
 
@@ -375,10 +498,15 @@ def create_tobii_gaze_recorder(
     tracker_metadata_path: str | Path,
     writer_health_path: str | Path | None = None,
     address: str | None = None,
+    serial_number: str | None = None,
     import_module: ImportModule = importlib.import_module,
 ) -> TobiiGazeRecorder:
     tobii_research = load_tobii_research(import_module=import_module)
-    eyetracker = open_eyetracker(address=address, import_module=import_module)
+    eyetracker = open_eyetracker(
+        address=address,
+        serial_number=serial_number,
+        import_module=import_module,
+    )
     return TobiiGazeRecorder(
         eyetracker=eyetracker,
         tobii_research=tobii_research,

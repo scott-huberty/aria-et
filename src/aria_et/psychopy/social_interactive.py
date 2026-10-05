@@ -330,6 +330,7 @@ def run_social_interactive_session(
     output_dir: str | Path,
     subject: str,
     tracker_address: str | None = None,
+    tracker_serial_number: str | None = None,
     session: str | None = None,
     run: str | None = None,
     fullscreen: bool = False,
@@ -401,6 +402,7 @@ def run_social_interactive_session(
         task_id="social-interactive",
         tracker=tracker,
         tracker_address=tracker_address,
+        tracker_serial_number=tracker_serial_number,
         output_dir=output_dir,
         bids=_bids_metadata(subject, session, run),
         stimulus_display=_stimulus_display_metadata(

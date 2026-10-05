@@ -56,6 +56,7 @@ Observed Validated Stack
    * - Tracker address
      - ``tobii-prp://169.254.10.180``
      - Auto-IP address observed during validation; this can change across boots.
+       Each site saves its own tracker with ``aria-et find-eyetracker --save``.
    * - Stimulus display
      - EIZO / ``EV2480`` observed in PsychoPy logs
      - Production runs target PsychoPy ``screen=1`` in fullscreen mode.

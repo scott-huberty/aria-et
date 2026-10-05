@@ -21,6 +21,7 @@ def test_parse_tracker_lines_extracts_the_discovered_tracker():
             "model": "Tobii Pro Spectrum",
             "serial": "TPSP1-010214213025",
             "address": "tobii-prp://169.254.10.180",
+            "firmware": "unknown",
         }
     ]
 
