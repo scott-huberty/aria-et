@@ -139,6 +139,43 @@ def test_export_emits_args_the_cli_accepts(qapp, config, session):
     ]
 
 
+def test_export_rescans_for_runs_recorded_after_the_session_opened(
+    qapp, config, session
+):
+    # The session opens before any task runs, so the first scan is empty.
+    page = ExportPage(config)
+    page.set_session(session)
+    assert page._boxes == []
+
+    _write_run(
+        session, "activity-monitoring", "01", events=_complete("activity-monitoring")
+    )
+    page.show()  # navigating to the Export page
+
+    assert [c.run.task_id for c in page.selected_candidates()] == [
+        "activity-monitoring"
+    ]
+    page.hide()
+
+
+def test_export_does_not_rescan_mid_export(qapp, config, session):
+    _write_run(
+        session, "activity-monitoring", "01", events=_complete("activity-monitoring")
+    )
+    page = ExportPage(config)
+    page.set_session(session)
+    page._start_export()
+    _write_run(
+        session, "social-interactive", "01", events=_complete("social-interactive")
+    )
+
+    page.show()
+
+    assert len(page._boxes) == 1
+    assert not page._export_button.isEnabled()
+    page.hide()
+
+
 def test_export_runs_the_selection_one_at_a_time(qapp, config, session):
     _write_run(
         session, "activity-monitoring", "01", events=_complete("activity-monitoring")

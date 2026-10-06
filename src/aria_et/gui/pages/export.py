@@ -281,6 +281,14 @@ class ExportPage(QWidget):
 
     # -- rendering --------------------------------------------------------
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # Runs are recorded after the session opens, so rescan each time the
+        # page is navigated to. Skip a window restore (spontaneous) so it
+        # doesn't reset the operator's selection, and never rescan mid-export.
+        if not event.spontaneous() and self._active is None and not self._queue:
+            self.refresh()
+
     def refresh(self) -> None:
         while self._runs_layout.count():
             item = self._runs_layout.takeAt(0)
