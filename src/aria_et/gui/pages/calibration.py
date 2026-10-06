@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import Signal
@@ -9,6 +10,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
     QFrame,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -31,6 +33,13 @@ CHILD_FRIENDLY_ROUTINE = "child-friendly"
 
 ESCAPE_NOTE = (
     "Child-friendly calibration accepts Escape to abort. The four task runners do not."
+)
+
+EDIT_SETTINGS_TEXT = "Change settings"
+LOCK_SETTINGS_TEXT = "Lock settings"
+CUSTOM_SETTINGS_NOTICE = (
+    "Custom calibration settings are in use. Restore defaults before "
+    "collecting data unless you mean to change them."
 )
 
 NO_HISTORY_TEXT = "No calibrations yet for this session."
@@ -96,20 +105,36 @@ class CalibrationPage(QWidget):
         routine_layout.addWidget(self._manager_label)
         routine_layout.addWidget(self._manager_warning)
 
-        self._child_options, child_layout = _card("Child-friendly options")
+        settings_card, settings_layout = _card("Settings")
+        # Production calibrations want the defaults, so the fields start locked
+        # and must be unlocked deliberately, as on the Battery page.
+        self._settings_fields = QWidget()
+        self._settings_fields.setObjectName("CardFields")
+        fields_layout = QVBoxLayout(self._settings_fields)
+        fields_layout.setContentsMargins(0, 0, 0, 0)
+        fields_layout.setSpacing(6)
+
+        self._screen = WheelSafeSpinBox()
+        self._screen.setRange(0, 8)
+        screen_form = QFormLayout()
+        screen_form.setVerticalSpacing(6)
+        screen_form.addRow("Screen", self._screen)
+        fields_layout.addLayout(screen_form)
+
+        self._child_options = QWidget()
+        child_layout = QVBoxLayout(self._child_options)
+        child_layout.setContentsMargins(0, 0, 0, 0)
+        child_layout.setSpacing(6)
         child_form = QFormLayout()
         child_form.setVerticalSpacing(6)
         self._point_duration = WheelSafeDoubleSpinBox()
         self._point_duration.setRange(0.5, 30.0)
         self._point_duration.setSingleStep(0.5)
-        self._point_duration.setValue(3.0)
         self._point_duration.setSuffix(" s")
-        self._advance_on_space = QCheckBox("Advance on space")
+        self._advance_on_space = QCheckBox("Wait for space after each point")
         self._fullscreen = QCheckBox("Fullscreen")
-        self._fullscreen.setChecked(True)
-        self._window_size = QLineEdit("1024x768")
+        self._window_size = QLineEdit()
         self._sound = QCheckBox("Play sound")
-        self._sound.setChecked(True)
         self._debug_render = QCheckBox("Debug render overlay")
         child_form.addRow("Point duration", self._point_duration)
         child_form.addRow("Advance", self._advance_on_space)
@@ -119,16 +144,44 @@ class CalibrationPage(QWidget):
         child_form.addRow("Diagnostics", self._debug_render)
         child_layout.addLayout(child_form)
         child_layout.addWidget(_helper(ESCAPE_NOTE))
+        fields_layout.addWidget(self._child_options)
+        settings_layout.addWidget(self._settings_fields)
+
+        self._custom_notice = QLabel(CUSTOM_SETTINGS_NOTICE)
+        self._custom_notice.setObjectName("ModeBanner")
+        self._custom_notice.setWordWrap(True)
+        settings_layout.addWidget(self._custom_notice)
+
+        self._edit_settings_button = QPushButton(EDIT_SETTINGS_TEXT)
+        self._edit_settings_button.clicked.connect(self._toggle_settings_lock)
+        self._restore_defaults_button = QPushButton("Restore defaults")
+        self._restore_defaults_button.clicked.connect(self._restore_defaults)
+        settings_buttons = QHBoxLayout()
+        settings_buttons.addWidget(self._edit_settings_button)
+        settings_buttons.addWidget(self._restore_defaults_button)
+        settings_buttons.addStretch(1)
+        settings_layout.addLayout(settings_buttons)
+
+        # Fullscreen ignores the window size, so don't let it look editable.
+        self._fullscreen.toggled.connect(self._sync_window_size_enabled)
+        for changed in (
+            self._screen.valueChanged,
+            self._point_duration.valueChanged,
+            self._advance_on_space.toggled,
+            self._fullscreen.toggled,
+            self._window_size.textChanged,
+            self._sound.toggled,
+            self._debug_render.toggled,
+        ):
+            changed.connect(self._sync_settings_state)
 
         tracker_card, tracker_layout = _card("Tracker")
-        self._screen = WheelSafeSpinBox()
-        self._screen.setRange(0, 8)
-        self._screen.setValue(config.etm_screen)
         self._serial = QLineEdit()
-        self._serial.setPlaceholderText("Optional — leave blank to auto-detect")
+        self._serial.setPlaceholderText(
+            "Optional — leave blank to use the saved tracker"
+        )
         tracker_form = QFormLayout()
         tracker_form.setVerticalSpacing(6)
-        tracker_form.addRow("Screen", self._screen)
         tracker_form.addRow("Serial number", self._serial)
         tracker_layout.addLayout(tracker_form)
 
@@ -149,7 +202,7 @@ class CalibrationPage(QWidget):
         layout.setSpacing(14)
         layout.addWidget(heading)
         layout.addWidget(routine_card)
-        layout.addWidget(self._child_options)
+        layout.addWidget(settings_card)
         layout.addWidget(tracker_card)
         layout.addWidget(history_card)
         layout.addStretch(1)
@@ -192,9 +245,66 @@ class CalibrationPage(QWidget):
             build_calibrate_args(self._session, self.calibration_options())
         )
 
+    def default_calibration_options(self) -> CalibrationOptions:
+        """Production settings for the selected routine.
+
+        ETM and PsychoPy number displays differently, so each routine has its
+        own configured screen: ETM opens on ``etm_screen``, the child-friendly
+        PsychoPy window on ``psychopy_screen`` (the EIZO stimulus display).
+        """
+        routine = self.selected_routine()
+        manager, _ = resolve_manager_path(self._config)
+        return CalibrationOptions(
+            routine=routine,
+            manager=manager if routine == ETM_ROUTINE else None,
+            screen=(
+                self._config.etm_screen
+                if routine == ETM_ROUTINE
+                else self._config.psychopy_screen
+            ),
+        )
+
+    def _restore_defaults(self) -> None:
+        defaults = self.default_calibration_options()
+        self._screen.setValue(defaults.screen)
+        self._point_duration.setValue(defaults.point_duration_seconds)
+        self._advance_on_space.setChecked(defaults.advance_on_space)
+        self._fullscreen.setChecked(defaults.fullscreen)
+        self._window_size.setText(defaults.window_size)
+        self._sound.setChecked(defaults.play_sound)
+        self._debug_render.setChecked(defaults.debug_render)
+        self._set_settings_locked(True)
+
+    def _toggle_settings_lock(self) -> None:
+        self._set_settings_locked(self._settings_fields.isEnabled())
+
+    def _set_settings_locked(self, locked: bool) -> None:
+        self._settings_fields.setEnabled(not locked)
+        self._edit_settings_button.setText(
+            EDIT_SETTINGS_TEXT if locked else LOCK_SETTINGS_TEXT
+        )
+        self._sync_window_size_enabled()
+        self._sync_settings_state()
+
+    def _sync_window_size_enabled(self) -> None:
+        self._window_size.setEnabled(not self._fullscreen.isChecked())
+
+    def _sync_settings_state(self) -> None:
+        options = self.calibration_options()
+        defaults = self.default_calibration_options()
+        if self.selected_routine() == ETM_ROUTINE:
+            # Only the screen applies to ETM; hidden child options don't count.
+            customised = options.screen != defaults.screen
+        else:
+            customised = replace(options, serial_number=None) != defaults
+        self._custom_notice.setVisible(customised)
+        self._restore_defaults_button.setEnabled(customised)
+
     def _on_routine_changed(self) -> None:
         is_etm = self.selected_routine() == ETM_ROUTINE
         self._child_options.setVisible(not is_etm)
+        # Each routine has its own screen, so switching resets to its defaults.
+        self._restore_defaults()
         path, exists = resolve_manager_path(self._config)
         self._manager_label.setText(f"Manager executable: {path}")
         self._manager_label.setVisible(is_etm)

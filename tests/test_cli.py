@@ -477,6 +477,8 @@ def test_calibrate_eyetracker_child_friendly_defaults_to_psychopy_screen():
 
     assert exit_code == 0
     assert calls[0]["screen"] == 1
+    assert calls[0]["point_duration_seconds"] == 1.5
+    assert calls[0]["advance_on_space"] is False
 
 
 def test_cli_uses_user_config_defaults(tmp_path):

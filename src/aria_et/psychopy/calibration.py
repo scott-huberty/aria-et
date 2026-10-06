@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Protocol
 
 from aria_et.calibration import (
+    DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS,
     CalibrationPoint,
     CalibrationSequence,
     NormalizedPoint,
@@ -543,7 +544,7 @@ def run_child_friendly_eyetracker_calibration(
     monitor_name: str = "EIZO_EV2480",
     audio_speaker: str | None = None,
     play_sound: bool = True,
-    point_duration_seconds: float = 3.0,
+    point_duration_seconds: float = DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS,
     advance_on_space: bool = False,
     debug_render: bool = False,
     import_module: Callable[[str], object] = importlib.import_module,

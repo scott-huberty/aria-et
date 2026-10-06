@@ -9,6 +9,7 @@ from enum import Enum
 from pathlib import Path
 
 from aria_et import tasks
+from aria_et.calibration import DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS
 
 DRY_RUN_ENV_VAR = "ARIA_ET_ALLOW_DRY_RUN"
 DEFAULT_SESSION_LABEL = "01"
@@ -72,7 +73,7 @@ class CalibrationOptions:
     serial_number: str | None = None
     manager: str | None = None
     screen: int | None = None
-    point_duration_seconds: float = 3.0
+    point_duration_seconds: float = DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS
     advance_on_space: bool = False
     fullscreen: bool = True
     window_size: str = "1024x768"

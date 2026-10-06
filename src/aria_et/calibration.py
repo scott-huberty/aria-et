@@ -12,6 +12,8 @@ from aria_et.assets import (
 )
 
 DEFAULT_CALIBRATION_INSET = 0.1
+# Seconds each child-friendly calibration point is shown while data is collected.
+DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS = 1.5
 
 
 @dataclass(frozen=True)

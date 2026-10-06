@@ -8,6 +8,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
+from aria_et.calibration import DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS
 from aria_et.config import (
     CONFIG_KEYS,
     AriaEtConfig,
@@ -214,7 +215,7 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
     calibrate_eyetracker.add_argument(
         "--point-duration",
         type=float,
-        default=3.0,
+        default=DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS,
         help="Seconds to display each child-friendly calibration point.",
     )
     calibrate_eyetracker.add_argument(

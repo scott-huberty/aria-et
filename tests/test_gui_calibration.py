@@ -92,6 +92,75 @@ def test_calibration_reveals_child_options_for_the_child_routine(qapp, config):
     assert not page._manager_label.isVisibleTo(page)
 
 
+def test_calibration_screen_follows_the_routine(qapp):
+    config = AriaEtConfig(etm_screen=2, psychopy_screen=1)
+    page = CalibrationPage(config)
+
+    assert page.calibration_options().screen == 2
+
+    page._routine.setCurrentIndex(1)
+    # The child-friendly PsychoPy window must open on the EIZO display.
+    assert page.calibration_options().screen == 1
+
+    page._routine.setCurrentIndex(0)
+    assert page.calibration_options().screen == 2
+
+
+def test_child_friendly_defaults(qapp, config):
+    page = CalibrationPage(config)
+    page._routine.setCurrentIndex(1)
+
+    options = page.calibration_options()
+
+    assert options.point_duration_seconds == 1.5
+    # Waiting for space would stop the timed auto-advance, so it stays off.
+    assert options.advance_on_space is False
+    assert options.fullscreen is True
+    assert options.play_sound is True
+
+
+def test_calibration_settings_start_locked(qapp, config):
+    page = CalibrationPage(config)
+    page._routine.setCurrentIndex(1)
+
+    assert not page._settings_fields.isEnabled()
+    assert not page._custom_notice.isVisibleTo(page)
+    assert not page._restore_defaults_button.isEnabled()
+
+    page._edit_settings_button.click()
+    assert page._settings_fields.isEnabled()
+
+
+def test_custom_calibration_settings_show_a_notice_until_restored(qapp, config):
+    page = CalibrationPage(config)
+    page._routine.setCurrentIndex(1)
+    page._edit_settings_button.click()
+
+    page._point_duration.setValue(3.0)
+
+    assert page._custom_notice.isVisibleTo(page)
+    assert page._restore_defaults_button.isEnabled()
+
+    page._restore_defaults_button.click()
+
+    assert page.calibration_options().point_duration_seconds == 1.5
+    assert not page._custom_notice.isVisibleTo(page)
+    assert not page._settings_fields.isEnabled()
+
+
+def test_switching_routine_restores_and_locks_settings(qapp, config):
+    page = CalibrationPage(config)
+    page._routine.setCurrentIndex(1)
+    page._edit_settings_button.click()
+    page._point_duration.setValue(3.0)
+
+    page._routine.setCurrentIndex(0)
+    page._routine.setCurrentIndex(1)
+
+    assert page.calibration_options().point_duration_seconds == 1.5
+    assert not page._settings_fields.isEnabled()
+
+
 def test_calibration_needs_a_session_before_it_can_run(qapp, config):
     page = CalibrationPage(config)
 
@@ -174,6 +243,8 @@ def test_calibration_re_enables_its_button_after_a_refused_start(qapp, config, s
 @pytest.mark.parametrize("field", ["_routine", "_point_duration", "_screen"])
 def test_mouse_wheel_does_not_change_calibration_inputs(qapp, config, field):
     page = CalibrationPage(config)
+    page._routine.setCurrentIndex(1)
+    page._edit_settings_button.click()  # locked fields ignore input anyway
     widget = getattr(page, field)
 
     def current():
