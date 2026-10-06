@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -284,6 +285,122 @@ def test_export_bids_defaults_to_user_data_bids_root(tmp_path):
             "bids_root": tmp_path / "aria-et-data" / "bids",
         }
     ]
+
+
+def _write_run(session_dir, task_id, run_label, *, ended=True, tracker="tobii"):
+    run_dir = session_dir / f"task-{task_id}_run-{run_label}"
+    run_dir.mkdir(parents=True)
+    (run_dir / "session.json").write_text(
+        json.dumps({"tracker": tracker}), encoding="utf-8"
+    )
+    names = [f"{task_id}.started"] + ([f"{task_id}.ended"] if ended else [])
+    (run_dir / "events.jsonl").write_text(
+        "".join(json.dumps({"name": name}) + "\n" for name in names),
+        encoding="utf-8",
+    )
+    (run_dir / "gaze.jsonl").write_text('{"x": 0}\n', encoding="utf-8")
+    return run_dir
+
+
+def _fake_export(calls, fail_for=()):
+    def runner(*, run_dir, bids_root):
+        calls.append(Path(run_dir).name)
+        if Path(run_dir).name in fail_for:
+            raise ValueError("Run is missing bids.subject metadata.")
+        return SimpleNamespace(bids_root=Path(bids_root), written_files=())
+
+    return runner
+
+
+def test_export_bids_exports_every_complete_run_in_a_session_folder(tmp_path, capsys):
+    session_dir = tmp_path / "sourcedata" / "sub-01" / "ses-01"
+    _write_run(session_dir, "activity-monitoring", "01")
+    _write_run(session_dir, "social-interactive", "01", ended=False)
+    _write_run(session_dir, "static-social-scenes", "01", tracker="none")
+    (session_dir / "calibrations" / "calibration-1").mkdir(parents=True)
+    calls = []
+
+    exit_code = main(
+        ["export-bids", "--input", str(session_dir), "--output", str(tmp_path / "bids")],
+        export_bids_runner=_fake_export(calls),
+    )
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert calls == ["task-activity-monitoring_run-01"]
+    assert "Exported 1 of 3 run(s)" in out
+    assert "Skipped task-social-interactive_run-01 (incomplete)." in out
+    assert "Skipped task-static-social-scenes_run-01 (no gaze data)." in out
+    assert "--include-incomplete" in out
+
+
+def test_export_bids_include_incomplete_exports_unfinished_runs(tmp_path):
+    session_dir = tmp_path / "sub-01" / "ses-01"
+    _write_run(session_dir, "activity-monitoring", "01")
+    _write_run(session_dir, "social-interactive", "01", ended=False)
+    calls = []
+
+    main(
+        ["export-bids", "--input", str(session_dir), "--include-incomplete"],
+        export_bids_runner=_fake_export(calls),
+    )
+
+    assert calls == [
+        "task-activity-monitoring_run-01",
+        "task-social-interactive_run-01",
+    ]
+
+
+def test_export_bids_subject_folder_covers_every_session(tmp_path):
+    subject_dir = tmp_path / "sub-01"
+    _write_run(subject_dir / "ses-01", "activity-monitoring", "01")
+    _write_run(subject_dir / "ses-02", "activity-monitoring", "01")
+    calls = []
+
+    assert (
+        main(
+            ["export-bids", "--input", str(subject_dir)],
+            export_bids_runner=_fake_export(calls),
+        )
+        == 0
+    )
+    assert len(calls) == 2
+
+
+def test_export_bids_continues_after_a_failed_run(tmp_path, capsys):
+    session_dir = tmp_path / "sub-01" / "ses-01"
+    _write_run(session_dir, "activity-monitoring", "01")
+    _write_run(session_dir, "social-interactive", "01")
+    calls = []
+
+    exit_code = main(
+        ["export-bids", "--input", str(session_dir)],
+        export_bids_runner=_fake_export(
+            calls, fail_for={"task-activity-monitoring_run-01"}
+        ),
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert len(calls) == 2
+    assert "Exported 1 of 2 run(s)" in captured.out
+    assert "missing bids.subject" in captured.err
+    assert "Failed task-activity-monitoring_run-01." in captured.err
+
+
+def test_export_bids_reports_a_folder_without_runs(tmp_path, capsys):
+    exit_code = main(["export-bids", "--input", str(tmp_path)])
+
+    assert exit_code == 1
+    assert "No ARIA runs" in capsys.readouterr().err
+
+
+def test_export_bids_explains_a_folder_that_is_not_a_run(tmp_path, capsys):
+    # The real exporter: a missing session.json gets a message, not a traceback.
+    exit_code = main(["export-bids", "--input", str(tmp_path / "not-a-run")])
+
+    assert exit_code == 1
+    assert "is not an ARIA run folder" in capsys.readouterr().err
 
 
 def test_calibrate_eyetracker_invokes_manager_runner_with_production_defaults(tmp_path):

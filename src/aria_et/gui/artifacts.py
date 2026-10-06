@@ -116,6 +116,22 @@ def find_run_directories(
     return sorted(found, key=lambda run: (run.task_id, run.run_label))
 
 
+def find_run_directories_under(directory: Path) -> list[RunDirectory]:
+    """Every ``task-*_run-*`` folder below a session, subject or sourcedata folder."""
+    found = []
+    for child in directory.rglob("task-*_run-*"):
+        match = RUN_DIR_PATTERN.match(child.name)
+        if child.is_dir() and match is not None:
+            found.append(RunDirectory(child, match.group("task"), match.group("run")))
+    return sorted(found, key=lambda run: run.path)
+
+
+def is_run_directory(path: Path) -> bool:
+    return (path / SESSION_METADATA_NAME).is_file() or bool(
+        RUN_DIR_PATTERN.match(path.name)
+    )
+
+
 def classify_session(
     sourcedata_root: Path, subject: str, session: str
 ) -> SessionOpenState:

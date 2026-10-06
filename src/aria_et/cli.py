@@ -80,7 +80,18 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
         "--run-dir",
         dest="run_dir",
         required=True,
-        help="ARIA run directory containing session.json, events.jsonl, and gaze.jsonl.",
+        help=(
+            "An ARIA run folder (task-*_run-*), or a session, subject or "
+            "sourcedata folder to export every run inside it."
+        ),
+    )
+    export_bids.add_argument(
+        "--include-incomplete",
+        action="store_true",
+        help=(
+            "With a session/subject folder, also export runs that did not finish. "
+            "By default only complete runs are exported."
+        ),
     )
     export_bids.add_argument(
         "--output",
@@ -529,14 +540,12 @@ def main(
 
             runner = export_run_to_bids
 
-        result = runner(
-            run_dir=args.run_dir,
+        return export_bids_command(
+            input_path=args.run_dir,
             bids_root=args.bids_root or default_bids_root(config),
+            include_incomplete=args.include_incomplete,
+            runner=runner,
         )
-        print(f"Exported BIDS eyetracking files to {result.bids_root}.")
-        for path in result.written_files:
-            print(path)
-        return 0
 
     if args.command == "check-eyetracker":
         runner = check_eyetracker_runner
@@ -1010,6 +1019,82 @@ def resolve_tracker(
     if address is not None:
         return address, None
     return config.tracker_address, config.tracker_serial_number
+
+
+def export_bids_command(
+    *,
+    input_path: str | Path,
+    bids_root: str | Path,
+    include_incomplete: bool,
+    runner: ExportBidsRunner,
+) -> int:
+    """Export one run, or every run below a session/subject/sourcedata folder."""
+    from aria_et.gui import artifacts
+
+    path = Path(input_path)
+    if not path.is_dir() or artifacts.is_run_directory(path):
+        return 0 if _export_one_run(input_path, bids_root, runner) else 1
+
+    runs = artifacts.find_run_directories_under(path)
+    if not runs:
+        print(
+            f"No ARIA runs (task-*_run-* folders) found in {path}. Pass a run "
+            "folder, or a session or subject folder that contains runs.",
+            file=sys.stderr,
+        )
+        return 1
+
+    exported, no_gaze_runs, unfinished, failed = [], [], [], []
+    for run in runs:
+        status, no_gaze = artifacts.summarize_run(run)
+        # Dry runs record no gaze, so there is nothing to export.
+        if no_gaze:
+            no_gaze_runs.append(run.path.name)
+            continue
+        if status is not artifacts.RunStatus.COMPLETE and not include_incomplete:
+            unfinished.append(f"{run.path.name} ({status.value})")
+            continue
+        print(f"\n== {run.path}")
+        if _export_one_run(run.path, bids_root, runner):
+            exported.append(run.path.name)
+        else:
+            failed.append(run.path.name)
+
+    print(f"\nExported {len(exported)} of {len(runs)} run(s) to {bids_root}.")
+    for name in no_gaze_runs:
+        print(f"Skipped {name} (no gaze data).")
+    for name in unfinished:
+        print(f"Skipped {name}.")
+    if unfinished:
+        print("Pass --include-incomplete to also export runs that did not finish.")
+    for name in failed:
+        print(f"Failed {name}.", file=sys.stderr)
+    return 1 if failed else 0
+
+
+def _export_one_run(
+    run_dir: str | Path, bids_root: str | Path, runner: ExportBidsRunner
+) -> bool:
+    try:
+        result = runner(run_dir=run_dir, bids_root=bids_root)
+    except FileNotFoundError as error:
+        if Path(error.filename or "").name == "session.json":
+            print(
+                f"{run_dir} is not an ARIA run folder (no session.json). Pass a "
+                "run folder (task-*_run-*), or a session or subject folder.",
+                file=sys.stderr,
+            )
+        else:
+            print(f"Could not export {run_dir}: {error}", file=sys.stderr)
+        return False
+    except (OSError, ValueError, KeyError) as error:
+        print(f"Could not export {run_dir}: {error}", file=sys.stderr)
+        return False
+
+    print(f"Exported BIDS eyetracking files to {result.bids_root}.")
+    for written in result.written_files:
+        print(written)
+    return True
 
 
 def config_command(args: argparse.Namespace) -> int:
