@@ -8,7 +8,14 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from aria_et.calibration import DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS
+from aria_et.calibration import (
+    ANIMATION_CHOICES,
+    CALIBRATION_POINT_CHOICES,
+    DEFAULT_ANIMATION,
+    DEFAULT_CALIBRATION_POINTS,
+    DEFAULT_SHOW_POSITIONING,
+    DEFAULT_SHUFFLE_POINTS,
+)
 from aria_et.config import (
     CONFIG_KEYS,
     AriaEtConfig,
@@ -218,31 +225,14 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
         default="1024x768",
         help="Window size for child-friendly --windowed mode, formatted as WIDTHxHEIGHT.",
     )
-    calibrate_eyetracker.add_argument(
-        "--no-sound",
-        action="store_true",
-        help="Disable child-friendly calibration sound playback.",
-    )
-    calibrate_eyetracker.add_argument(
-        "--point-duration",
-        type=float,
-        default=DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS,
-        help="Seconds to display each child-friendly calibration point.",
-    )
-    calibrate_eyetracker.add_argument(
-        "--advance-on-space",
-        action="store_true",
-        help="Wait for Space before moving to the next child-friendly calibration point.",
-    )
-    calibrate_eyetracker.add_argument(
-        "--debug-render",
-        action="store_true",
-        help="Print child-friendly calibration rendering diagnostics.",
-    )
+    _add_child_friendly_calibration_arguments(calibrate_eyetracker)
 
     demo_calibration = subparsers.add_parser(
         "demo-calibration",
-        help="Run the bundled Gap-Overlap reward calibration sequence in PsychoPy.",
+        help=(
+            "Preview the child-friendly (DeToX) calibration without a tracker; "
+            "the mouse stands in for gaze."
+        ),
     )
     display_mode = demo_calibration.add_mutually_exclusive_group()
     display_mode.add_argument(
@@ -270,27 +260,7 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
         default="1024x768",
         help="Window size for --windowed mode, formatted as WIDTHxHEIGHT.",
     )
-    demo_calibration.add_argument(
-        "--no-sound",
-        action="store_true",
-        help="Disable calibration sound playback.",
-    )
-    demo_calibration.add_argument(
-        "--point-duration",
-        type=float,
-        default=3.0,
-        help="Seconds to display each calibration point.",
-    )
-    demo_calibration.add_argument(
-        "--advance-on-space",
-        action="store_true",
-        help="Wait for Space before moving to the next calibration point.",
-    )
-    demo_calibration.add_argument(
-        "--debug-render",
-        action="store_true",
-        help="Print frame-level PsychoPy rendering diagnostics.",
-    )
+    _add_child_friendly_calibration_arguments(demo_calibration)
 
     demo_am = subparsers.add_parser(
         "demo-am",
@@ -615,10 +585,7 @@ def main(
                 screen_size_meters=parse_float_pair(config.screen_size_meters),
                 monitor_name=config.monitor_name,
                 audio_speaker=config.audio_speaker,
-                play_sound=not args.no_sound,
-                point_duration_seconds=args.point_duration,
-                advance_on_space=args.advance_on_space,
-                debug_render=args.debug_render,
+                **_child_friendly_calibration_options(args),
             )
 
         runner = calibrate_eyetracker_runner
@@ -640,10 +607,10 @@ def main(
         runner = demo_calibration_runner
         if runner is None:
             from aria_et.psychopy.calibration import (
-                run_gap_overlap_reward_calibration_demo,
+                run_child_friendly_calibration_demo,
             )
 
-            runner = run_gap_overlap_reward_calibration_demo
+            runner = run_child_friendly_calibration_demo
 
         return runner(
             fullscreen=args.fullscreen,
@@ -654,10 +621,7 @@ def main(
             screen_size_meters=parse_float_pair(config.screen_size_meters),
             monitor_name=config.monitor_name,
             audio_speaker=config.audio_speaker,
-            play_sound=not args.no_sound,
-            point_duration_seconds=args.point_duration,
-            advance_on_space=args.advance_on_space,
-            debug_render=args.debug_render,
+            **_child_friendly_calibration_options(args),
         )
 
     if args.command == "demo-am":
@@ -879,6 +843,53 @@ def main(
         )
 
     raise ValueError(f"Unsupported command: {args.command}")
+
+
+def _add_child_friendly_calibration_arguments(parser: argparse.ArgumentParser) -> None:
+    """Options for the DeToX child-friendly calibration."""
+    parser.add_argument(
+        "--points",
+        type=int,
+        choices=CALIBRATION_POINT_CHOICES,
+        default=DEFAULT_CALIBRATION_POINTS,
+        help="Number of calibration targets (child-friendly routine).",
+    )
+    parser.add_argument(
+        "--no-shuffle",
+        action="store_false",
+        dest="shuffle",
+        help="Present calibration targets in a fixed order instead of shuffled.",
+    )
+    parser.add_argument(
+        "--animation",
+        choices=ANIMATION_CHOICES,
+        default=DEFAULT_ANIMATION,
+        help="Calibration target animation (child-friendly routine).",
+    )
+    parser.add_argument(
+        "--no-sound",
+        action="store_true",
+        help="Disable the attention-getting calibration sound.",
+    )
+    parser.add_argument(
+        "--skip-positioning",
+        action="store_false",
+        dest="show_positioning",
+        help="Skip the positioning screen shown before calibration.",
+    )
+    parser.set_defaults(
+        shuffle=DEFAULT_SHUFFLE_POINTS, show_positioning=DEFAULT_SHOW_POSITIONING
+    )
+
+
+def _child_friendly_calibration_options(args: argparse.Namespace) -> dict[str, object]:
+    return {
+        "play_sound": not args.no_sound,
+        "calibration_points": args.points,
+        "shuffle": args.shuffle,
+        "animation": args.animation,
+        "show_positioning": args.show_positioning,
+    }
 
 
 def _add_run_presentation_arguments(

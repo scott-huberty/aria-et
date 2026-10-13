@@ -9,7 +9,6 @@ from enum import Enum
 from pathlib import Path
 
 from aria_et import tasks
-from aria_et.calibration import DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS
 
 DRY_RUN_ENV_VAR = "ARIA_ET_ALLOW_DRY_RUN"
 DEFAULT_SESSION_LABEL = "01"
@@ -73,12 +72,9 @@ class CalibrationOptions:
     serial_number: str | None = None
     manager: str | None = None
     screen: int | None = None
-    point_duration_seconds: float = DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS
-    advance_on_space: bool = False
     fullscreen: bool = True
     window_size: str = "1024x768"
     play_sound: bool = True
-    debug_render: bool = False
 
 
 @dataclass(frozen=True)
@@ -182,13 +178,10 @@ def build_calibrate_args(state: SessionState, options: CalibrationOptions) -> li
             window_size=options.window_size,
             screen=None,
         )
+        # DeToX procedure settings (points, order, animation, positioning) use
+        # the CLI's protocol defaults; the GUI doesn't expose them.
         if not options.play_sound:
             args.append("--no-sound")
-        args += ["--point-duration", str(options.point_duration_seconds)]
-        if options.advance_on_space:
-            args.append("--advance-on-space")
-        if options.debug_render:
-            args.append("--debug-render")
     return args
 
 

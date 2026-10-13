@@ -3,9 +3,6 @@
 Child-Friendly Calibration
 ==========================
 
-Preview
--------
-
 .. vimeo:: 1214478085
 
 `Child-friendly calibration video <https://vimeo.com/1214478085>`__
@@ -13,70 +10,52 @@ Preview
 Description
 -----------
 
-The child-friendly calibration routine presents a five-point calibration
-sequence using the Gap-Overlap reward animations and auditory stimuli. The
-target positions are center, top-left, top-right, bottom-right, and bottom-left.
-By default the target inset is ``0.1`` in normalized display coordinates. In a
-tracker-connected calibration, the stimulus initially spins to attract gaze and
-then shrinks during collection feedback after gaze reaches the target.
+The child-friendly calibration is run by `DeToX
+<https://pypi.org/project/dvst-detox/>`__ (``dvst-detox``), a PsychoPy and Tobii
+SDK toolkit for infant-friendly eye tracking. aria-et resolves the tracker,
+opens the PsychoPy window on the configured stimulus display, and hands the
+calibration to DeToX:
 
-Event Markers
--------------
+1. **Positioning.** A screen shows the child's eye positions inside the
+   tracker's track box and their distance from the screen. Press Space when the
+   child is well positioned. Skip it with ``--skip-positioning``.
+2. **Calibration.** Animated cartoon targets, with an attention-getting sound,
+   appear at 5 points (corners and center) or 9 points. The operator presses a
+   number key to show a target and Space to collect when the child is looking at
+   it.
+3. **Results.** Enter computes the calibration and shows the collected gaze
+   against each target. The operator can redo individual points, restart, or
+   accept. Escape aborts without saving.
 
-The markers below are emitted as ``RuntimeEvent.name`` values by the calibration
-presenter.
+An accepted calibration is applied on the tracker and saved under the session's
+``calibrations/`` folder (``calibration.bin`` and ``calibration.json``, method
+``child-friendly-detox``). Later runs record it as the calibration in effect.
 
-.. list-table::
-   :header-rows: 1
-   :widths: 30 40 30
-
-   * - Marker
-     - Meaning
-     - Payload fields
-   * - ``calibration.started``
-     - Calibration sequence began.
-     - ``sequence_id``
-   * - ``calibration.point.started``
-     - A calibration target point was presented.
-     - ``label``, ``x``, ``y``, ``window_x``, ``window_y``
-   * - ``calibration.point.ended``
-     - The current calibration target point completed.
-     - ``label``
-   * - ``calibration.aborted``
-     - Calibration stopped before all points completed.
-     - ``sequence_id``, ``point_count``
-   * - ``calibration.ended``
-     - Calibration sequence ended.
-     - ``sequence_id``, ``point_count``
-
-Payload Field Reference
------------------------
+Options
+-------
 
 .. list-table::
    :header-rows: 1
-   :widths: 25 55 20
+   :widths: 30 50 20
 
-   * - Field
-     - Description
-     - Example or values
-   * - ``sequence_id``
-     - Calibration sequence identifier.
-     - ``gap-overlap-reward-5-point``
-   * - ``label``
-     - Human-readable calibration target label.
-     - ``center``, ``top-left``, ``top-right``, ``bottom-right``, ``bottom-left``
-   * - ``x``
-     - Target x position in normalized display coordinates. ``0`` is the left edge and ``1`` is the right edge.
-     - ``0.1``, ``0.5``, ``0.9``
-   * - ``y``
-     - Target y position in normalized display coordinates. ``0`` is the top edge and ``1`` is the bottom edge.
-     - ``0.1``, ``0.5``, ``0.9``
-   * - ``window_x``
-     - Target x position converted into PsychoPy window coordinates.
-     - Float
-   * - ``window_y``
-     - Target y position converted into PsychoPy window coordinates.
-     - Float
-   * - ``point_count``
-     - Number of calibration points completed before the event was emitted.
-     - Integer from ``0`` to ``5``
+   * - Option
+     - Effect
+     - Default
+   * - ``--points {5,9}``
+     - Number of calibration targets.
+     - ``5``
+   * - ``--no-shuffle``
+     - Present targets in a fixed order.
+     - shuffled
+   * - ``--animation {zoom,trill}``
+     - Target animation.
+     - ``zoom``
+   * - ``--no-sound``
+     - Turn off the attention-getting sound.
+     - sound on
+   * - ``--skip-positioning``
+     - Skip the positioning screen.
+     - shown
+
+``aria-et demo-calibration`` previews the same procedure without a tracker,
+using the mouse in place of gaze. Nothing is saved.

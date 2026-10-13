@@ -539,10 +539,12 @@ def test_calibrate_eyetracker_child_friendly_invokes_psychopy_sdk_runner():
             "--size",
             "800x600",
             "--no-sound",
-            "--point-duration",
-            "0.5",
-            "--advance-on-space",
-            "--debug-render",
+            "--points",
+            "9",
+            "--no-shuffle",
+            "--animation",
+            "trill",
+            "--skip-positioning",
         ],
         child_friendly_calibration_runner=runner,
     )
@@ -565,9 +567,10 @@ def test_calibrate_eyetracker_child_friendly_invokes_psychopy_sdk_runner():
             "monitor_name": "EIZO_EV2480",
             "audio_speaker": "EV2480",
             "play_sound": False,
-            "point_duration_seconds": 0.5,
-            "advance_on_space": True,
-            "debug_render": True,
+            "calibration_points": 9,
+            "shuffle": False,
+            "animation": "trill",
+            "show_positioning": False,
         }
     ]
 
@@ -594,8 +597,10 @@ def test_calibrate_eyetracker_child_friendly_defaults_to_psychopy_screen():
 
     assert exit_code == 0
     assert calls[0]["screen"] == 1
-    assert calls[0]["point_duration_seconds"] == 1.5
-    assert calls[0]["advance_on_space"] is False
+    assert calls[0]["calibration_points"] == 5
+    assert calls[0]["shuffle"] is True
+    assert calls[0]["animation"] == "zoom"
+    assert calls[0]["show_positioning"] is True
 
 
 def test_cli_uses_user_config_defaults(tmp_path):
@@ -674,8 +679,8 @@ def test_demo_calibration_invokes_injected_runner():
             "--size",
             "800x600",
             "--no-sound",
-            "--point-duration",
-            "0.25",
+            "--points",
+            "9",
         ],
         demo_calibration_runner=runner,
     )
@@ -692,9 +697,10 @@ def test_demo_calibration_invokes_injected_runner():
             "monitor_name": "EIZO_EV2480",
             "audio_speaker": "EV2480",
             "play_sound": False,
-            "point_duration_seconds": 0.25,
-            "advance_on_space": False,
-            "debug_render": False,
+            "calibration_points": 9,
+            "shuffle": True,
+            "animation": "zoom",
+            "show_positioning": True,
         }
     ]
 
@@ -720,9 +726,10 @@ def test_demo_calibration_defaults_to_eizo_fullscreen_runner_options():
             "monitor_name": "EIZO_EV2480",
             "audio_speaker": "EV2480",
             "play_sound": True,
-            "point_duration_seconds": 3.0,
-            "advance_on_space": False,
-            "debug_render": False,
+            "calibration_points": 5,
+            "shuffle": True,
+            "animation": "zoom",
+            "show_positioning": True,
         }
     ]
 
@@ -742,36 +749,9 @@ def test_demo_calibration_can_request_fullscreen():
     assert calls[0]["fullscreen"] is True
 
 
-def test_demo_calibration_can_wait_for_space_between_points():
-    calls = []
-
-    def runner(**kwargs):
-        calls.append(kwargs)
-        return 0
-
-    exit_code = main(
-        ["demo-calibration", "--advance-on-space"],
-        demo_calibration_runner=runner,
-    )
-
-    assert exit_code == 0
-    assert calls[0]["advance_on_space"] is True
-
-
-def test_demo_calibration_can_enable_render_debug_logging():
-    calls = []
-
-    def runner(**kwargs):
-        calls.append(kwargs)
-        return 0
-
-    exit_code = main(
-        ["demo-calibration", "--debug-render"],
-        demo_calibration_runner=runner,
-    )
-
-    assert exit_code == 0
-    assert calls[0]["debug_render"] is True
+def test_demo_calibration_rejects_unsupported_point_counts():
+    with pytest.raises(SystemExit):
+        main(["demo-calibration", "--points", "7"], demo_calibration_runner=None)
 
 
 def test_demo_activity_monitoring_invokes_injected_runner():

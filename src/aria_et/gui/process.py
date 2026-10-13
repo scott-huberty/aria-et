@@ -35,7 +35,7 @@ class CliProcess(QObject):
         self._buffer = ""
         self._process = QProcess(self)
         self._process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-        self._process.setProcessEnvironment(QProcessEnvironment.systemEnvironment())
+        self._process.setProcessEnvironment(child_process_environment())
         self._process.setWorkingDirectory(str(Path.home()))
         self._process.readyReadStandardOutput.connect(self._drain_output)
         self._process.started.connect(self.started)
@@ -95,6 +95,18 @@ class CliProcess(QObject):
             self.failed_to_start.emit(
                 f"Could not start {self._executable}: {self._process.errorString()}"
             )
+
+
+def child_process_environment() -> QProcessEnvironment:
+    """The system environment, with the child's output forced to UTF-8.
+
+    Piped Python on Windows otherwise writes cp1252, which can't encode the
+    box-drawing characters DeToX prints, so the CLI would crash mid-calibration.
+    It also matches the UTF-8 decoding in ``_drain_output``.
+    """
+    environment = QProcessEnvironment.systemEnvironment()
+    environment.insert("PYTHONIOENCODING", "utf-8")
+    return environment
 
 
 def split_output_lines(buffer: str, chunk: str) -> tuple[list[str], str]:

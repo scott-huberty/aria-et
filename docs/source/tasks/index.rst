@@ -26,9 +26,9 @@ by the PsychoPy presenter.
      - Duration
      - Preview
    * - :ref:`task-calibration`
-     - 5 calibration points
-     - Configurable
-     - `Child-friendly calibration video <https://vimeo.com/1214478085>`__
+     - 5 or 9 calibration points
+     - Operator-paced
+     - ``aria-et demo-calibration``
    * - :ref:`task-activity-monitoring`
      - 16 trials
      - Approximately 5 minutes

@@ -24,15 +24,17 @@ from aria_et.gui import artifacts
 from aria_et.gui.state import CalibrationOptions, SessionState, build_calibrate_args
 from aria_et.gui.widgets.inputs import (
     WheelSafeComboBox,
-    WheelSafeDoubleSpinBox,
     WheelSafeSpinBox,
 )
 
 ETM_ROUTINE = "etm"
 CHILD_FRIENDLY_ROUTINE = "child-friendly"
 
-ESCAPE_NOTE = (
-    "Child-friendly calibration accepts Escape to abort. The four task runners do not."
+CHILD_FRIENDLY_NOTE = (
+    "Child-friendly calibration uses DeToX with the study's 5-point protocol. "
+    "After the positioning screen (Space to continue), number keys select a "
+    "point, Space collects, Enter shows the results, and Escape aborts. On the "
+    "results screen, pick points to redo or press Enter to accept."
 )
 
 EDIT_SETTINGS_TEXT = "Change settings"
@@ -127,23 +129,14 @@ class CalibrationPage(QWidget):
         child_layout.setSpacing(6)
         child_form = QFormLayout()
         child_form.setVerticalSpacing(6)
-        self._point_duration = WheelSafeDoubleSpinBox()
-        self._point_duration.setRange(0.5, 30.0)
-        self._point_duration.setSingleStep(0.5)
-        self._point_duration.setSuffix(" s")
-        self._advance_on_space = QCheckBox("Wait for space after each point")
         self._fullscreen = QCheckBox("Fullscreen")
         self._window_size = QLineEdit()
         self._sound = QCheckBox("Play sound")
-        self._debug_render = QCheckBox("Debug render overlay")
-        child_form.addRow("Point duration", self._point_duration)
-        child_form.addRow("Advance", self._advance_on_space)
         child_form.addRow("Display", self._fullscreen)
         child_form.addRow("Window size", self._window_size)
         child_form.addRow("Sound", self._sound)
-        child_form.addRow("Diagnostics", self._debug_render)
         child_layout.addLayout(child_form)
-        child_layout.addWidget(_helper(ESCAPE_NOTE))
+        child_layout.addWidget(_helper(CHILD_FRIENDLY_NOTE))
         fields_layout.addWidget(self._child_options)
         settings_layout.addWidget(self._settings_fields)
 
@@ -166,12 +159,9 @@ class CalibrationPage(QWidget):
         self._fullscreen.toggled.connect(self._sync_window_size_enabled)
         for changed in (
             self._screen.valueChanged,
-            self._point_duration.valueChanged,
-            self._advance_on_space.toggled,
             self._fullscreen.toggled,
             self._window_size.textChanged,
             self._sound.toggled,
-            self._debug_render.toggled,
         ):
             changed.connect(self._sync_settings_state)
 
@@ -225,12 +215,9 @@ class CalibrationPage(QWidget):
             serial_number=self._serial.text().strip() or None,
             manager=manager if routine == ETM_ROUTINE else None,
             screen=self._screen.value(),
-            point_duration_seconds=self._point_duration.value(),
-            advance_on_space=self._advance_on_space.isChecked(),
             fullscreen=self._fullscreen.isChecked(),
             window_size=self._window_size.text().strip() or "1024x768",
             play_sound=self._sound.isChecked(),
-            debug_render=self._debug_render.isChecked(),
         )
 
     def report_exit(self, _exit_code: int) -> None:
@@ -267,12 +254,9 @@ class CalibrationPage(QWidget):
     def _restore_defaults(self) -> None:
         defaults = self.default_calibration_options()
         self._screen.setValue(defaults.screen)
-        self._point_duration.setValue(defaults.point_duration_seconds)
-        self._advance_on_space.setChecked(defaults.advance_on_space)
         self._fullscreen.setChecked(defaults.fullscreen)
         self._window_size.setText(defaults.window_size)
         self._sound.setChecked(defaults.play_sound)
-        self._debug_render.setChecked(defaults.debug_render)
         self._set_settings_locked(True)
 
     def _toggle_settings_lock(self) -> None:

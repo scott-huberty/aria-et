@@ -237,8 +237,6 @@ Use BIDS-safe session labels such as `flushtest`, not `flush-test`.
 
 - Subscribe to Tobii buffer-overflow notifications and record any occurrence in
   session artifacts.
-- Make child-friendly calibration responsive to early gaze by collecting after a
-  short dwell delay and retrying until success or timeout.
 - Decide whether optional Tobii SDK streams should be recorded in production:
   eye openness, user position guide, eye images, external signal, time
   synchronization, stream errors, tracker notifications.

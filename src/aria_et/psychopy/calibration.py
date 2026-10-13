@@ -1,533 +1,31 @@
-"""PsychoPy adapter for calibration presentation."""
+"""Child-friendly calibration through DeToX.
+
+DeToX (``dvst-detox``) provides the positioning screen and the infant-friendly
+calibration procedure: animated targets, operator-driven collection, a results
+view, and re-collection of individual points. aria-et resolves the tracker,
+opens the PsychoPy window on the configured stimulus display, and saves the
+applied calibration so runs can record which calibration was in effect.
+"""
 
 from __future__ import annotations
 
 import importlib
 import sys
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
-from importlib.abc import Traversable
-from importlib.resources import as_file
+from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
 
 from aria_et.calibration import (
-    DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS,
-    CalibrationPoint,
-    CalibrationSequence,
-    NormalizedPoint,
-    build_gap_overlap_reward_calibration_sequence,
-)
-from aria_et.runtime import (
-    CalibrationRunResult,
-    Clock,
-    EventSink,
-    PresentedCalibrationPoint,
-    RuntimeEvent,
+    DEFAULT_ANIMATION,
+    DEFAULT_CALIBRATION_POINTS,
+    DEFAULT_SHOW_POSITIONING,
+    DEFAULT_SHUFFLE_POINTS,
+    RESULTS_VISUALIZATION_STYLE,
 )
 
-
-class WindowLike(Protocol):
-    size: Sequence[float]
-    clientSize: Sequence[float]
-
-    def flip(self) -> None:
-        """Present the next frame."""
-
-
-class DrawableLike(Protocol):
-    def draw(self) -> None:
-        """Draw the object into the current PsychoPy frame."""
-
-
-class SoundLike(Protocol):
-    def play(self) -> None:
-        """Start sound playback."""
-
-
-ImageFactory = Callable[
-    [WindowLike, str, tuple[float, float], tuple[float, float]], DrawableLike
-]
-SoundFactory = Callable[[str], SoundLike]
-Wait = Callable[[float], None]
-AbortCheck = Callable[[], bool]
-AdvanceCheck = Callable[[], bool]
-PointCollector = Callable[[CalibrationPoint], bool]
 StatusSink = Callable[[str], None]
-RenderStatus = Callable[[str], None]
+ImportModule = Callable[[str], object]
 
-
-@dataclass(frozen=True)
-class PsychoPyCalibrationPresenter:
-    window: WindowLike
-    image_factory: ImageFactory | None = None
-    sound_factory: SoundFactory | None = None
-    wait: Wait | None = None
-    point_duration_seconds: float = 1.0
-    frame_duration_seconds: float = 1 / 30
-    image_size_pixels: tuple[float, float] = (120, 120)
-    play_sound: bool = True
-    continue_without_sound_on_error: bool = False
-    sound_error_sink: StatusSink | None = None
-    abort_requested: AbortCheck | None = None
-    advance_requested: AdvanceCheck | None = None
-    point_collector: PointCollector | None = None
-    collect_before_feedback: bool = False
-    feedback_duration_seconds: float = 1.0
-    spin_degrees_per_second: float = 180.0
-    render_status: RenderStatus | None = None
-    _active_sounds: list[SoundLike] = field(
-        default_factory=list, init=False, repr=False
-    )
-
-    def present(
-        self,
-        sequence: CalibrationSequence,
-        clock: Clock,
-        event_sink: EventSink,
-    ) -> CalibrationRunResult:
-        started_at = clock.now()
-        event_sink.emit(
-            RuntimeEvent(
-                "calibration.started",
-                started_at,
-                {"sequence_id": sequence.sequence_id},
-            )
-        )
-
-        presented_points = []
-        aborted = False
-        for point in sequence.points:
-            if self._abort_requested():
-                aborted = True
-                break
-
-            presented_point = self._present_point(point, clock, event_sink)
-            if presented_point is None:
-                aborted = True
-                break
-
-            presented_points.append(presented_point)
-
-        ended_at = clock.now()
-        if aborted:
-            event_sink.emit(
-                RuntimeEvent(
-                    "calibration.aborted",
-                    ended_at,
-                    {
-                        "sequence_id": sequence.sequence_id,
-                        "point_count": len(presented_points),
-                    },
-                )
-            )
-
-        event_sink.emit(
-            RuntimeEvent(
-                "calibration.ended",
-                ended_at,
-                {
-                    "sequence_id": sequence.sequence_id,
-                    "point_count": len(presented_points),
-                },
-            )
-        )
-
-        return CalibrationRunResult(
-            sequence_id=sequence.sequence_id,
-            presented_points=tuple(presented_points),
-            started_at=started_at,
-            ended_at=ended_at,
-        )
-
-    def _present_point(
-        self,
-        point: CalibrationPoint,
-        clock: Clock,
-        event_sink: EventSink,
-    ) -> PresentedCalibrationPoint | None:
-        started_at = clock.now()
-        window_position = self._to_window_position(point.target.position)
-        event_sink.emit(
-            RuntimeEvent(
-                "calibration.point.started",
-                started_at,
-                {
-                    "label": point.target.label,
-                    "x": point.target.position.x,
-                    "y": point.target.position.y,
-                    "window_x": window_position[0],
-                    "window_y": window_position[1],
-                },
-            )
-        )
-
-        self._play_sound(point.stimulus.sound)
-        if self.collect_before_feedback:
-            if not self._present_collection_stimulus(point):
-                return None
-            if self.point_collector is not None and not self.point_collector(point):
-                return None
-            if not self._present_stimulus(
-                point, duration_seconds=self.feedback_duration_seconds
-            ):
-                return None
-        else:
-            if not self._present_stimulus(point):
-                return None
-            if self.point_collector is not None and not self.point_collector(point):
-                return None
-        if not self._wait_for_advance():
-            return None
-
-        ended_at = clock.now()
-        event_sink.emit(
-            RuntimeEvent(
-                "calibration.point.ended",
-                ended_at,
-                {"label": point.target.label},
-            )
-        )
-
-        return PresentedCalibrationPoint(
-            label=point.target.label,
-            position=point.target.position,
-            started_at=started_at,
-            ended_at=ended_at,
-        )
-
-    def _present_stimulus(
-        self,
-        point: CalibrationPoint,
-        *,
-        duration_seconds: float | None = None,
-    ) -> bool:
-        return self._draw_frame_animation(point, duration_seconds=duration_seconds)
-
-    def _draw_frame_animation(
-        self,
-        point: CalibrationPoint,
-        *,
-        duration_seconds: float | None = None,
-    ) -> bool:
-        position = self._to_window_position(point.target.position)
-        frames = point.stimulus.animation_frames
-        if not frames:
-            raise ValueError("Calibration stimulus must include frames or a movie.")
-        animation_seconds = (
-            self.point_duration_seconds
-            if duration_seconds is None
-            else duration_seconds
-        )
-        frame_count = max(1, round(animation_seconds / self.frame_duration_seconds))
-        self._render_status(
-            f"Animation started: {point.target.label} "
-            f"frame_count={frame_count} frame_duration={self.frame_duration_seconds}"
-        )
-
-        for frame_index in range(frame_count):
-            if self._abort_requested():
-                self._render_status(
-                    f"Animation aborted before frame: {point.target.label} "
-                    f"frame={frame_index + 1}/{frame_count}"
-                )
-                return False
-
-            frame = frames[frame_index % len(frames)]
-            self._render_status(
-                f"Frame image create: {point.target.label} frame={frame_index + 1}/{frame_count}"
-            )
-            with as_file(frame) as frame_path:
-                image = self._image_factory()(
-                    self.window,
-                    str(frame_path),
-                    position,
-                    self.image_size_pixels,
-                )
-                self._render_status(
-                    f"Frame draw: {point.target.label} frame={frame_index + 1}/{frame_count}"
-                )
-                image.draw()
-            self._render_status(
-                f"Frame flip: {point.target.label} frame={frame_index + 1}/{frame_count}"
-            )
-            self.window.flip()
-            self._render_status(
-                f"Frame wait: {point.target.label} frame={frame_index + 1}/{frame_count}"
-            )
-            self._wait()(self.frame_duration_seconds)
-            self._render_status(
-                f"Frame done: {point.target.label} frame={frame_index + 1}/{frame_count}"
-            )
-
-        self._render_status(f"Animation ended: {point.target.label}")
-        return True
-
-    def _present_collection_stimulus(self, point: CalibrationPoint) -> bool:
-        position = self._to_window_position(point.target.position)
-        frames = point.stimulus.animation_frames
-        if not frames:
-            raise ValueError("Calibration stimulus must include frames or a movie.")
-        frame_count = max(
-            1, round(self.point_duration_seconds / self.frame_duration_seconds)
-        )
-        self._render_status(
-            f"Collection animation started: {point.target.label} "
-            f"frame_count={frame_count} frame_duration={self.frame_duration_seconds}"
-        )
-
-        frame = frames[0]
-        for frame_index in range(frame_count):
-            if self._abort_requested():
-                self._render_status(
-                    f"Collection animation aborted before frame: {point.target.label} "
-                    f"frame={frame_index + 1}/{frame_count}"
-                )
-                return False
-
-            rotation = (
-                frame_index * self.frame_duration_seconds * self.spin_degrees_per_second
-            ) % 360
-            with as_file(frame) as frame_path:
-                image = self._image_factory()(
-                    self.window,
-                    str(frame_path),
-                    position,
-                    self.image_size_pixels,
-                )
-                image.ori = rotation
-                image.draw()
-            self.window.flip()
-            self._wait()(self.frame_duration_seconds)
-
-        self._render_status(f"Collection animation ended: {point.target.label}")
-        return True
-
-    def _play_sound(self, sound: Traversable | None) -> None:
-        if not self.play_sound or sound is None:
-            return
-
-        with as_file(sound) as sound_path:
-            try:
-                sound_object = self._sound_factory()(str(sound_path))
-                sound_object.play()
-            except BaseException as error:
-                from aria_et.psychopy.environment import should_reraise_sound_error
-
-                if (
-                    not self.continue_without_sound_on_error
-                    or should_reraise_sound_error(error)
-                ):
-                    raise
-                self._warn_sound_unavailable(error)
-                return
-            self._active_sounds.append(sound_object)
-
-    def _to_window_position(self, point: NormalizedPoint) -> tuple[float, float]:
-        width, height = self._coordinate_size()
-        return (
-            (point.x - 0.5) * width,
-            (0.5 - point.y) * height,
-        )
-
-    def _coordinate_size(self) -> Sequence[float]:
-        return getattr(self.window, "clientSize", self.window.size)
-
-    def _image_factory(self) -> ImageFactory:
-        if self.image_factory is not None:
-            return self.image_factory
-
-        from psychopy import visual
-
-        return lambda window, image, pos, size: visual.ImageStim(
-            window,
-            image=image,
-            pos=pos,
-            size=size,
-            units="pix",
-        )
-
-    def _sound_factory(self) -> SoundFactory:
-        if self.sound_factory is not None:
-            return self.sound_factory
-
-        from psychopy import sound
-
-        return lambda path: sound.Sound(path)
-
-    def _wait(self) -> Wait:
-        if self.wait is not None:
-            return self.wait
-
-        from psychopy import core
-
-        return core.wait
-
-    def _abort_requested(self) -> bool:
-        return self.abort_requested is not None and self.abort_requested()
-
-    def _wait_for_advance(self) -> bool:
-        if self.advance_requested is None:
-            return True
-
-        self._render_status("Waiting for advance")
-        while not self.advance_requested():
-            if self._abort_requested():
-                self._render_status("Advance wait aborted")
-                return False
-            self._wait()(self.frame_duration_seconds)
-
-        self._render_status("Advance received")
-        return True
-
-    def _render_status(self, message: str) -> None:
-        if self.render_status is not None:
-            self.render_status(message)
-
-    def _warn_sound_unavailable(self, error: BaseException) -> None:
-        if self.sound_error_sink is None:
-            return
-        from aria_et.psychopy.environment import warn_demo_sound_unavailable
-
-        warn_demo_sound_unavailable(sink=self.sound_error_sink, error=error)
-
-
-@dataclass
-class PsychoPyClock:
-    psychopy_clock: object
-
-    def now(self) -> float:
-        return self.psychopy_clock.getTime()
-
-
-@dataclass
-class StatusLoggingEventSink:
-    delegate: EventSink
-    status: StatusSink
-
-    def emit(self, event: RuntimeEvent) -> None:
-        self.delegate.emit(event)
-        if event.name == "calibration.started":
-            self.status(f"Calibration started: {event.payload['sequence_id']}")
-        elif event.name == "calibration.point.started":
-            self.status(
-                "Point started: "
-                f"{event.payload['label']} "
-                f"normalized=({event.payload['x']}, {event.payload['y']}) "
-                f"window=({event.payload['window_x']}, {event.payload['window_y']})"
-            )
-        elif event.name == "calibration.point.ended":
-            self.status(f"Point ended: {event.payload['label']}")
-        elif event.name == "calibration.aborted":
-            self.status(
-                "Calibration aborted after "
-                f"{event.payload['point_count']} completed point(s)."
-            )
-        elif event.name == "calibration.ended":
-            self.status(
-                "Calibration ended after "
-                f"{event.payload['point_count']} completed point(s)."
-            )
-
-
-def run_gap_overlap_reward_calibration_demo(
-    *,
-    fullscreen: bool = True,
-    screen: int = 1,
-    window_size: tuple[int, int] = (1024, 768),
-    screen_distance_meters: float = 0.65,
-    screen_resolution_pixels: tuple[int, int] = (1920, 1080),
-    screen_size_meters: tuple[float, float] = (0.527, 0.296),
-    monitor_name: str = "EIZO_EV2480",
-    audio_speaker: str | None = None,
-    play_sound: bool = True,
-    point_duration_seconds: float = 1.0,
-    advance_on_space: bool = False,
-    debug_render: bool = False,
-    status_sink: StatusSink | None = None,
-) -> int:
-    status = status_sink or (
-        lambda message: print(message, file=sys.stderr, flush=True)
-    )
-
-    status("Importing PsychoPy...")
-    from psychopy import core, event, monitors, prefs, sound, visual
-
-    from aria_et.psychopy.environment import (
-        demo_sound_factory,
-        effective_window_size,
-        open_window,
-    )
-    from aria_et.runtime import RecordingEventSink
-
-    effective_size = effective_window_size(
-        fullscreen=fullscreen,
-        window_size=window_size,
-        screen_resolution_pixels=screen_resolution_pixels,
-    )
-    status(
-        "Opening PsychoPy window "
-        f"({effective_size[0]}x{effective_size[1]}, fullscreen={fullscreen}, screen={screen})..."
-    )
-    window = open_window(
-        visual_module=visual,
-        monitors_module=monitors,
-        prefs_module=prefs,
-        fullscreen=fullscreen,
-        screen=screen,
-        window_size=window_size,
-        screen_distance_meters=screen_distance_meters,
-        screen_resolution_pixels=screen_resolution_pixels,
-        screen_size_meters=screen_size_meters,
-        monitor_name=monitor_name,
-        audio_speaker=audio_speaker,
-    )
-    status(
-        "PsychoPy window sizes: "
-        f"size={tuple(window.size)} "
-        f"clientSize={tuple(getattr(window, 'clientSize', ())) or 'unavailable'}"
-    )
-    try:
-        if advance_on_space:
-            status(
-                "Running Gap-Overlap reward calibration. "
-                "Press Space for each point; Escape stops."
-            )
-        else:
-            status("Running Gap-Overlap reward calibration. Press Escape to stop.")
-
-        event.clearEvents()
-        abort_requested = lambda: bool(event.getKeys(keyList=["escape"]))
-        advance_requested = None
-        if advance_on_space:
-            advance_requested = lambda: bool(event.getKeys(keyList=["space"]))
-
-        presenter = PsychoPyCalibrationPresenter(
-            window=window,
-            sound_factory=demo_sound_factory(
-                sound_module=sound,
-                prefs_module=prefs,
-                status_sink=status,
-            ),
-            play_sound=play_sound,
-            continue_without_sound_on_error=True,
-            sound_error_sink=status,
-            point_duration_seconds=point_duration_seconds,
-            abort_requested=abort_requested,
-            advance_requested=advance_requested,
-            render_status=status if debug_render else None,
-        )
-        presenter.present(
-            build_gap_overlap_reward_calibration_sequence(),
-            PsychoPyClock(core.Clock()),
-            StatusLoggingEventSink(RecordingEventSink(), status),
-        )
-        status("Calibration demo finished.")
-    finally:
-        status("Closing PsychoPy window...")
-        window.close()
-
-    return 0
+CALIBRATION_METHOD = "child-friendly-detox"
 
 
 def run_child_friendly_eyetracker_calibration(
@@ -544,10 +42,11 @@ def run_child_friendly_eyetracker_calibration(
     monitor_name: str = "EIZO_EV2480",
     audio_speaker: str | None = None,
     play_sound: bool = True,
-    point_duration_seconds: float = DEFAULT_CHILD_FRIENDLY_POINT_DURATION_SECONDS,
-    advance_on_space: bool = False,
-    debug_render: bool = False,
-    import_module: Callable[[str], object] = importlib.import_module,
+    calibration_points: int = DEFAULT_CALIBRATION_POINTS,
+    shuffle: bool = DEFAULT_SHUFFLE_POINTS,
+    animation: str = DEFAULT_ANIMATION,
+    show_positioning: bool = DEFAULT_SHOW_POSITIONING,
+    import_module: ImportModule = importlib.import_module,
     status_sink: StatusSink | None = None,
     error_sink: StatusSink | None = None,
 ) -> int:
@@ -575,7 +74,8 @@ def run_child_friendly_eyetracker_calibration(
             serial_number=serial_number,
             import_module=import_module,
         )
-        calibration_api = tobii_research.ScreenBasedCalibration(eyetracker)
+        # DeToX selects its tracker by position in Tobii's discovery list.
+        tracker_index = _discovery_index(tobii_research, eyetracker)
     except TobiiSdkUnavailableError as error_message:
         error(str(error_message))
         return 2
@@ -583,45 +83,9 @@ def run_child_friendly_eyetracker_calibration(
         error(str(error_message))
         return 3
 
-    status("Importing PsychoPy...")
-    from psychopy import core, event, monitors, prefs, visual
-
-    from aria_et.psychopy.environment import effective_window_size, open_window
-    from aria_et.runtime import RecordingEventSink
-
-    def collect_point(point: CalibrationPoint) -> bool:
-        x = point.target.position.x
-        y = point.target.position.y
-        status(f"Collecting Tobii calibration data: {point.target.label} ({x}, {y})")
-        calibration_api.discard_data(x, y)
-        collection_status = calibration_api.collect_data(x, y)
-        if collection_status == getattr(
-            tobii_research,
-            "CALIBRATION_STATUS_FAILURE",
-            None,
-        ):
-            status(f"Tobii calibration data collection failed: {point.target.label}")
-            return False
-
-        status(
-            "Tobii calibration data collected: "
-            f"{point.target.label} status={collection_status}"
-        )
-        return True
-
-    effective_size = effective_window_size(
-        fullscreen=fullscreen,
-        window_size=window_size,
-        screen_resolution_pixels=screen_resolution_pixels,
-    )
-    status(
-        "Opening PsychoPy window "
-        f"({effective_size[0]}x{effective_size[1]}, fullscreen={fullscreen}, screen={screen})..."
-    )
-    window = open_window(
-        visual_module=visual,
-        monitors_module=monitors,
-        prefs_module=prefs,
+    detox = import_module("DeToX")
+    window = _open_calibration_window(
+        status=status,
         fullscreen=fullscreen,
         screen=screen,
         window_size=window_size,
@@ -631,54 +95,37 @@ def run_child_friendly_eyetracker_calibration(
         monitor_name=monitor_name,
         audio_speaker=audio_speaker,
     )
-
     try:
-        status("Entering Tobii SDK calibration mode.")
-        calibration_api.enter_calibration_mode()
-        try:
-            event.clearEvents()
-            abort_requested = lambda: bool(event.getKeys(keyList=["escape"]))
-            advance_requested = None
-            if advance_on_space:
-                advance_requested = lambda: bool(event.getKeys(keyList=["space"]))
-
-            presenter = PsychoPyCalibrationPresenter(
-                window=window,
-                play_sound=play_sound,
-                point_duration_seconds=point_duration_seconds,
-                abort_requested=abort_requested,
-                advance_requested=advance_requested,
-                point_collector=collect_point,
-                collect_before_feedback=True,
-                render_status=status if debug_render else None,
+        controller = detox.ETracker(window, etracker_id=tracker_index)
+        if controller.eyetracker.serial_number != eyetracker.serial_number:
+            error(
+                "DeToX connected to tracker "
+                f"{controller.eyetracker.serial_number}, expected "
+                f"{eyetracker.serial_number}."
             )
-            result = presenter.present(
-                build_gap_overlap_reward_calibration_sequence(),
-                PsychoPyClock(core.Clock()),
-                StatusLoggingEventSink(RecordingEventSink(), status),
-            )
-            if len(result.presented_points) == 0:
-                status("No calibration points collected.")
-                return 31
-
-            status("Computing and applying Tobii SDK calibration.")
-            calibration_result = calibration_api.compute_and_apply()
-        finally:
-            status("Leaving Tobii SDK calibration mode.")
-            calibration_api.leave_calibration_mode()
+            return 3
+        succeeded = _run_detox_calibration(
+            controller,
+            status=status,
+            play_sound=play_sound,
+            calibration_points=calibration_points,
+            shuffle=shuffle,
+            animation=animation,
+            show_positioning=show_positioning,
+        )
     finally:
         status("Closing PsychoPy window...")
         window.close()
 
-    if _calibration_failed(calibration_result, tobii_research):
-        error("Tobii SDK calibration failed.")
+    if not succeeded:
+        error("Calibration was aborted or did not succeed; nothing was saved.")
         return 31
 
     try:
         artifact_dir = save_current_calibration(
             eyetracker=eyetracker,
             output_dir=calibration_output_dir,
-            method="child-friendly-sdk",
+            method=CALIBRATION_METHOD,
             screen=screen,
         )
     except OSError as error_message:
@@ -691,7 +138,118 @@ def run_child_friendly_eyetracker_calibration(
     return 0
 
 
-def _calibration_failed(calibration_result: object, tobii_research: object) -> bool:
-    failure = getattr(tobii_research, "CALIBRATION_STATUS_FAILURE", None)
-    status = getattr(calibration_result, "status", None)
-    return failure is not None and status == failure
+def run_child_friendly_calibration_demo(
+    *,
+    fullscreen: bool = True,
+    screen: int = 1,
+    window_size: tuple[int, int] = (1024, 768),
+    screen_distance_meters: float = 0.65,
+    screen_resolution_pixels: tuple[int, int] = (1920, 1080),
+    screen_size_meters: tuple[float, float] = (0.527, 0.296),
+    monitor_name: str = "EIZO_EV2480",
+    audio_speaker: str | None = None,
+    play_sound: bool = True,
+    calibration_points: int = DEFAULT_CALIBRATION_POINTS,
+    shuffle: bool = DEFAULT_SHUFFLE_POINTS,
+    animation: str = DEFAULT_ANIMATION,
+    show_positioning: bool = DEFAULT_SHOW_POSITIONING,
+    import_module: ImportModule = importlib.import_module,
+    status_sink: StatusSink | None = None,
+) -> int:
+    """Preview the calibration without a tracker; the mouse stands in for gaze."""
+    status = status_sink or (
+        lambda message: print(message, file=sys.stderr, flush=True)
+    )
+    detox = import_module("DeToX")
+    window = _open_calibration_window(
+        status=status,
+        fullscreen=fullscreen,
+        screen=screen,
+        window_size=window_size,
+        screen_distance_meters=screen_distance_meters,
+        screen_resolution_pixels=screen_resolution_pixels,
+        screen_size_meters=screen_size_meters,
+        monitor_name=monitor_name,
+        audio_speaker=audio_speaker,
+    )
+    try:
+        controller = detox.ETracker(window, simulate=True)
+        _run_detox_calibration(
+            controller,
+            status=status,
+            play_sound=play_sound,
+            calibration_points=calibration_points,
+            shuffle=shuffle,
+            animation=animation,
+            show_positioning=show_positioning,
+        )
+        status("Calibration demo finished.")
+    finally:
+        status("Closing PsychoPy window...")
+        window.close()
+    return 0
+
+
+def _run_detox_calibration(
+    controller,
+    *,
+    status: StatusSink,
+    play_sound: bool,
+    calibration_points: int,
+    shuffle: bool,
+    animation: str,
+    show_positioning: bool,
+) -> bool:
+    if show_positioning:
+        status("Positioning: adjust the child, then press Space to continue.")
+        controller.show_status()
+    status(
+        f"Running DeToX calibration ({calibration_points} points). Number keys "
+        "select a point, Space collects, Enter shows results, Escape aborts."
+    )
+    return bool(
+        controller.calibrate(
+            calibration_points=calibration_points,
+            shuffle=shuffle,
+            audio=play_sound,
+            anim_type=animation,
+            visualization_style=RESULTS_VISUALIZATION_STYLE,
+        )
+    )
+
+
+def _discovery_index(tobii_research, eyetracker) -> int:
+    from aria_et.eyetracker import TobiiTrackerUnavailableError
+
+    for index, candidate in enumerate(tobii_research.find_all_eyetrackers()):
+        if candidate.serial_number == eyetracker.serial_number:
+            return index
+    raise TobiiTrackerUnavailableError(
+        f"Tracker {eyetracker.serial_number} is not visible to discovery, which "
+        "DeToX needs to connect to it."
+    )
+
+
+def _open_calibration_window(*, status: StatusSink, **window_options):
+    status("Importing PsychoPy...")
+    from psychopy import monitors, prefs, visual
+
+    from aria_et.psychopy.environment import effective_window_size, open_window
+
+    effective_size = effective_window_size(
+        fullscreen=window_options["fullscreen"],
+        window_size=window_options["window_size"],
+        screen_resolution_pixels=window_options["screen_resolution_pixels"],
+    )
+    status(
+        "Opening PsychoPy window "
+        f"({effective_size[0]}x{effective_size[1]}, "
+        f"fullscreen={window_options['fullscreen']}, "
+        f"screen={window_options['screen']})..."
+    )
+    return open_window(
+        visual_module=visual,
+        monitors_module=monitors,
+        prefs_module=prefs,
+        **window_options,
+    )

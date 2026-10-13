@@ -141,8 +141,6 @@ def test_build_calibrate_args_include_child_friendly_flags(parser, session):
             session,
             state.CalibrationOptions(
                 routine="child-friendly",
-                point_duration_seconds=1.5,
-                advance_on_space=True,
                 fullscreen=False,
                 window_size="800x600",
                 play_sound=False,
@@ -151,8 +149,11 @@ def test_build_calibrate_args_include_child_friendly_flags(parser, session):
     )
 
     assert args.routine == "child-friendly"
-    assert args.point_duration == 1.5
-    assert args.advance_on_space is True
+    # Procedure settings fall back to the CLI's protocol defaults.
+    assert args.points == 5
+    assert args.shuffle is True
+    assert args.animation == "zoom"
+    assert args.show_positioning is True
     assert args.fullscreen is False
     assert args.size == "800x600"
     assert args.no_sound is True

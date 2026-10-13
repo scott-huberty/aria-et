@@ -4,7 +4,7 @@ from aria_et.gui.state import ExitSeverity, describe_exit_code
 
 pytest.importorskip("PySide6")
 
-from aria_et.gui.process import split_output_lines
+from aria_et.gui.process import child_process_environment, split_output_lines
 
 
 def test_split_output_lines_holds_back_a_partial_line():
@@ -53,3 +53,8 @@ def test_unknown_exit_code_falls_back_to_an_error():
 
     assert outcome.severity is ExitSeverity.ERROR
     assert "42" in outcome.message
+
+
+def test_child_processes_write_utf8_output():
+    # DeToX prints box-drawing characters; cp1252 pipes would crash the CLI.
+    assert child_process_environment().value("PYTHONIOENCODING") == "utf-8"

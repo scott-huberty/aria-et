@@ -112,9 +112,6 @@ def test_child_friendly_defaults(qapp, config):
 
     options = page.calibration_options()
 
-    assert options.point_duration_seconds == 1.5
-    # Waiting for space would stop the timed auto-advance, so it stays off.
-    assert options.advance_on_space is False
     assert options.fullscreen is True
     assert options.play_sound is True
 
@@ -136,14 +133,14 @@ def test_custom_calibration_settings_show_a_notice_until_restored(qapp, config):
     page._routine.setCurrentIndex(1)
     page._edit_settings_button.click()
 
-    page._point_duration.setValue(3.0)
+    page._sound.setChecked(False)
 
     assert page._custom_notice.isVisibleTo(page)
     assert page._restore_defaults_button.isEnabled()
 
     page._restore_defaults_button.click()
 
-    assert page.calibration_options().point_duration_seconds == 1.5
+    assert page.calibration_options().play_sound is True
     assert not page._custom_notice.isVisibleTo(page)
     assert not page._settings_fields.isEnabled()
 
@@ -152,12 +149,12 @@ def test_switching_routine_restores_and_locks_settings(qapp, config):
     page = CalibrationPage(config)
     page._routine.setCurrentIndex(1)
     page._edit_settings_button.click()
-    page._point_duration.setValue(3.0)
+    page._sound.setChecked(False)
 
     page._routine.setCurrentIndex(0)
     page._routine.setCurrentIndex(1)
 
-    assert page.calibration_options().point_duration_seconds == 1.5
+    assert page.calibration_options().play_sound is True
     assert not page._settings_fields.isEnabled()
 
 
@@ -185,7 +182,6 @@ def test_child_friendly_calibration_args_still_parse(qapp, config, session):
     page = CalibrationPage(config)
     page.set_session(session)
     page._routine.setCurrentIndex(1)
-    page._advance_on_space.setChecked(True)
     page._sound.setChecked(False)
     emitted = []
     page.calibrate_requested.connect(emitted.append)
@@ -193,8 +189,10 @@ def test_child_friendly_calibration_args_still_parse(qapp, config, session):
     page._request_calibration()
 
     build_parser(config).parse_args(emitted[0])
-    assert "--advance-on-space" in emitted[0]
-    assert "--point-duration" in emitted[0]
+    assert "--no-sound" in emitted[0]
+    # The DeToX procedure settings are not exposed; the CLI defaults apply.
+    for flag in ("--points", "--no-shuffle", "--animation", "--skip-positioning"):
+        assert flag not in emitted[0]
 
 
 def test_calibration_history_is_empty_for_a_fresh_session(qapp, config, session):
@@ -240,7 +238,7 @@ def test_calibration_re_enables_its_button_after_a_refused_start(qapp, config, s
     assert page._calibrate_button.isEnabled()
 
 
-@pytest.mark.parametrize("field", ["_routine", "_point_duration", "_screen"])
+@pytest.mark.parametrize("field", ["_routine", "_screen"])
 def test_mouse_wheel_does_not_change_calibration_inputs(qapp, config, field):
     page = CalibrationPage(config)
     page._routine.setCurrentIndex(1)
