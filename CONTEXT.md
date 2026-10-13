@@ -184,6 +184,11 @@ issues/crash-reports/python3.10-2026-08-19-121231.ips
 Because `issues/` is ignored by `.gitignore`, these files are preserved locally
 but not committed.
 
+## Raw Format Rationale
+
+Raw runs are JSON Lines (`gaze.jsonl`, `events.jsonl`) because append-only lines survive aborted runs and crashes with no dependencies to read them. if raw size
+matters, gzip the JSONL (~5x smaller for under 1% of a core at 600 Hz).
+
 ## BIDS Export
 
 Per-run export command:
