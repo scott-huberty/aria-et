@@ -45,6 +45,21 @@ DEFAULT_VALIDATION_POINTS = (
 # right after calibrating, which is stricter.
 ACCURACY_TOLERANCE_DEG = 2.5
 
+# DeToX 0.2.1's eye colours (ETSettings.colors, RGBA 0-255), here so the GUI can
+# use them without importing PsychoPy or DeToX.
+DETOX_EYE_COLORS = {
+    "left": (100, 200, 255, 120),
+    "right": (255, 100, 120, 120),
+}
+
+# Live child-position panel (Tobii user position guide; x, y, z are normalized
+# to the tracker's track box, 0-1). A starting point to tune on hardware: z is
+# assumed to run from near (0) to far (1), with the ideal distance in the middle.
+POSITION_IDEAL_Z = 0.5
+POSITION_Z_TOLERANCE = 0.2  # good while |z - ideal| <= this
+POSITION_CENTRE_RANGE = (0.2, 0.8)  # good while x and y stay inside this range
+POSITION_STALE_SECONDS = 0.5  # no sample for longer than this: data is stale
+
 # After the operator presses Space, validation waits for the eyes to settle for
 # DeToX's own ``focus_time`` (the same wait its calibration uses before
 # collecting), then records gaze for this long.

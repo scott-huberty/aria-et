@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from aria_et.config import AriaEtConfig
+from aria_et.config import AriaEtConfig, load_config
 from aria_et.gui.pages.battery import BatteryPage
 from aria_et.gui.pages.calibration import CalibrationPage
 from aria_et.gui.pages.export import ExportPage
@@ -33,6 +33,8 @@ from aria_et.gui.theme import PALETTE
 from aria_et.gui.widgets.crash_panel import CRASH_LOG_LINES
 from aria_et.gui.widgets.log_pane import LogPane
 from aria_et.gui.widgets.status_pill import PillTone, StatusPill
+from aria_et.gui.widgets.track_box import TrackBoxPanel
+from aria_et.position_monitor import PositionMonitor
 
 NAV_ITEMS = ("1  Setup", "2  Hardware", "3  Calibration", "4  Battery", "5  Export")
 NAV_ICON_SIZE = 16
@@ -43,10 +45,17 @@ MODE_BANNERS = {
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, config: AriaEtConfig, screen_count: int = 1):
+    def __init__(
+        self,
+        config: AriaEtConfig,
+        screen_count: int = 1,
+        position_monitor: PositionMonitor | None = None,
+    ):
         super().__init__()
         self._config = config
         self._session: SessionState | None = None
+        # Live child position; started once the Hardware check finds the tracker.
+        self._position_monitor = position_monitor or PositionMonitor()
 
         self.setWindowTitle("ARIA-ET")
         self.setMinimumSize(1000, 680)
@@ -125,7 +134,16 @@ class MainWindow(QMainWindow):
         body_layout = QHBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(0)
-        body_layout.addWidget(self._nav)
+        # Left column: page list, with the live child-position panel under it.
+        self._track_box = TrackBoxPanel(self._position_monitor)
+        left_column = QWidget()
+        left_column.setFixedWidth(self._nav.width())
+        left_layout = QVBoxLayout(left_column)
+        left_layout.setContentsMargins(0, 0, 0, 8)
+        left_layout.setSpacing(0)
+        left_layout.addWidget(self._nav, 1)
+        left_layout.addWidget(self._track_box)
+        body_layout.addWidget(left_column)
         body_layout.addWidget(content, 1)
 
         root = QWidget()
@@ -297,6 +315,22 @@ class MainWindow(QMainWindow):
         self._hardware_page.report_exit(exit_code)
         self._sync_tracker_pill()
         self._battery_page.set_tracker_checked(self._hardware_page.tracker_connected)
+        self._sync_position_monitor()
+
+    def _sync_position_monitor(self) -> None:
+        """Follow the saved tracker once the Hardware check has found it."""
+        if self._hardware_page.tracker_connected:
+            config = load_config()  # the check may just have saved the tracker
+            self._position_monitor.start(
+                address=config.tracker_address,
+                serial_number=config.tracker_serial_number,
+            )
+        else:
+            self._position_monitor.stop()
+
+    def closeEvent(self, event) -> None:
+        self._position_monitor.stop()
+        super().closeEvent(event)
 
     def _on_output_line(self, line: str) -> None:
         self._log_pane.append_line(line)

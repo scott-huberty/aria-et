@@ -24,6 +24,7 @@ from aria_et.calibration import (
     DEFAULT_SHOW_POSITIONING,
     DEFAULT_SHUFFLE_POINTS,
     DEFAULT_VALIDATION_POINTS,
+    DETOX_EYE_COLORS,
     RESULTS_VISUALIZATION_STYLE,
     VALIDATION_COLLECT_SECONDS,
 )
@@ -448,8 +449,8 @@ class DetoxColorDefaults:
     Only used if DeToX's own settings can't be read.
     """
 
-    left_eye = (100, 200, 255, 120)
-    right_eye = (255, 100, 120, 120)
+    left_eye = DETOX_EYE_COLORS["left"]
+    right_eye = DETOX_EYE_COLORS["right"]
 
 
 def _detox_colors(import_module: ImportModule) -> dict[str, tuple]:

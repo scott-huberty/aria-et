@@ -150,3 +150,29 @@ command line so aria-et records it:
 Don't calibrate in the Eye Tracker Manager application directly: the
 calibration would be applied on the tracker but not recorded, so later runs
 would record the previous aria-et calibration as the one in effect.
+
+Live child position (GUI)
+-------------------------
+
+The GUI shows a **Child position** panel under the page list, on every page.
+It is the same picture as DeToX's positioning screen, but it stays live during
+calibration and runs, so the operator can see if the child slumps, leans in or
+turns away:
+
+- the tracker's **track box** with a dot per eye (left eye blue, right eye
+  pink; mirrored like DeToX, as if facing the child),
+- a **distance bar** from *near* to *far*, with the ideal distance marked and
+  the good range shaded,
+- a status: **Position good**, **Too close**, **Too far**, **Move to centre**,
+  **Eyes not found**, **No position data** (no recent samples) or
+  **No tracker**.
+
+It starts after a successful **Check tracker** on the Hardware page and uses
+the tracker saved for this laptop. It shows where the tracker sees the eyes,
+not where the child is looking. The GUI reads the tracker's user position
+stream itself, alongside the calibration or task process; this costs very
+little and doesn't touch the recording.
+
+The thresholds (ideal distance, good range, centre band) are starting values
+in ``aria_et/calibration.py`` (``POSITION_*``) and should be tuned on the lab
+hardware, including confirming that the distance runs near to far.
