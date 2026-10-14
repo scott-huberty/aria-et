@@ -1,4 +1,6 @@
 import json
+import math
+import random
 import sys
 from types import SimpleNamespace
 
@@ -6,21 +8,58 @@ import pytest
 
 from aria_et.psychopy.calibration import (
     CALIBRATION_METHOD,
+    describe_validation,
     run_child_friendly_calibration_demo,
     run_child_friendly_eyetracker_calibration,
+    run_validation,
 )
+
+# A 527 x 296 mm screen; the eye sits 650 mm in front of its centre.
+DISPLAY_AREA = SimpleNamespace(
+    top_left=(-263.5, 148.0, 0.0),
+    top_right=(263.5, 148.0, 0.0),
+    bottom_left=(-263.5, -148.0, 0.0),
+)
+EYE_ORIGIN = (0.0, 0.0, 650.0)
+SCREEN_CENTRE = (0.0, 0.0, 0.0)
+GAZE_STREAM = "gaze_data"
 
 
 class FakeTracker:
+    """A tracker whose gaze stream always looks at the screen centre."""
+
     address = "tobii-prp://169.254.10.180"
     model = "Tobii Pro Spectrum"
     firmware_version = "2.6.2"
 
     def __init__(self, serial_number="TPS-123"):
         self.serial_number = serial_number
+        self.subscribers = []
+        self.unsubscribed = []
 
     def retrieve_calibration_data(self):
         return b"detox-calibration"
+
+    def get_display_area(self):
+        return DISPLAY_AREA
+
+    def subscribe_to(self, stream, callback, as_dictionary=False):
+        assert stream == GAZE_STREAM and as_dictionary
+        self.subscribers.append(callback)
+
+    def unsubscribe_from(self, stream, callback=None):
+        self.unsubscribed.append(stream)
+        self.subscribers.remove(callback)
+
+    def emit_gaze(self):
+        sample = {}
+        for eye in ("left", "right"):
+            sample[f"{eye}_gaze_origin_in_user_coordinate_system"] = EYE_ORIGIN
+            sample[f"{eye}_gaze_point_in_user_coordinate_system"] = SCREEN_CENTRE
+            sample[f"{eye}_gaze_origin_validity"] = 1
+            sample[f"{eye}_gaze_point_validity"] = 1
+        for callback in list(self.subscribers):
+            callback(sample)
 
 
 class FakeWindow:
@@ -29,13 +68,72 @@ class FakeWindow:
 
     def __init__(self):
         self.closed = False
+        self.tracker = None  # set by tests: each flip delivers one gaze sample
+
+    def flip(self):
+        if self.tracker is not None:
+            self.tracker.emit_gaze()
 
     def close(self):
         self.closed = True
 
 
+class FakeStim:
+    def __init__(self, *args, **kwargs):
+        self.kwargs = kwargs
+        self.size = kwargs.get("size")
+
+    def draw(self):
+        pass
+
+
+class FakeSound:
+    instances = []
+
+    def __init__(self, path, loops=0):
+        self.path = path
+        self.plays = 0
+        FakeSound.instances.append(self)
+
+    def play(self):
+        self.plays += 1
+
+    def stop(self):
+        pass
+
+    def setVolume(self, volume):
+        self.volumes = getattr(self, "volumes", []) + [volume]
+
+
+class FakeKeys:
+    """Scripted keypresses: each getKeys call pops the next batch, then Space."""
+
+    def __init__(self, script=()):
+        self.script = list(script)
+
+    def getKeys(self, keyList=None):
+        return self.script.pop(0) if self.script else ["space"]
+
+    def clearEvents(self):
+        pass
+
+
+class FakeClock:
+    def __init__(self):
+        self.time = 0.0
+
+    def getTime(self):
+        self.time += 0.1
+        return self.time
+
+
 @pytest.fixture
-def window(monkeypatch):
+def keys():
+    return FakeKeys()
+
+
+@pytest.fixture
+def window(monkeypatch, keys):
     """Fake PsychoPy so the runner can open its window without a display."""
     window = FakeWindow()
 
@@ -49,19 +147,50 @@ def window(monkeypatch):
     fake_psychopy = SimpleNamespace(
         monitors=SimpleNamespace(Monitor=lambda *args, **kwargs: FakeMonitor()),
         prefs=SimpleNamespace(hardware={}),
-        visual=SimpleNamespace(Window=lambda **kwargs: window),
+        visual=SimpleNamespace(
+            Window=lambda **kwargs: window,
+            TextStim=FakeStim,
+            ImageStim=FakeStim,
+            Circle=FakeStim,
+        ),
+        core=SimpleNamespace(Clock=FakeClock),
+        event=keys,
+        sound=SimpleNamespace(Sound=FakeSound),
     )
     monkeypatch.setitem(sys.modules, "psychopy", fake_psychopy)
     return window
 
 
+# Where a real DeToX 5-point calibration puts its targets, as Tobii reports them.
+DETOX_POSITIONS = [[0.9, 0.9], [0.9, 0.1], [0.1, 0.9], [0.1, 0.1], [0.5, 0.5]]
+
+
+class FakeCalibrationResult:
+    status = "success"
+
+    def __init__(self, positions=DETOX_POSITIONS):
+        self.calibration_points = [
+            SimpleNamespace(position_on_display_area=tuple(position))
+            for position in positions
+        ]
+
+
 class FakeDetox:
     """Stands in for the DeToX package; records how ETracker is driven."""
 
-    def __init__(self, trackers, *, calibrate_result=True):
+    def __init__(
+        self,
+        trackers,
+        *,
+        calibrate_result=True,
+        stimulus_dir=None,
+        positions=DETOX_POSITIONS,
+    ):
         self.trackers = trackers
         self.calibrate_result = calibrate_result
         self.controllers = []
+        if stimulus_dir is not None:
+            self.__file__ = str(stimulus_dir.parent / "__init__.py")
         detox = self
 
         class ETracker:
@@ -70,6 +199,9 @@ class FakeDetox:
                 self.etracker_id = etracker_id
                 self.simulate = simulate
                 self.eyetracker = None if simulate else detox.trackers[etracker_id]
+                self.calibration = SimpleNamespace(
+                    compute_and_apply=lambda: FakeCalibrationResult(positions)
+                )
                 self.calls = []
                 detox.controllers.append(self)
 
@@ -78,6 +210,9 @@ class FakeDetox:
 
             def calibrate(self, **kwargs):
                 self.calls.append(("calibrate", kwargs))
+                if not self.simulate:
+                    # DeToX computes through its calibration object, then drops it.
+                    self.calibration.compute_and_apply()
                 return detox.calibrate_result
 
         self.ETracker = ETracker
@@ -86,6 +221,7 @@ class FakeDetox:
 def _import_module(trackers, detox):
     fake_tobii = SimpleNamespace(
         __version__="2.1.0",
+        EYETRACKER_GAZE_DATA=GAZE_STREAM,
         find_all_eyetrackers=lambda: tuple(trackers),
     )
 
@@ -214,3 +350,277 @@ def test_calibration_demo_uses_detox_mouse_simulation(window):
 def test_importing_the_calibration_module_does_not_import_psychopy():
     assert "psychopy" not in sys.modules
     assert "DeToX" not in sys.modules
+
+
+@pytest.fixture
+def stimulus_dir(tmp_path):
+    stimuli = tmp_path / "DeToX" / "stimuli"
+    stimuli.mkdir(parents=True)
+    (stimuli / "cute_cat.png").write_bytes(b"png")
+    (stimuli / "CalibrationSound.wav").write_bytes(b"wav")
+    return stimuli
+
+
+def _calibrate(
+    tmp_path, window, *, stimulus_dir=None, positions=DETOX_POSITIONS, **kwargs
+):
+    tracker = FakeTracker()
+    window.tracker = tracker
+    detox = FakeDetox([tracker], stimulus_dir=stimulus_dir, positions=positions)
+    exit_code = run_child_friendly_eyetracker_calibration(
+        calibration_output_dir=tmp_path / "calibrations",
+        import_module=_import_module([tracker], detox),
+        status_sink=lambda message: None,
+        **kwargs,
+    )
+    artifact_dir = next((tmp_path / "calibrations").iterdir())
+    metadata = json.loads((artifact_dir / "calibration.json").read_text())
+    return exit_code, metadata, tracker
+
+
+def test_calibration_saves_point_positions_and_validation_quality(
+    tmp_path, window, stimulus_dir
+):
+    FakeSound.instances.clear()
+
+    exit_code, metadata, tracker = _calibrate(
+        tmp_path, window, stimulus_dir=stimulus_dir
+    )
+
+    assert exit_code == 0
+    assert metadata["calibration_points"] == {
+        "count": 5,
+        "positions_adcs": DETOX_POSITIONS,
+    }
+    validation = metadata["validation"]
+    # Validation targets are the calibration's own positions.
+    assert validation["points_adcs"] == DETOX_POSITIONS
+    assert sorted(p["target_adcs"] for p in validation["points"]) == sorted(
+        DETOX_POSITIONS
+    )
+    assert validation["status"] == "complete"
+    assert len(validation["points"]) == 5
+    # The fake gaze always hits the screen centre, so the centre target is exact.
+    centre = next(p for p in validation["points"] if p["target_adcs"] == [0.5, 0.5])
+    assert centre["left"]["accuracy_deg"] == pytest.approx(0.0, abs=1e-6)
+    assert centre["left"]["data_loss"] == 0.0
+    assert centre["left"]["n_samples"] > 0
+    summary = validation["summary"]
+    assert summary["left"]["accuracy_deg"] > 0
+    assert summary["right"]["max_accuracy_deg"] >= summary["right"]["accuracy_deg"]
+    # Gaze is only subscribed during validation, and the sound plays per target.
+    assert tracker.subscribers == []
+    assert tracker.unsubscribed == [GAZE_STREAM]
+    assert FakeSound.instances[0].plays == 5
+
+
+def test_escape_at_the_validation_instructions_skips_validation(
+    tmp_path, window, keys
+):
+    keys.script = [["escape"]]
+
+    exit_code, metadata, _ = _calibrate(tmp_path, window)
+
+    assert exit_code == 0  # the calibration is kept
+    assert metadata["validation"]["status"] == "skipped"
+    assert metadata["validation"]["summary"] is None
+
+
+def test_escape_during_validation_keeps_the_collected_points(tmp_path, window, keys):
+    # Start, collect two targets, then Escape on the third.
+    keys.script = [[], ["space"], ["space"], ["space"], ["escape"]]
+
+    _, metadata, tracker = _calibrate(tmp_path, window)
+
+    validation = metadata["validation"]
+    assert validation["status"] == "partial"
+    assert len(validation["points"]) == 2
+    assert validation["summary"]["left"]["data_loss"] == 0.0
+    assert tracker.subscribers == []
+
+
+def test_validation_shuffles_targets_with_the_given_rng(window):
+    tracker = FakeTracker()
+    window.tracker = tracker
+
+    validation = run_validation(
+        window,
+        eyetracker=tracker,
+        tobii_research=SimpleNamespace(EYETRACKER_GAZE_DATA=GAZE_STREAM),
+        stimulus_dir=None,
+        play_sound=True,
+        status=lambda message: None,
+        rng=random.Random(0),
+    )
+
+    order = [point["target_adcs"] for point in validation["points"]]
+    expected = [list(p) for p in validation["points_adcs"]]
+    random.Random(0).shuffle(expected)
+    assert order == expected
+
+
+def test_describe_validation_summarizes_both_eyes():
+    validation = {
+        "status": "complete",
+        "summary": {
+            "left": {
+                "accuracy_deg": 0.72,
+                "precision_rms_deg": 0.07,
+                "data_loss": 0.0,
+                "max_accuracy_deg": 1.0,
+            },
+            "right": {
+                "accuracy_deg": 0.61,
+                "precision_rms_deg": None,
+                "data_loss": 0.25,
+                "max_accuracy_deg": 0.9,
+            },
+        },
+    }
+
+    assert describe_validation(validation) == (
+        "Validation complete: accuracy L 0.72° R 0.61°; "
+        "precision L 0.07° R n/a; data loss L 0.00% R 25.00%."
+    )
+    assert describe_validation({"status": "skipped", "summary": None}) == (
+        "Validation skipped."
+    )
+
+
+def test_validation_falls_back_to_the_detox_layout_without_recorded_points(
+    tmp_path, window
+):
+    _, metadata, _ = _calibrate(tmp_path, window, positions=[])
+
+    assert metadata["calibration_points"]["count"] == 0
+    assert sorted(metadata["validation"]["points_adcs"]) == sorted(DETOX_POSITIONS)
+
+
+class SteppedClock:
+    """A clock that returns preset times, one per call."""
+
+    def __init__(self, times):
+        self.times = list(times)
+
+    def getTime(self):
+        return self.times.pop(0)
+
+
+def test_validation_zoom_matches_detox_calibration_animation():
+    from aria_et.psychopy.calibration import DetoxAnimationDefaults, _Target
+
+    settings = DetoxAnimationDefaults()
+    period = 2 * math.pi / settings.zoom_speed
+    window = FakeWindow()
+    target = _Target(
+        window,
+        SimpleNamespace(ImageStim=FakeStim, Circle=FakeStim),
+        SimpleNamespace(Clock=lambda: SteppedClock([0.0, period / 4, period / 2])),
+        (0.1, 0.1),
+        ["cat.png"],
+        0,
+        animation="zoom",
+        settings=settings,
+    )
+    height = window.size[1]
+
+    sizes = []
+    for _ in range(3):
+        target.draw()
+        sizes.append(target._stim.size)
+
+    # DeToX: size = min + (cos(t * zoom_speed) + 1) / 2 * (max - min), in screen heights.
+    assert sizes[0] == pytest.approx(0.16 * height)  # starts at max
+    assert sizes[1] == pytest.approx((0.05 + 0.16) / 2 * height)
+    assert sizes[2] == pytest.approx(0.05 * height)  # half a cycle later: min
+    assert target._stim.kwargs["pos"] == pytest.approx((-768.0, 432.0))
+    assert target._stim.kwargs["interpolate"] is True
+
+
+def test_validation_trill_rotates_at_a_fixed_size():
+    from aria_et.psychopy.calibration import DetoxAnimationDefaults, _Target
+
+    settings = DetoxAnimationDefaults()
+    target = _Target(
+        FakeWindow(),
+        SimpleNamespace(ImageStim=FakeStim, Circle=FakeStim),
+        SimpleNamespace(Clock=lambda: SteppedClock([1 / 12, 1.3])),
+        (0.5, 0.5),
+        [],
+        0,
+        animation="trill",
+        settings=settings,
+    )
+
+    target.draw()
+    assert target._stim.size == pytest.approx(0.14 * 1080)
+    assert target._stim.ori == pytest.approx(settings.trill_rotation_range)
+    target.draw()  # 1.3 s is in the pause after the 1.1 s active phase
+    assert target._stim.ori == 0
+
+
+def test_animation_defaults_match_the_installed_detox():
+    import importlib.util
+    import subprocess
+
+    # find_spec, not importorskip: importing DeToX here would import PsychoPy.
+    if importlib.util.find_spec("DeToX") is None:
+        pytest.skip("DeToX not installed")
+
+    from aria_et.psychopy.calibration import DetoxAnimationDefaults
+
+    names = [name for name in vars(DetoxAnimationDefaults) if not name.startswith("_")]
+    # In a subprocess: importing DeToX imports PsychoPy, which other tests forbid.
+    script = (
+        "import json; from DeToX import ETSettings as cfg; "
+        f"print(json.dumps({{n: getattr(cfg.animation, n) for n in {names!r}}}))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, timeout=120
+    )
+    assert result.returncode == 0, result.stderr
+    installed = json.loads(result.stdout.strip().splitlines()[-1])
+
+    assert installed == {name: getattr(DetoxAnimationDefaults, name) for name in names}
+
+
+def _validate(window, **kwargs):
+    tracker = FakeTracker()
+    window.tracker = tracker
+    return run_validation(
+        window,
+        eyetracker=tracker,
+        tobii_research=SimpleNamespace(EYETRACKER_GAZE_DATA=GAZE_STREAM),
+        status=lambda message: None,
+        points=[(0.5, 0.5)],
+        **kwargs,
+    )
+
+
+def test_validation_settle_uses_detox_focus_time(window):
+    from aria_et.psychopy.calibration import DetoxAnimationDefaults
+
+    default = _validate(window, stimulus_dir=None, play_sound=False)
+    tuned_settings = DetoxAnimationDefaults()
+    tuned_settings.focus_time = 1.0
+    tuned = _validate(
+        window,
+        stimulus_dir=None,
+        play_sound=False,
+        animation_settings=tuned_settings,
+    )
+
+    assert default["settle_seconds"] == 0.5  # DeToX's focus_time
+    assert tuned["settle_seconds"] == 1.0
+
+
+def test_validation_fades_the_sound_during_the_settle(window, stimulus_dir):
+    FakeSound.instances.clear()
+
+    _validate(window, stimulus_dir=stimulus_dir, play_sound=True)
+
+    volumes = FakeSound.instances[0].volumes
+    fade = [volume for volume in volumes if volume < 1.0]
+    assert len(fade) >= 3
+    assert fade == sorted(fade, reverse=True)  # only ever gets quieter
+    assert volumes[-1] == 1.0  # reset, ready for the next target

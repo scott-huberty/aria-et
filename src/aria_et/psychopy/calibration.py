@@ -1,16 +1,20 @@
-"""Child-friendly calibration through DeToX.
+"""Child-friendly calibration through DeToX, followed by a validation step.
 
 DeToX (``dvst-detox``) provides the positioning screen and the infant-friendly
 calibration procedure: animated targets, operator-driven collection, a results
 view, and re-collection of individual points. aria-et resolves the tracker,
-opens the PsychoPy window on the configured stimulus display, and saves the
-applied calibration so runs can record which calibration was in effect.
+opens the PsychoPy window on the configured stimulus display, runs a
+Titta-style validation after the calibration is accepted, and saves the applied
+calibration with its quality so runs can record which calibration was in effect.
 """
 
 from __future__ import annotations
 
 import importlib
+import math
+import random
 import sys
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
@@ -19,8 +23,11 @@ from aria_et.calibration import (
     DEFAULT_CALIBRATION_POINTS,
     DEFAULT_SHOW_POSITIONING,
     DEFAULT_SHUFFLE_POINTS,
+    DEFAULT_VALIDATION_POINTS,
     RESULTS_VISUALIZATION_STYLE,
+    VALIDATION_COLLECT_SECONDS,
 )
+from aria_et.calibration_quality import EYES, adcs_to_ucs, point_quality, summarize
 
 StatusSink = Callable[[str], None]
 ImportModule = Callable[[str], object]
@@ -95,6 +102,7 @@ def run_child_friendly_eyetracker_calibration(
         monitor_name=monitor_name,
         audio_speaker=audio_speaker,
     )
+    extra_metadata: dict[str, object] = {}
     try:
         controller = detox.ETracker(window, etracker_id=tracker_index)
         if controller.eyetracker.serial_number != eyetracker.serial_number:
@@ -104,6 +112,9 @@ def run_child_friendly_eyetracker_calibration(
                 f"{eyetracker.serial_number}."
             )
             return 3
+        # DeToX discards the calibration result; keep it for the point positions.
+        recorder = _RecordingCalibration(controller.calibration)
+        controller.calibration = recorder
         succeeded = _run_detox_calibration(
             controller,
             status=status,
@@ -113,6 +124,27 @@ def run_child_friendly_eyetracker_calibration(
             animation=animation,
             show_positioning=show_positioning,
         )
+        if succeeded:
+            calibration_point_metadata = recorder.point_metadata()
+            extra_metadata["calibration_points"] = calibration_point_metadata
+            # Validate at the calibration's own positions, so both steps cover
+            # the same area; fall back to DeToX's default layout if unknown.
+            validation_points = [
+                tuple(point) for point in calibration_point_metadata["positions_adcs"]
+            ] or DEFAULT_VALIDATION_POINTS
+            validation = run_validation(
+                window,
+                eyetracker=eyetracker,
+                tobii_research=tobii_research,
+                stimulus_dir=_detox_stimulus_dir(detox),
+                play_sound=play_sound,
+                status=status,
+                animation=animation,
+                animation_settings=_detox_animation_settings(import_module),
+                points=validation_points,
+            )
+            extra_metadata["validation"] = validation
+            status(describe_validation(validation))
     finally:
         status("Closing PsychoPy window...")
         window.close()
@@ -127,6 +159,7 @@ def run_child_friendly_eyetracker_calibration(
             output_dir=calibration_output_dir,
             method=CALIBRATION_METHOD,
             screen=screen,
+            extra_metadata=extra_metadata,
         )
     except OSError as error_message:
         error(
@@ -216,6 +249,363 @@ def _run_detox_calibration(
             visualization_style=RESULTS_VISUALIZATION_STYLE,
         )
     )
+
+
+class _RecordingCalibration:
+    """Wraps Tobii's ``ScreenBasedCalibration`` to keep the last computed result.
+
+    DeToX calls ``compute_and_apply()`` internally and drops the result; this
+    proxy records it so the calibration point positions can be saved.
+    """
+
+    def __init__(self, calibration):
+        self._calibration = calibration
+        self.result = None
+
+    def compute_and_apply(self):
+        self.result = self._calibration.compute_and_apply()
+        return self.result
+
+    def __getattr__(self, name):
+        return getattr(self._calibration, name)
+
+    def point_metadata(self) -> dict[str, object]:
+        points = getattr(self.result, "calibration_points", None) or ()
+        positions = [
+            [float(value) for value in point.position_on_display_area]
+            for point in points
+        ]
+        return {"count": len(positions), "positions_adcs": positions}
+
+
+def run_validation(
+    window,
+    *,
+    eyetracker,
+    tobii_research,
+    stimulus_dir: Path | None,
+    play_sound: bool,
+    status: StatusSink,
+    animation: str = DEFAULT_ANIMATION,
+    animation_settings: object | None = None,
+    points=DEFAULT_VALIDATION_POINTS,
+    settle_seconds: float | None = None,
+    collect_seconds: float = VALIDATION_COLLECT_SECONDS,
+    rng: random.Random | None = None,
+) -> dict[str, object]:
+    """Show validation targets, record gaze at each, and compute quality.
+
+    The operator presses Space when the child looks at the target; gaze is then
+    recorded for ``collect_seconds`` after a settle. The settle defaults to
+    DeToX's ``focus_time``, the wait its calibration uses before collecting, and
+    the attention sound fades out over it as in DeToX. Escape stops the
+    validation; the calibration is kept either way. Targets are animated the
+    same way as DeToX's calibration targets (``animation`` and DeToX's
+    ``ETSettings.animation``), so the child sees the same thing in both steps.
+    """
+    from psychopy import core, event, sound, visual
+
+    animation_settings = animation_settings or DetoxAnimationDefaults()
+    if settle_seconds is None:
+        settle_seconds = animation_settings.focus_time
+
+    order = list(points)
+    (rng or random.Random()).shuffle(order)
+    images = sorted(stimulus_dir.glob("*.png")) if stimulus_dir else []
+    collector = _GazeCollector()
+    display_area = eyetracker.get_display_area()
+    gaze_stream = tobii_research.EYETRACKER_GAZE_DATA
+    attention_sound = _load_sound(
+        sound, stimulus_dir, enabled=play_sound, status=status
+    )
+    record: dict[str, object] = {
+        "points_adcs": [list(point) for point in points],
+        "settle_seconds": settle_seconds,
+        "collect_seconds": collect_seconds,
+    }
+    results = []
+
+    eyetracker.subscribe_to(gaze_stream, collector.add, as_dictionary=True)
+    try:
+        if not _show_instructions(window, visual, event):
+            record.update(status="skipped", points=[], summary=None)
+            return record
+        for index, point in enumerate(order):
+            target = _Target(
+                window,
+                visual,
+                core,
+                point,
+                images,
+                index,
+                animation=animation,
+                settings=animation_settings,
+            )
+            if attention_sound is not None:
+                attention_sound.play()
+            try:
+                if not _wait_for_space(window, target, event):
+                    break
+                status(f"Validation: collecting at {point}")
+                # Like DeToX: fade the sound out while the eyes settle, so
+                # recording starts in silence.
+                _animate(
+                    window,
+                    target,
+                    core,
+                    settle_seconds,
+                    on_progress=_sound_fader(attention_sound),
+                )
+                _stop_sound(attention_sound)
+                collector.start()
+                _animate(window, target, core, collect_seconds)
+                samples = collector.stop()
+            finally:
+                _stop_sound(attention_sound)
+            target_ucs = adcs_to_ucs(point, display_area)
+            results.append(
+                {
+                    "target_adcs": list(point),
+                    **{eye: point_quality(samples, target_ucs, eye) for eye in EYES},
+                }
+            )
+    finally:
+        eyetracker.unsubscribe_from(gaze_stream, collector.add)
+
+    if not results:
+        status_text = "skipped"
+    elif len(results) < len(order):
+        status_text = "partial"
+    else:
+        status_text = "complete"
+    record.update(
+        status=status_text,
+        points=[
+            {
+                "target_adcs": result["target_adcs"],
+                **{eye: result[eye].as_dict() for eye in EYES},
+            }
+            for result in results
+        ],
+        summary=summarize(results) if results else None,
+    )
+    return record
+
+
+def describe_validation(validation: dict[str, object]) -> str:
+    """One-line validation summary for the console and GUI log."""
+    summary = validation.get("summary")
+    if not summary:
+        return f"Validation {validation.get('status', 'skipped')}."
+    parts = []
+    for label, key, scale, unit in (
+        ("accuracy", "accuracy_deg", 1, "°"),
+        ("precision", "precision_rms_deg", 1, "°"),
+        ("data loss", "data_loss", 100, "%"),
+    ):
+        values = [summary[eye][key] for eye in EYES]
+        text = " ".join(
+            f"{eye[0].upper()} {'n/a' if value is None else f'{value * scale:.2f}{unit}'}"
+            for eye, value in zip(EYES, values)
+        )
+        parts.append(f"{label} {text}")
+    return f"Validation {validation['status']}: " + "; ".join(parts) + "."
+
+
+class _GazeCollector:
+    """Buffers gaze samples from the Tobii callback thread while recording."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._recording = False
+        self._samples: list[dict] = []
+
+    def add(self, sample: dict) -> None:
+        with self._lock:
+            if self._recording:
+                self._samples.append(sample)
+
+    def start(self) -> None:
+        with self._lock:
+            self._samples = []
+            self._recording = True
+
+    def stop(self) -> list[dict]:
+        with self._lock:
+            self._recording = False
+            samples, self._samples = self._samples, []
+        return samples
+
+
+class DetoxAnimationDefaults:
+    """DeToX 0.2.1's ``ETSettings.animation`` defaults ("big" stimulus preset).
+
+    Only used if DeToX's own settings can't be read; normally the live settings
+    object is passed so validation follows any tuning of the calibration.
+    """
+
+    focus_time = 0.5
+    zoom_speed = 6.0
+    min_zoom_size_big = 0.05
+    max_zoom_size_big = 0.16
+    trill_size_big = 0.14
+    trill_rotation_range = 20
+    trill_cycle_duration = 1.5
+    trill_active_duration = 1.1
+    trill_frequency = 3.0
+
+
+class _Target:
+    """A validation target animated exactly like DeToX's calibration targets.
+
+    Mirrors ``BaseCalibrationSession._animate`` for the "big" stimulus preset
+    that ``ETracker.calibrate()`` uses: sizes are fractions of screen height,
+    "zoom" oscillates between the min and max size as
+    ``(cos(t * zoom_speed) + 1) / 2``, and "trill" rotates the target at a fixed
+    size with pauses. Drawn in pix units at an ADCS position.
+    """
+
+    def __init__(
+        self, window, visual, core, point, images, index, *, animation, settings
+    ):
+        width, height = window.size
+        position = ((point[0] - 0.5) * width, (0.5 - point[1]) * height)
+        self._height = height
+        self._animation = animation
+        self._settings = settings
+        self._clock = core.Clock()
+        start_size = settings.max_zoom_size_big * height
+        if images:
+            self._stim = visual.ImageStim(
+                window,
+                image=str(images[index % len(images)]),
+                pos=position,
+                size=start_size,
+                units="pix",
+                interpolate=True,
+            )
+        else:
+            self._stim = visual.Circle(
+                window,
+                radius=0.5,
+                size=start_size,
+                pos=position,
+                fillColor="white",
+                units="pix",
+            )
+
+    def draw(self) -> None:
+        settings = self._settings
+        elapsed = self._clock.getTime()
+        if self._animation == "trill":
+            self._stim.size = settings.trill_size_big * self._height
+            cycle_position = elapsed % settings.trill_cycle_duration
+            if cycle_position < settings.trill_active_duration:
+                trill_time = cycle_position * settings.trill_frequency * 2 * math.pi
+                self._stim.ori = math.sin(trill_time) * settings.trill_rotation_range
+            else:
+                self._stim.ori = 0
+        else:
+            oscillation = (math.cos(elapsed * settings.zoom_speed) + 1) / 2
+            minimum = settings.min_zoom_size_big * self._height
+            maximum = settings.max_zoom_size_big * self._height
+            self._stim.size = minimum + oscillation * (maximum - minimum)
+        self._stim.draw()
+
+
+def _show_instructions(window, visual, event) -> bool:
+    text = visual.TextStim(
+        window,
+        text=(
+            "Validation\n\n"
+            "Press Space when the child looks at each animal.\n"
+            "Press Escape to skip validation (the calibration is kept).\n\n"
+            "Press Space to start."
+        ),
+        color="white",
+        height=0.03 * window.size[1],
+        units="pix",
+    )
+    event.clearEvents()
+    while True:
+        text.draw()
+        window.flip()
+        keys = event.getKeys(keyList=["space", "escape"])
+        if "escape" in keys:
+            return False
+        if "space" in keys:
+            return True
+
+
+def _wait_for_space(window, target: _Target, event) -> bool:
+    event.clearEvents()
+    while True:
+        target.draw()
+        window.flip()
+        keys = event.getKeys(keyList=["space", "escape"])
+        if "escape" in keys:
+            return False
+        if "space" in keys:
+            return True
+
+
+def _animate(
+    window,
+    target: _Target,
+    core,
+    seconds: float,
+    on_progress: Callable[[float], None] | None = None,
+) -> None:
+    """Keep the target animating for ``seconds``; report progress from 0 to 1."""
+    clock = core.Clock()
+    while (elapsed := clock.getTime()) < seconds:
+        if on_progress is not None:
+            on_progress(elapsed / seconds)
+        target.draw()
+        window.flip()
+
+
+def _sound_fader(attention_sound) -> Callable[[float], None] | None:
+    if attention_sound is None:
+        return None
+    return lambda progress: attention_sound.setVolume(max(0.0, 1.0 - progress))
+
+
+def _stop_sound(attention_sound) -> None:
+    """Stop, and reset the volume for the next target (as DeToX does)."""
+    if attention_sound is None:
+        return
+    attention_sound.stop()
+    attention_sound.setVolume(1.0)
+
+
+def _load_sound(sound, stimulus_dir: Path | None, *, enabled: bool, status):
+    if not enabled or stimulus_dir is None:
+        return None
+    path = stimulus_dir / "CalibrationSound.wav"
+    if not path.exists():
+        return None
+    try:
+        return sound.Sound(str(path), loops=-1)
+    except Exception as error:  # noqa: BLE001 - audio backends fail many ways
+        status(f"Validation sound unavailable ({error}); continuing without it.")
+        return None
+
+
+def _detox_animation_settings(import_module: ImportModule):
+    """DeToX's live animation settings, or None to use the bundled defaults."""
+    try:
+        return import_module("DeToX.ETSettings").animation
+    except (ImportError, AttributeError):
+        return None
+
+
+def _detox_stimulus_dir(detox) -> Path | None:
+    module_file = getattr(detox, "__file__", None)
+    if module_file is None:
+        return None
+    stimuli = Path(module_file).parent / "stimuli"
+    return stimuli if stimuli.is_dir() else None
 
 
 def _discovery_index(tobii_research, eyetracker) -> int:

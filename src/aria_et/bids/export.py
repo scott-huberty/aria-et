@@ -7,6 +7,7 @@ import gzip
 import io
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +63,7 @@ def export_run_to_bids(
                 gaze_rows,
                 eye,
                 tracker,
+                _calibration_fields(session, run_path, eye, display),
             )
         )
 
@@ -263,10 +265,12 @@ def _write_physio_json(
     gaze_rows: list[dict[str, Any]],
     eye: str,
     tracker: dict[str, Any],
+    calibration_fields: dict[str, Any],
 ) -> Path:
     return _write_json(
         path,
         {
+            **calibration_fields,
             "Manufacturer": "Tobii",
             "ManufacturersModelName": tracker.get("model", "n/a"),
             "DeviceSerialNumber": tracker.get("serial_number", "n/a"),
@@ -299,6 +303,81 @@ def _write_physio_json(
             },
         },
     )
+
+
+def _calibration_fields(
+    session: dict[str, Any],
+    run_path: Path,
+    eye: str,
+    display: dict[str, Any],
+) -> dict[str, Any]:
+    """BIDS eye-tracking calibration fields for one eye's physio sidecar.
+
+    Uses the calibration recorded in the run's session.json. Fields are only
+    written when the recorded calibration supports them: point positions and
+    validation quality exist for child-friendly calibrations made after
+    validation was added, not for ETM or older calibrations.
+    """
+    calibration = session.get("calibration") or {}
+    metadata = calibration.get("metadata") or {}
+    if not calibration:
+        return {}
+
+    fields: dict[str, Any] = {}
+    count = _calibration_count(run_path, session.get("started_at"))
+    if count is not None:
+        fields["CalibrationCount"] = count
+
+    points = (metadata.get("calibration_points") or {}).get("positions_adcs")
+    if points:
+        width, height = display["screen_resolution_pixels"]
+        fields["CalibrationType"] = f"HV{len(points)}"
+        fields["CalibrationPosition"] = [
+            [round(x * width, 1), round(y * height, 1)] for x, y in points
+        ]
+        fields["CalibrationUnit"] = "pixel"
+
+    validation = metadata.get("validation") or {}
+    eye_summary = (validation.get("summary") or {}).get(eye) or {}
+    if validation.get("status") == "complete":
+        if eye_summary.get("accuracy_deg") is not None:
+            fields["AverageCalibrationError"] = round(eye_summary["accuracy_deg"], 3)
+        if eye_summary.get("max_accuracy_deg") is not None:
+            fields["MaximalCalibrationError"] = round(
+                eye_summary["max_accuracy_deg"], 3
+            )
+
+    # Not BIDS-defined: identify the calibration so it can be traced back.
+    for key, value in (
+        ("CalibrationId", calibration.get("calibration_id")),
+        ("CalibrationMethod", calibration.get("method")),
+        ("CalibrationDate", calibration.get("created_at")),
+    ):
+        if value is not None:
+            fields[key] = value
+    return fields
+
+
+def _calibration_count(run_path: Path, started_at: str | None) -> int | None:
+    """Calibrations saved in the run's session before the run started."""
+    calibrations_dir = run_path.parent / "calibrations"
+    if not calibrations_dir.is_dir():
+        return None
+    count = 0
+    for metadata_file in calibrations_dir.glob("calibration-*/calibration.json"):
+        created_at = _read_json(metadata_file).get("created_at")
+        if started_at is None or created_at is None or _before(created_at, started_at):
+            count += 1
+    return count
+
+
+def _before(first: str, second: str) -> bool:
+    try:
+        return datetime.fromisoformat(first.replace("Z", "+00:00")) <= (
+            datetime.fromisoformat(second.replace("Z", "+00:00"))
+        )
+    except (TypeError, ValueError):  # unparseable or naive vs aware: count it
+        return True
 
 
 def _pixel_coordinate(

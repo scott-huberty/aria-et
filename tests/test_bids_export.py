@@ -28,24 +28,25 @@ def _write_run(
     subject: str = "01",
     session: str = "baseline",
     run: str = "02",
+    calibration: dict | None = None,
 ) -> Path:
     """Write a minimal two-sample acquisition run, as the session recorder would."""
     run_dir.mkdir(parents=True)
-    _write_json(
-        run_dir / "session.json",
-        {
-            "task_id": task_id,
-            "tracker": "tobii",
-            "started_at": "2026-07-29T12:00:00+00:00",
-            "bids": {"subject": subject, "session": session, "run": run},
-            "stimulus_display": {
-                "screen_distance_meters": 0.6,
-                "screen_origin": ["top", "left"],
-                "screen_resolution_pixels": [1920, 1080],
-                "screen_size_meters": [0.527, 0.296],
-            },
+    session_metadata = {
+        "task_id": task_id,
+        "tracker": "tobii",
+        "started_at": "2026-07-29T12:00:00+00:00",
+        "bids": {"subject": subject, "session": session, "run": run},
+        "stimulus_display": {
+            "screen_distance_meters": 0.6,
+            "screen_origin": ["top", "left"],
+            "screen_resolution_pixels": [1920, 1080],
+            "screen_size_meters": [0.527, 0.296],
         },
-    )
+    }
+    if calibration is not None:
+        session_metadata["calibration"] = calibration
+    _write_json(run_dir / "session.json", session_metadata)
     _write_json(
         run_dir / "tracker.json",
         {
@@ -175,6 +176,114 @@ def test_export_run_to_bids_writes_binocular_physio_and_events(tmp_path):
     }
 
 
+VALIDATED_CALIBRATION = {
+    "calibration_id": "calibration-20260729T115500Z",
+    "created_at": "2026-07-29T11:55:00Z",
+    "method": "child-friendly-detox",
+    "metadata": {
+        "calibration_points": {
+            "count": 5,
+            "positions_adcs": [
+                [0.1, 0.1],
+                [0.9, 0.1],
+                [0.5, 0.5],
+                [0.1, 0.9],
+                [0.9, 0.9],
+            ],
+        },
+        "validation": {
+            "status": "complete",
+            "summary": {
+                "left": {
+                    "accuracy_deg": 0.7614,
+                    "max_accuracy_deg": 1.2,
+                    "precision_rms_deg": 0.07,
+                    "data_loss": 0.0,
+                },
+                "right": {
+                    "accuracy_deg": 0.94,
+                    "max_accuracy_deg": 1.5,
+                    "precision_rms_deg": 0.06,
+                    "data_loss": 0.0,
+                },
+            },
+        },
+    },
+}
+
+
+def _write_saved_calibrations(session_dir, created_at_values):
+    for index, created_at in enumerate(created_at_values):
+        directory = session_dir / "calibrations" / f"calibration-{index}"
+        directory.mkdir(parents=True)
+        _write_json(directory / "calibration.json", {"created_at": created_at})
+    # A failed attempt (no calibration.json) doesn't count.
+    (session_dir / "calibrations" / "calibration-failed").mkdir()
+
+
+def test_export_writes_calibration_fields_per_eye(tmp_path):
+    session_dir = tmp_path / "sourcedata" / "sub-01" / "ses-baseline"
+    run_dir = _write_run(
+        session_dir / "task-pupillary-light-reflex_run-02",
+        calibration=VALIDATED_CALIBRATION,
+    )
+    # Two calibrations before the run started, one after.
+    _write_saved_calibrations(
+        session_dir,
+        ["2026-07-29T11:50:00Z", "2026-07-29T11:55:00Z", "2026-07-29T13:00:00Z"],
+    )
+
+    export_run_to_bids(run_dir=run_dir, bids_root=tmp_path / "bids")
+
+    base = (
+        tmp_path
+        / "bids/sub-01/ses-baseline/beh"
+        / "sub-01_ses-baseline_task-PupillaryLightReflex_run-02"
+    )
+    left = json.loads(base.with_name(base.name + "_recording-eye1_physio.json").read_text())
+    right = json.loads(base.with_name(base.name + "_recording-eye2_physio.json").read_text())
+    assert left["CalibrationType"] == "HV5"
+    assert left["CalibrationUnit"] == "pixel"
+    assert left["CalibrationPosition"][0] == [192.0, 108.0]
+    assert left["CalibrationCount"] == 2
+    assert left["AverageCalibrationError"] == 0.761
+    assert left["MaximalCalibrationError"] == 1.2
+    assert right["AverageCalibrationError"] == 0.94
+    assert right["MaximalCalibrationError"] == 1.5
+    assert left["CalibrationId"] == "calibration-20260729T115500Z"
+    assert left["CalibrationMethod"] == "child-friendly-detox"
+
+
+def test_export_omits_calibration_fields_the_calibration_cannot_support(tmp_path):
+    etm = {
+        "calibration_id": "calibration-1",
+        "created_at": "2026-07-29T11:55:00Z",
+        "method": "tobii-pro-eye-tracker-manager",
+        "metadata": {},
+    }
+    skipped = {
+        **VALIDATED_CALIBRATION,
+        "metadata": {
+            **VALIDATED_CALIBRATION["metadata"],
+            "validation": {"status": "skipped", "summary": None},
+        },
+    }
+    for name, calibration in (("etm", etm), ("skipped", skipped), ("none", None)):
+        run_dir = _write_run(tmp_path / name / "run", calibration=calibration)
+        export_run_to_bids(run_dir=run_dir, bids_root=tmp_path / name / "bids")
+        sidecar = json.loads(
+            next((tmp_path / name / "bids").rglob("*eye1_physio.json")).read_text()
+        )
+        assert "AverageCalibrationError" not in sidecar, name
+        if name == "etm":
+            assert "CalibrationType" not in sidecar
+            assert sidecar["CalibrationMethod"] == "tobii-pro-eye-tracker-manager"
+        if name == "skipped":
+            assert sidecar["CalibrationType"] == "HV5"
+        if name == "none":
+            assert not any(key.startswith("Calibration") for key in sidecar)
+
+
 def test_export_run_to_bids_requires_acquisition_metadata(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
@@ -240,6 +349,7 @@ def test_exported_dataset_passes_bids_validator(tmp_path):
                 subject=subject,
                 session=session,
                 run="01",
+                calibration=VALIDATED_CALIBRATION,
             )
             export_run_to_bids(run_dir=run_dir, bids_root=bids_root)
 

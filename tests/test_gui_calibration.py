@@ -17,6 +17,9 @@ from aria_et.gui.pages.calibration import (
     CHILD_FRIENDLY_ROUTINE,
     ETM_ROUTINE,
     NO_HISTORY_TEXT,
+    NO_QUALITY_TEXT,
+    NO_VALIDATION_TEXT,
+    VALIDATION_SKIPPED_TEXT,
     CalibrationPage,
     resolve_manager_path,
 )
@@ -39,7 +42,7 @@ def session(config):
     return state.SessionState(subject="abby", data_root=config.data_root)
 
 
-def _write_calibration(session, calibration_id, method):
+def _write_calibration(session, calibration_id, method, validation=None):
     directory = (
         session.sourcedata_root
         / "sub-abby"
@@ -48,10 +51,39 @@ def _write_calibration(session, calibration_id, method):
         / calibration_id
     )
     directory.mkdir(parents=True)
+    metadata = {"created_at": calibration_id[-8:], "method": method}
+    if validation is not None:
+        metadata["validation"] = validation
     (directory / "calibration.json").write_text(
-        json.dumps({"created_at": calibration_id[-8:], "method": method}),
-        encoding="utf-8",
+        json.dumps(metadata), encoding="utf-8"
     )
+
+
+VALIDATION = {
+    "status": "complete",
+    "points_adcs": [[0.5, 0.5]] * 5,
+    "points": [{"target_adcs": [0.5, 0.5]}] * 5,
+    "summary": {
+        "left": {
+            "accuracy_deg": 0.761,
+            "max_accuracy_deg": 1.2,
+            "precision_rms_deg": 0.07,
+            "data_loss": 0.0,
+        },
+        "right": {
+            "accuracy_deg": 0.94,
+            "max_accuracy_deg": 1.4,
+            "precision_rms_deg": None,
+            "data_loss": 0.125,
+        },
+    },
+}
+
+
+def _quality_table(page):
+    return [
+        (left.text(), right.text()) for left, right in page._quality_cells
+    ]
 
 
 def test_manager_path_falls_back_to_the_bundled_default(config):
@@ -264,3 +296,56 @@ def test_mouse_wheel_does_not_change_calibration_inputs(qapp, config, field):
         assert not wheel.isAccepted()  # left for the page's scroll area
 
     assert current() == before
+
+
+def test_quality_table_shows_the_latest_validation(qapp, config, session):
+    _write_calibration(session, "calibration-20260101", "child-friendly-detox")
+    _write_calibration(
+        session, "calibration-20260202", "child-friendly-detox", VALIDATION
+    )
+    page = CalibrationPage(config)
+
+    page.set_session(session)
+
+    assert page._quality_grid.isVisibleTo(page)
+    assert _quality_table(page) == [
+        ("0.76", "0.94"),
+        ("0.07", "n/a"),
+        ("0", "12"),
+    ]
+    assert "validated at 5 targets" in page._quality_status.text()
+    assert "accuracy L 0.76° R 0.94°" in page._history.text().splitlines()[0]
+
+
+def test_quality_card_explains_a_skipped_validation(qapp, config, session):
+    _write_calibration(
+        session,
+        "calibration-20260202",
+        "child-friendly-detox",
+        {"status": "skipped", "points": [], "summary": None},
+    )
+    page = CalibrationPage(config)
+
+    page.set_session(session)
+
+    assert page._quality_status.text() == VALIDATION_SKIPPED_TEXT
+    assert not page._quality_grid.isVisibleTo(page)
+
+
+def test_quality_card_explains_a_calibration_without_validation(
+    qapp, config, session
+):
+    _write_calibration(session, "calibration-20260202", "tobii-pro-eye-tracker-manager")
+    page = CalibrationPage(config)
+
+    page.set_session(session)
+
+    assert page._quality_status.text() == NO_VALIDATION_TEXT
+    assert not page._quality_grid.isVisibleTo(page)
+
+
+def test_quality_card_without_a_session(qapp, config):
+    page = CalibrationPage(config)
+
+    assert page._quality_status.text() == NO_QUALITY_TEXT
+    assert not page._quality_grid.isVisibleTo(page)

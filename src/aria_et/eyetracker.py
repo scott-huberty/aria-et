@@ -642,7 +642,13 @@ def save_current_calibration(
     manager_executable: str | None = None,
     manager_return_code: int | None = None,
     now: datetime | None = None,
+    extra_metadata: dict[str, object] | None = None,
 ) -> Path:
+    """Save the tracker's active calibration and its ``calibration.json``.
+
+    ``extra_metadata`` is merged into ``calibration.json``, e.g. the calibration
+    point positions and validation results of a child-friendly calibration.
+    """
     created_at = now or datetime.now(timezone.utc)
     if artifact_dir is None:
         artifact_dir = _allocate_calibration_artifact_dir(output_dir, created_at)
@@ -670,6 +676,8 @@ def save_current_calibration(
         metadata["manager_return_code"] = manager_return_code
     if etm_log_file.exists():
         metadata["etm_log_file"] = etm_log_file.name
+    if extra_metadata:
+        metadata.update(extra_metadata)
     (artifact_dir / "calibration.json").write_text(
         json.dumps(metadata, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

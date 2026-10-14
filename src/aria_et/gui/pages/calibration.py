@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -58,9 +59,69 @@ def resolve_manager_path(config: AriaEtConfig) -> tuple[str, bool]:
     return path, Path(path).exists()
 
 
+NO_QUALITY_TEXT = "No calibration yet for this session."
+NO_VALIDATION_TEXT = (
+    "No validation for the latest calibration (ETM, or a calibration made "
+    "before validation was added)."
+)
+VALIDATION_SKIPPED_TEXT = "Validation was skipped for the latest calibration."
+
+# (row label, summary key, scale, decimals) for the quality table.
+QUALITY_ROWS = (
+    ("Accuracy (deg)", "accuracy_deg", 1, 2),
+    ("Precision (deg)", "precision_rms_deg", 1, 2),
+    ("Data loss (%)", "data_loss", 100, 0),
+)
+EYES = ("left", "right")
+
+
 def describe_calibration(record: artifacts.CalibrationRecord) -> str:
     method = record.method or "unknown method"
-    return f"{record.created_at or record.calibration_id}  —  {method}"
+    text = f"{record.created_at or record.calibration_id}  —  {method}"
+    accuracy = _summary_values(record.validation, "accuracy_deg")
+    if accuracy is not None:
+        left, right = (_format_value(value, 1, 2) for value in accuracy)
+        text += f"  —  accuracy L {left}° R {right}°"
+    return text
+
+
+def quality_rows(validation: dict | None) -> list[tuple[str, str, str]]:
+    """Rows of (label, left eye, right eye) for the quality table."""
+    rows = []
+    for label, key, scale, decimals in QUALITY_ROWS:
+        values = _summary_values(validation, key) or (None, None)
+        rows.append(
+            (label, *(_format_value(value, scale, decimals) for value in values))
+        )
+    return rows
+
+
+def describe_quality_status(record: artifacts.CalibrationRecord | None) -> str:
+    if record is None:
+        return NO_QUALITY_TEXT
+    validation = record.validation
+    if validation is None:
+        return NO_VALIDATION_TEXT
+    status = validation.get("status")
+    if status == "skipped" or not validation.get("summary"):
+        return VALIDATION_SKIPPED_TEXT
+    points = len(validation.get("points") or ())
+    planned = len(validation.get("points_adcs") or ()) or points
+    when = record.created_at or record.calibration_id
+    if status == "partial":
+        return f"Latest calibration ({when}): validation partial, {points} of {planned} targets."
+    return f"Latest calibration ({when}): validated at {points} targets."
+
+
+def _summary_values(validation: dict | None, key: str) -> tuple | None:
+    summary = (validation or {}).get("summary")
+    if not summary:
+        return None
+    return tuple((summary.get(eye) or {}).get(key) for eye in EYES)
+
+
+def _format_value(value: float | None, scale: float, decimals: int) -> str:
+    return "n/a" if value is None else f"{value * scale:.{decimals}f}"
 
 
 def _card(title: str) -> tuple[QFrame, QVBoxLayout]:
@@ -180,6 +241,26 @@ class CalibrationPage(QWidget):
         self._calibrate_button.clicked.connect(self._request_calibration)
         tracker_layout.addWidget(self._calibrate_button)
 
+        quality_card, quality_layout = _card("Latest calibration quality")
+        self._quality_status = _helper("")
+        quality_layout.addWidget(self._quality_status)
+        self._quality_grid = QWidget()
+        grid = QGridLayout(self._quality_grid)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(24)
+        grid.setVerticalSpacing(4)
+        for column, column_title in enumerate(("", "Left eye", "Right eye")):
+            grid.addWidget(QLabel(column_title), 0, column)
+        self._quality_cells: list[tuple[QLabel, QLabel]] = []
+        for row, (label, _key, _scale, _decimals) in enumerate(QUALITY_ROWS, 1):
+            grid.addWidget(QLabel(label), row, 0)
+            cells = (QLabel(), QLabel())
+            grid.addWidget(cells[0], row, 1)
+            grid.addWidget(cells[1], row, 2)
+            self._quality_cells.append(cells)
+        grid.setColumnStretch(3, 1)
+        quality_layout.addWidget(self._quality_grid)
+
         history_card, history_layout = _card("Calibration history")
         history_layout.addWidget(_helper(HISTORY_PREAMBLE))
         self._history = QLabel()
@@ -194,6 +275,7 @@ class CalibrationPage(QWidget):
         layout.addWidget(routine_card)
         layout.addWidget(settings_card)
         layout.addWidget(tracker_card)
+        layout.addWidget(quality_card)
         layout.addWidget(history_card)
         layout.addStretch(1)
 
@@ -304,13 +386,26 @@ class CalibrationPage(QWidget):
         self._calibrate_button.setEnabled(self._session is not None)
         if self._session is None:
             self._history.setText(NO_HISTORY_TEXT)
+            self._show_quality(None)
             return
         records = artifacts.find_calibrations(
             self._session.sourcedata_root,
             self._session.subject,
             self._session.session,
         )
+        self._show_quality(records[0] if records else None)
         self._history.setText(
             "\n".join(describe_calibration(record) for record in records)
             or NO_HISTORY_TEXT
         )
+
+    def _show_quality(self, record: artifacts.CalibrationRecord | None) -> None:
+        self._quality_status.setText(describe_quality_status(record))
+        validation = record.validation if record is not None else None
+        has_summary = bool((validation or {}).get("summary"))
+        self._quality_grid.setVisible(has_summary)
+        for (left_cell, right_cell), (_label, left, right) in zip(
+            self._quality_cells, quality_rows(validation)
+        ):
+            left_cell.setText(left)
+            right_cell.setText(right)

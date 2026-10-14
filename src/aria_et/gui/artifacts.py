@@ -63,6 +63,9 @@ class CalibrationRecord:
     calibration_id: str
     created_at: str | None
     method: str | None
+    # The validation block of calibration.json (status, per-point results and
+    # per-eye summary), or None for calibrations without a validation step.
+    validation: dict | None = None
 
 
 def find_calibrations(
@@ -85,6 +88,7 @@ def find_calibrations(
                 calibration_id=child.name,
                 created_at=_as_optional_str(metadata.get("created_at")),
                 method=_as_optional_str(metadata.get("method")),
+                validation=_as_optional_dict(metadata.get("validation")),
             )
         )
     return records
@@ -298,6 +302,10 @@ def _read_json(path: Path) -> dict | None:
     except json.JSONDecodeError:
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+def _as_optional_dict(value: object) -> dict | None:
+    return value if isinstance(value, dict) else None
 
 
 def _as_optional_str(value: object) -> str | None:
