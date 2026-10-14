@@ -29,13 +29,14 @@ from aria_et.calibration import (
 )
 from aria_et.calibration_quality import (
     EYES,
-    QUALITY_COLUMNS,
+    PASS_MARK,
     adcs_to_ucs,
     describe_tolerance,
-    format_quality,
     gaze_on_display,
     point_quality,
+    quality_table,
     summarize,
+    tolerance_mark,
     tolerance_verdict,
 )
 
@@ -365,28 +366,59 @@ def _results_stimuli(window, visual, validation, gaze, colors) -> list:
     summary = validation.get("summary")
     # Above the centre target (gaze clouds sit there) and inside the corner
     # targets, which are 10% in from each edge.
-    top = 0.30 * height
+    top = 0.33 * height
     if summary:
-        column_width = 0.12 * width
-        first_column = -1.0 * column_width * (len(QUALITY_COLUMNS) - 1)
-        for index, (label, key, _scale, _decimals) in enumerate(QUALITY_COLUMNS):
-            centre = first_column + 2 * index * column_width
-            stimuli.append(text(label, (centre, top)))
-            values = format_quality(summary, key)
-            for offset, eye, value in zip((-0.5, 0.5), EYES, values):
-                x = centre + offset * column_width
-                color = tuple(colors[eye][:3])
+        verdict = tolerance_verdict(summary)
+        # Columns: metric label, then mean and worst for each eye.
+        label_x = -0.26 * width
+        value_x = {
+            ("left", 0): -0.10 * width,
+            ("left", 1): -0.02 * width,
+            ("right", 0): 0.10 * width,
+            ("right", 1): 0.18 * width,
+        }
+        row_step = 0.04 * height
+        for eye in EYES:
+            color = tuple(colors[eye][:3])
+            centre = (value_x[(eye, 0)] + value_x[(eye, 1)]) / 2
+            stimuli.append(text(f"{eye.capitalize()} eye", (centre, top), color=color))
+            for column, heading in enumerate(("Mean", "Worst")):
                 stimuli.append(
                     text(
-                        f"{eye.capitalize()} eye", (x, top - 0.04 * height), color=color
+                        heading,
+                        (value_x[(eye, column)], top - row_step),
+                        color=(170, 170, 170),
+                        size=0.018,
                     )
                 )
-                stimuli.append(text(value, (x, top - 0.08 * height), color=color))
-        verdict = tolerance_verdict(summary)
+        for row, (label, values) in enumerate(quality_table(summary)):
+            y = top - (row + 2) * row_step
+            stimuli.append(text(label, (label_x, y)))
+            for eye in EYES:
+                color = tuple(colors[eye][:3])
+                for column, value in enumerate(values[eye]):
+                    stimuli.append(
+                        text(value, (value_x[(eye, column)], y), color=color)
+                    )
+            if row == 0:
+                # Within / above the tolerance, next to each eye's worst accuracy.
+                for eye in EYES:
+                    mark = tolerance_mark(verdict, eye)
+                    if mark:
+                        stimuli.append(
+                            text(
+                                mark,
+                                (value_x[(eye, 1)] + 0.035 * width, y),
+                                color=TOLERANCE_PASS_COLOR
+                                if mark == PASS_MARK
+                                else TOLERANCE_FAIL_COLOR,
+                                size=0.028,
+                            )
+                        )
         stimuli.append(
             text(
-                describe_tolerance(verdict),
-                (0, top - 0.14 * height),
+                describe_tolerance(verdict, recalibrate_key="C"),
+                (0, top - 5.3 * row_step),
                 color=TOLERANCE_PASS_COLOR
                 if verdict["passed"]
                 else TOLERANCE_FAIL_COLOR,
@@ -399,7 +431,7 @@ def _results_stimuli(window, visual, validation, gaze, colors) -> list:
             stimuli.append(
                 text(
                     f"Partial validation: {collected} of {planned} targets.",
-                    (0, top - 0.19 * height),
+                    (0, top - 6.3 * row_step),
                 )
             )
     else:

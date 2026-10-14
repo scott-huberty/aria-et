@@ -102,7 +102,7 @@ def point_quality(
 
 
 def summarize(points: Iterable[Mapping[str, EyeQuality]]) -> dict[str, dict]:
-    """Per-eye mean accuracy, precision and data loss, plus the worst accuracy.
+    """Per-eye mean and worst-target accuracy, precision and data loss.
 
     ``points`` holds, for each validation target, a mapping from eye name to
     its :class:`EyeQuality`. Targets with no valid data are ignored by the
@@ -113,34 +113,66 @@ def summarize(points: Iterable[Mapping[str, EyeQuality]]) -> dict[str, dict]:
     for eye in EYES:
         qualities = [point[eye] for point in points if eye in point]
         accuracy = [q.accuracy_deg for q in qualities]
+        precision = [q.precision_rms_deg for q in qualities]
+        data_loss = [q.data_loss for q in qualities]
         summary[eye] = {
             "accuracy_deg": _nan_mean(accuracy),
             "max_accuracy_deg": _nan_max(accuracy),
-            "precision_rms_deg": _nan_mean([q.precision_rms_deg for q in qualities]),
-            "data_loss": _nan_mean([q.data_loss for q in qualities]),
+            "precision_rms_deg": _nan_mean(precision),
+            "max_precision_rms_deg": _nan_max(precision),
+            "data_loss": _nan_mean(data_loss),
+            "max_data_loss": _nan_max(data_loss),
         }
     return summary
 
 
 # The quality table shown on the GUI Calibration page and on the stimulus
-# screen after validation: (label, summary key, scale, decimals). Both use
-# format_quality so the two always show the same numbers.
-QUALITY_COLUMNS = (
-    ("Accuracy (deg)", "accuracy_deg", 1, 2),
-    ("Precision (deg)", "precision_rms_deg", 1, 2),
-    ("Data loss (%)", "data_loss", 100, 0),
+# screen after validation: one row per metric, a mean and a worst-target value
+# per eye. (label, mean key, worst key, scale, decimals). Both screens use
+# quality_table so they always show the same numbers.
+QUALITY_ROWS = (
+    ("Accuracy (deg)", "accuracy_deg", "max_accuracy_deg", 1, 2),
+    ("Precision (deg)", "precision_rms_deg", "max_precision_rms_deg", 1, 2),
+    ("Data loss (%)", "data_loss", "max_data_loss", 100, 0),
 )
+
+# Marks next to each eye's worst accuracy: within / above the tolerance. Heavy
+# text symbols: solid in PsychoPy's default font and in Qt. Not colour emoji
+# (e.g. U+2705 / U+274C), which PsychoPy draws as monochrome outlines and Qt in
+# colour, so the two screens wouldn't match.
+PASS_MARK = "\u2714"  # heavy check mark
+FAIL_MARK = "\u2716"  # heavy multiplication X
 
 
 def format_quality(summary: Mapping[str, Mapping] | None, key: str) -> tuple[str, str]:
-    """(left, right) display strings for one quality column; "n/a" if missing."""
-    _label, _key, scale, decimals = next(
-        column for column in QUALITY_COLUMNS if column[1] == key
+    """(left, right) display strings for one summary key; "n/a" if missing."""
+    scale, decimals = next(
+        (row[3], row[4]) for row in QUALITY_ROWS if key in (row[1], row[2])
     )
     values = [((summary or {}).get(eye) or {}).get(key) for eye in EYES]
     return tuple(
         "n/a" if value is None else f"{value * scale:.{decimals}f}" for value in values
     )
+
+
+def quality_table(
+    summary: Mapping[str, Mapping] | None,
+) -> list[tuple[str, dict[str, tuple[str, str]]]]:
+    """Rows of (label, {eye: (mean, worst)}) display strings."""
+    rows = []
+    for label, mean_key, worst_key, _scale, _decimals in QUALITY_ROWS:
+        means = format_quality(summary, mean_key)
+        worsts = format_quality(summary, worst_key)
+        rows.append((label, {eye: (means[i], worsts[i]) for i, eye in enumerate(EYES)}))
+    return rows
+
+
+def tolerance_mark(verdict: Mapping[str, object] | None, eye: str) -> str:
+    """PASS_MARK / FAIL_MARK for one eye's worst accuracy, or "" if unknown."""
+    within = ((verdict or {}).get("eyes") or {}).get(eye)
+    if within is None:
+        return ""
+    return PASS_MARK if within else FAIL_MARK
 
 
 def tolerance_verdict(
@@ -149,40 +181,45 @@ def tolerance_verdict(
 ) -> dict[str, object] | None:
     """Whether a validation meets the study's accuracy tolerance.
 
-    The rule matches ABCCT: an eye is within tolerance if its mean accuracy is
-    at most ``tolerance_deg``, and the calibration is good enough if at least
-    one eye is. Returns None when there is no validation summary to judge.
+    An eye is within tolerance if its worst validation target's error
+    (``max_accuracy_deg``) is at most ``tolerance_deg``, i.e. every target,
+    including each screen corner, is. The calibration is good enough if at
+    least one eye is (as in ABCCT). Returns None when there is no validation
+    summary to judge.
     """
     if not summary:
         return None
-    eyes = {}
-    for eye in EYES:
-        accuracy = (summary.get(eye) or {}).get("accuracy_deg")
-        eyes[eye] = None if accuracy is None else accuracy <= tolerance_deg
+    worst = {eye: (summary.get(eye) or {}).get("max_accuracy_deg") for eye in EYES}
+    eyes = {
+        eye: None if error is None else error <= tolerance_deg
+        for eye, error in worst.items()
+    }
     return {
-        "metric": "accuracy_deg",
+        "metric": "max_accuracy_deg",
         "tolerance_deg": tolerance_deg,
-        "rule": "at least one eye",
+        "rule": "worst target, at least one eye",
+        "worst_target_deg": worst,
         "eyes": eyes,
         "passed": any(eyes.values()),
     }
 
 
-def describe_tolerance(verdict: Mapping[str, object] | None) -> str:
-    """One line for the results screen and the GUI, e.g. after the table."""
+def describe_tolerance(
+    verdict: Mapping[str, object] | None, *, recalibrate_key: str | None = None
+) -> str:
+    """The short verdict under the quality table.
+
+    The table already shows the worst-target values (with a mark per eye), so
+    this only says what to do. ``recalibrate_key`` is appended on the stimulus
+    screen, where a key re-calibrates.
+    """
     if verdict is None:
         return ""
     tolerance = f"{verdict['tolerance_deg']:g}°"
-    per_eye = ", ".join(
-        f"{eye} {'n/a' if within is None else 'within' if within else 'above'}"
-        for eye, within in verdict["eyes"].items()
-    )
     if verdict["passed"]:
-        return f"Within the {tolerance} accuracy tolerance ({per_eye})."
-    return (
-        f"No eye within the {tolerance} accuracy tolerance ({per_eye}): "
-        "re-calibrate before collecting data."
-    )
+        return f"Within {tolerance} tolerance: OK to proceed"
+    key = f" ({recalibrate_key})" if recalibrate_key else ""
+    return f"Above {tolerance} tolerance: re-calibrate{key}"
 
 
 def gaze_on_display(samples: Sequence[Mapping[str, object]], eye: str) -> list:

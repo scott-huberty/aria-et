@@ -34,8 +34,8 @@ calibration to DeToX:
    (``focus_time``, 0.5 s, while the sound fades out), 1 s of gaze is
    recorded. Escape skips the rest of the validation and keeps the calibration.
 5. **Results.** Like Titta, the stimulus screen then shows each target with
-   the validation gaze of each eye (in DeToX's eye colours) and the quality
-   table (accuracy, precision and data loss per eye, the same numbers as the
+   the validation gaze of each eye (in DeToX's eye colours), the quality
+   table and the tolerance verdict (see *Calibration quality*; the same as the
    GUI). Keys: **Space** accepts and saves; **V** re-runs the validation;
    **C** re-calibrates (positioning, DeToX, then validation again). If a
    re-calibration is aborted, the previous calibration is still active on the
@@ -57,9 +57,24 @@ The validation step measures, for each eye (following Titta's method):
   (RMS-S2S), averaged over targets.
 - **Data loss (%):** share of samples without valid gaze.
 
-The results are saved in ``calibration.json`` (``validation``) and shown on the
-GUI Calibration page as a table for the latest calibration, so the operator can
-decide whether to recalibrate. The BIDS export writes ``AverageCalibrationError``
+Each metric is reported per eye as the **mean** over targets and the **worst**
+single target. The results are saved in ``calibration.json`` (``validation``)
+and shown as the same table on the stimulus screen after validation and on the
+GUI Calibration page:
+
+.. code-block:: text
+
+                         Left eye          Right eye
+                       Mean   Worst      Mean   Worst
+   Accuracy (deg)      0.76   5.30 ✖     0.94   2.40 ✔
+   Precision (deg)     0.07   0.11       0.06   0.10
+   Data loss (%)       0      0          2      8
+
+                   Within 2.5° tolerance: OK to proceed
+
+The ✔ / ✖ next to each eye's worst accuracy marks whether that eye is within
+the study tolerance (below). Marks are used rather than colour, so pass/fail
+doesn't clash with the eye colours. The BIDS export writes ``AverageCalibrationError``
 and ``MaximalCalibrationError`` (accuracy, in degrees) to each eye's
 ``*_physio.json``, along with ``CalibrationType``, ``CalibrationPosition`` and
 ``CalibrationCount``. ETM calibrations and skipped validations have no quality
@@ -68,19 +83,27 @@ numbers.
 Study tolerance
 ~~~~~~~~~~~~~~~
 
-A calibration is good enough when its validation **accuracy is at most 2.5°
-in at least one eye**. This matches the ABCCT criterion ("calibration error
-< 2.5°", ABCCT ET MOP v5.1 and Shic et al. 2022), which ABCCT also applied when
-either eye met it. ABCCT checked it per trial during the tasks; aria-et checks
-it at validation, right after calibrating, so it's a minimum bar: accuracy
-tends to worsen during a session. Precision and data loss are shown for
-information only.
+A calibration is good enough when, in **at least one eye**, the **worst
+validation target's error is at most 2.5°** (``max_accuracy_deg``, the largest
+per-target accuracy). In other words, every target, including each screen
+corner, has to be within 2.5°.
 
-The results screen shows the verdict under the quality table (green when
-within tolerance, amber when not, with "re-calibrate before collecting data").
-The GUI quality card shows the same line, as a warning banner when the
-calibration is above tolerance, and each history entry ends with "within
-tolerance" or "above tolerance". The verdict is also saved in
+Why the worst target, not the mean: what matters is that gaze is accurate
+across the whole screen, out to its extremities. A mean over targets can hide
+one bad corner; for example, a validation with a mean of 1.3° can still have a
+corner off by 3.1°, and that calibration fails.
+
+The 2.5° value and the at-least-one-eye rule come from ABCCT ("calibration
+error < 2.5°", ABCCT ET MOP v5.1 and Shic et al. 2022). ABCCT applied it to a
+mean error, per trial during the tasks; aria-et applies it to the worst target,
+at validation right after calibrating, which is stricter. Accuracy tends to
+worsen during a session, so this is a minimum bar. Precision, data loss and
+the mean accuracy are shown for information only.
+
+Under the table, a short verdict says what to do: "Within 2.5° tolerance: OK
+to proceed" (green on the stimulus screen) or "Above 2.5° tolerance:
+re-calibrate (C)" (amber; the GUI shows it as a warning banner, without the
+key). Each history entry ends with "within tolerance" or "above tolerance". The verdict is also saved in
 ``calibration.json`` (``validation.tolerance``). The threshold is
 ``ACCURACY_TOLERANCE_DEG`` in ``aria_et/calibration.py``.
 

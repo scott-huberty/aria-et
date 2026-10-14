@@ -813,16 +813,17 @@ def test_validation_saves_the_tolerance_verdict(tmp_path, window):
     _, metadata, _ = _calibrate(tmp_path, window)
 
     tolerance = metadata["validation"]["tolerance"]
-    accuracy = [
-        metadata["validation"]["summary"][eye]["accuracy_deg"]
+    worst = [
+        metadata["validation"]["summary"][eye]["max_accuracy_deg"]
         for eye in ("left", "right")
     ]
     assert tolerance["tolerance_deg"] == 2.5
-    assert tolerance["rule"] == "at least one eye"
-    assert tolerance["passed"] is any(value <= 2.5 for value in accuracy)
+    assert tolerance["metric"] == "max_accuracy_deg"
+    assert tolerance["passed"] is any(value <= 2.5 for value in worst)
 
 
 def test_results_screen_shows_the_tolerance_in_colour():
+    from aria_et.calibration_quality import FAIL_MARK, PASS_MARK
     from aria_et.psychopy.calibration import (
         TOLERANCE_FAIL_COLOR,
         TOLERANCE_PASS_COLOR,
@@ -835,8 +836,18 @@ def test_results_screen_shows_the_tolerance_in_colour():
             "points_adcs": [[0.5, 0.5]],
             "points": [{}],
             "summary": {
-                "left": {"accuracy_deg": left, "precision_rms_deg": 0.1, "data_loss": 0.0},
-                "right": {"accuracy_deg": right, "precision_rms_deg": 0.1, "data_loss": 0.0},
+                "left": {
+                    "accuracy_deg": 0.5,
+                    "max_accuracy_deg": left,
+                    "precision_rms_deg": 0.1,
+                    "data_loss": 0.0,
+                },
+                "right": {
+                    "accuracy_deg": 0.5,
+                    "max_accuracy_deg": right,
+                    "precision_rms_deg": 0.1,
+                    "data_loss": 0.0,
+                },
             },
         }
         stimuli = _results_stimuli(
@@ -848,12 +859,25 @@ def test_results_screen_shows_the_tolerance_in_colour():
             [],
             {"left": (1, 2, 3, 4), "right": (5, 6, 7, 8)},
         )
-        return next(s for s in stimuli if "tolerance" in str(s.kwargs.get("text")))
+        return stimuli
+
+    def by_text(stimuli, text):
+        return next(s for s in stimuli if s.kwargs.get("text") == text)
 
     passing = tolerance_line(0.8, 3.0)
     failing = tolerance_line(2.7, 3.0)
 
-    assert passing.kwargs["text"].startswith("Within the 2.5° accuracy tolerance")
-    assert passing.kwargs["color"] == TOLERANCE_PASS_COLOR
-    assert failing.kwargs["text"].startswith("No eye within the 2.5° accuracy tolerance")
-    assert failing.kwargs["color"] == TOLERANCE_FAIL_COLOR
+    line = by_text(passing, "Within 2.5° tolerance: OK to proceed")
+    assert line.kwargs["color"] == TOLERANCE_PASS_COLOR
+    line = by_text(failing, "Above 2.5° tolerance: re-calibrate (C)")
+    assert line.kwargs["color"] == TOLERANCE_FAIL_COLOR
+    # A mark per eye next to its worst accuracy: left within, right above.
+    def marks(stimuli):
+        return [
+            s.kwargs["text"]
+            for s in stimuli
+            if s.kwargs.get("text") in (PASS_MARK, FAIL_MARK)
+        ]
+
+    assert marks(passing) == [PASS_MARK, FAIL_MARK]
+    assert marks(failing) == [FAIL_MARK, FAIL_MARK]

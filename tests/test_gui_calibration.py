@@ -8,6 +8,7 @@ from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import QApplication, QComboBox, QLineEdit
 
+from aria_et.calibration_quality import FAIL_MARK, PASS_MARK
 from aria_et.cli import build_parser
 from aria_et.config import AriaEtConfig
 from aria_et.gui import state
@@ -64,22 +65,24 @@ VALIDATION = {
             "accuracy_deg": 0.761,
             "max_accuracy_deg": 1.2,
             "precision_rms_deg": 0.07,
+            "max_precision_rms_deg": 0.09,
             "data_loss": 0.0,
+            "max_data_loss": 0.0,
         },
         "right": {
             "accuracy_deg": 0.94,
             "max_accuracy_deg": 1.4,
             "precision_rms_deg": None,
+            "max_precision_rms_deg": None,
             "data_loss": 0.125,
+            "max_data_loss": 0.25,
         },
     },
 }
 
 
 def _quality_table(page):
-    return [
-        (left.text(), right.text()) for left, right in page._quality_cells
-    ]
+    return [[cell.text() for cell in cells] for cells in page._quality_cells]
 
 
 def test_calibration_page_has_no_routine_or_tracker_choice(qapp, config):
@@ -261,10 +264,11 @@ def test_quality_table_shows_the_latest_validation(qapp, config, session):
     page.set_session(session)
 
     assert page._quality_grid.isVisibleTo(page)
+    # Left mean, left worst, right mean, right worst; worst accuracy marked.
     assert _quality_table(page) == [
-        ("0.76", "0.94"),
-        ("0.07", "n/a"),
-        ("0", "12"),
+        ["0.76", f"1.20 {PASS_MARK}", "0.94", f"1.40 {PASS_MARK}"],
+        ["0.07", "0.09", "n/a", "n/a"],
+        ["0", "0", "12", "25"],
     ]
     assert "validated at 5 targets" in page._quality_status.text()
     latest = page._history.text().splitlines()[0]
@@ -316,22 +320,25 @@ def test_quality_card_shows_a_passing_tolerance_plainly(qapp, config, session):
     page.set_session(session)
 
     assert page._tolerance_ok.isVisibleTo(page)
-    assert page._tolerance_ok.text().startswith("Within the 2.5° accuracy tolerance")
+    assert page._tolerance_ok.text() == "Within 2.5° tolerance: OK to proceed"
     assert not page._tolerance_warning.isVisibleTo(page)
     assert "within tolerance" in page._history.text().splitlines()[0]
 
 
 def test_quality_card_warns_when_both_eyes_are_above_tolerance(qapp, config, session):
     above = json.loads(json.dumps(VALIDATION))
-    above["summary"]["left"]["accuracy_deg"] = 2.9
-    above["summary"]["right"]["accuracy_deg"] = 3.4
+    # Good means, but one bad corner in each eye.
+    above["summary"]["left"]["max_accuracy_deg"] = 2.9
+    above["summary"]["right"]["max_accuracy_deg"] = 3.4
     _write_calibration(session, "calibration-20260202", "child-friendly-detox", above)
     page = CalibrationPage(config)
 
     page.set_session(session)
 
     assert page._tolerance_warning.isVisibleTo(page)
-    assert "re-calibrate before collecting data" in page._tolerance_warning.text()
+    # The GUI has no re-calibrate key, so the message doesn't name one.
+    assert page._tolerance_warning.text() == "Above 2.5° tolerance: re-calibrate"
+    assert _quality_table(page)[0][1].endswith(FAIL_MARK)
     assert not page._tolerance_ok.isVisibleTo(page)
     assert "above tolerance" in page._history.text().splitlines()[0]
 

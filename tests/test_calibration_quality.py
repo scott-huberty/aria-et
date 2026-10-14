@@ -105,7 +105,9 @@ def test_summarize_averages_points_and_ignores_missing_targets():
         "accuracy_deg": pytest.approx(1.0),
         "max_accuracy_deg": pytest.approx(1.5),
         "precision_rms_deg": pytest.approx(0.1),
+        "max_precision_rms_deg": pytest.approx(0.15),
         "data_loss": pytest.approx(0.1),
+        "max_data_loss": pytest.approx(0.2),
     }
     assert summary["right"]["accuracy_deg"] == pytest.approx(0.5)
     assert summary["right"]["data_loss"] == pytest.approx(0.5)
@@ -118,14 +120,26 @@ def test_summarize_with_no_data_returns_none():
     assert summary["right"]["max_accuracy_deg"] is None
 
 
-def _summary(left, right):
+def _summary(left, right, *, mean=0.5):
+    """A summary with the given worst-target errors and a good mean."""
     return {
-        "left": {"accuracy_deg": left},
-        "right": {"accuracy_deg": right},
+        "left": {"accuracy_deg": mean, "max_accuracy_deg": left},
+        "right": {"accuracy_deg": mean, "max_accuracy_deg": right},
     }
 
 
-def test_tolerance_passes_when_at_least_one_eye_is_within_2_5_degrees():
+def test_tolerance_judges_the_worst_target_not_the_mean():
+    from aria_et.calibration_quality import tolerance_verdict
+
+    # A good mean (0.5 deg) can't hide one corner at 3.1 deg in each eye.
+    verdict = tolerance_verdict(_summary(3.1, 2.8, mean=0.5))
+
+    assert verdict["passed"] is False
+    assert verdict["metric"] == "max_accuracy_deg"
+    assert verdict["worst_target_deg"] == {"left": 3.1, "right": 2.8}
+
+
+def test_tolerance_passes_when_at_least_one_eye_has_every_target_within():
     from aria_et.calibration_quality import tolerance_verdict
 
     verdict = tolerance_verdict(_summary(1.2, 3.4))
@@ -133,10 +147,10 @@ def test_tolerance_passes_when_at_least_one_eye_is_within_2_5_degrees():
     assert verdict["eyes"] == {"left": True, "right": False}
     assert verdict["passed"] is True
     assert verdict["tolerance_deg"] == 2.5
-    assert verdict["metric"] == "accuracy_deg"
+    assert verdict["rule"] == "worst target, at least one eye"
 
 
-def test_tolerance_fails_when_both_eyes_are_above_and_counts_the_boundary_as_within():
+def test_tolerance_counts_the_boundary_as_within_and_handles_missing_eyes():
     from aria_et.calibration_quality import tolerance_verdict
 
     assert tolerance_verdict(_summary(2.6, 3.0))["passed"] is False
@@ -147,14 +161,55 @@ def test_tolerance_fails_when_both_eyes_are_above_and_counts_the_boundary_as_wit
     assert tolerance_verdict(None) is None
 
 
-def test_describe_tolerance_names_each_eye():
+def test_describe_tolerance_is_a_short_instruction():
     from aria_et.calibration_quality import describe_tolerance, tolerance_verdict
 
     assert describe_tolerance(tolerance_verdict(_summary(1.2, 3.4))) == (
-        "Within the 2.5° accuracy tolerance (left within, right above)."
+        "Within 2.5° tolerance: OK to proceed"
     )
     assert describe_tolerance(tolerance_verdict(_summary(2.6, None))) == (
-        "No eye within the 2.5° accuracy tolerance (left above, right n/a): "
-        "re-calibrate before collecting data."
+        "Above 2.5° tolerance: re-calibrate"
     )
+    assert describe_tolerance(
+        tolerance_verdict(_summary(2.6, 3.0)), recalibrate_key="C"
+    ) == ("Above 2.5° tolerance: re-calibrate (C)")
     assert describe_tolerance(None) == ""
+
+
+def test_quality_table_has_mean_and_worst_per_eye_with_marks():
+    from aria_et.calibration_quality import (
+        FAIL_MARK,
+        PASS_MARK,
+        quality_table,
+        tolerance_mark,
+        tolerance_verdict,
+    )
+
+    summary = {
+        "left": {
+            "accuracy_deg": 0.76,
+            "max_accuracy_deg": 5.3,
+            "precision_rms_deg": 0.07,
+            "max_precision_rms_deg": 0.11,
+            "data_loss": 0.0,
+            "max_data_loss": 0.0,
+        },
+        "right": {
+            "accuracy_deg": 0.94,
+            "max_accuracy_deg": 2.4,
+            "precision_rms_deg": 0.06,
+            "max_precision_rms_deg": None,
+            "data_loss": 0.02,
+            "max_data_loss": 0.08,
+        },
+    }
+
+    assert quality_table(summary) == [
+        ("Accuracy (deg)", {"left": ("0.76", "5.30"), "right": ("0.94", "2.40")}),
+        ("Precision (deg)", {"left": ("0.07", "0.11"), "right": ("0.06", "n/a")}),
+        ("Data loss (%)", {"left": ("0", "0"), "right": ("2", "8")}),
+    ]
+    verdict = tolerance_verdict(summary)
+    assert tolerance_mark(verdict, "left") == FAIL_MARK
+    assert tolerance_mark(verdict, "right") == PASS_MARK
+    assert tolerance_mark(None, "left") == ""

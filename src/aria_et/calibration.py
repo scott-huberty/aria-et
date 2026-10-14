@@ -34,12 +34,15 @@ DEFAULT_VALIDATION_POINTS = (
     (0.1, 0.9),
     (0.9, 0.9),
 )
-# Study tolerance on calibration quality, matching ABCCT: calibration error
-# (accuracy: mean angular offset of gaze from the targets) below 2.5 degrees,
-# met by at least one eye. ABCCT MOP v5.1 "Valid Trials per Paradigm"
-# ("Minimum calibration error < 2.5 degrees") and Shic et al. 2022 ("Cal Error
-# <= 2.5 deg"). ABCCT checked it per trial during the tasks; here it's checked
-# at validation, right after calibrating.
+# Study tolerance on calibration quality: the WORST validation target's error
+# (accuracy, the angular offset of gaze from the target) must be at most 2.5
+# degrees, in at least one eye. So every target, including each screen corner,
+# is within 2.5 degrees; a mean over targets could hide one bad corner.
+# The 2.5 degrees and the at-least-one-eye rule come from ABCCT (MOP v5.1
+# "Valid Trials per Paradigm": "Minimum calibration error < 2.5 degrees"; Shic
+# et al. 2022: "Cal Error <= 2.5 deg"). ABCCT applied it to a mean error, per
+# trial during the tasks; aria-et applies it to the worst target, at validation
+# right after calibrating, which is stricter.
 ACCURACY_TOLERANCE_DEG = 2.5
 
 # After the operator presses Space, validation waits for the eyes to settle for

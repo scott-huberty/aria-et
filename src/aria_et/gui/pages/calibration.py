@@ -22,9 +22,12 @@ from PySide6.QtWidgets import (
 )
 
 from aria_et.calibration_quality import (
-    QUALITY_COLUMNS,
+    EYES,
+    QUALITY_ROWS,
     describe_tolerance,
     format_quality,
+    quality_table,
+    tolerance_mark,
     tolerance_verdict,
 )
 from aria_et.config import AriaEtConfig
@@ -54,9 +57,9 @@ NO_VALIDATION_TEXT = (
 )
 VALIDATION_SKIPPED_TEXT = "Validation was skipped for the latest calibration."
 
-# The same table, with the same formatting, is shown on the stimulus screen
-# after validation (aria_et.calibration_quality).
-QUALITY_ROWS = QUALITY_COLUMNS
+# The quality table (rows of metrics; mean and worst target per eye) is the
+# same one shown on the stimulus screen after validation, built by
+# aria_et.calibration_quality.quality_table.
 
 
 # Display names for calibration methods in the history; calibration.json keeps
@@ -76,10 +79,22 @@ def describe_calibration(record: artifacts.CalibrationRecord) -> str:
     return text
 
 
-def quality_rows(validation: dict | None) -> list[tuple[str, str, str]]:
-    """Rows of (label, left eye, right eye) for the quality table."""
+def quality_rows(validation: dict | None) -> list[tuple[str, list[str]]]:
+    """Rows of (label, [left mean, left worst, right mean, right worst]).
+
+    Each eye's worst accuracy carries a check mark or X for the tolerance.
+    """
     summary = (validation or {}).get("summary")
-    return [(label, *format_quality(summary, key)) for label, key, _, _ in QUALITY_ROWS]
+    verdict = tolerance_verdict(summary)
+    rows = []
+    for index, (label, values) in enumerate(quality_table(summary)):
+        cells = []
+        for eye in EYES:
+            mean, worst = values[eye]
+            mark = tolerance_mark(verdict, eye) if index == 0 else ""
+            cells += [mean, f"{worst} {mark}" if mark else worst]
+        rows.append((label, cells))
+    return rows
 
 
 def describe_quality_status(record: artifacts.CalibrationRecord | None) -> str:
@@ -190,19 +205,22 @@ class CalibrationPage(QWidget):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(24)
         grid.setVerticalSpacing(4)
-        for column, column_title in enumerate(("", "Left eye", "Right eye")):
-            grid.addWidget(QLabel(column_title), 0, column)
-        self._quality_cells: list[tuple[QLabel, QLabel]] = []
-        for row, (label, _key, _scale, _decimals) in enumerate(QUALITY_ROWS, 1):
+        # Header: each eye spans its Mean and Worst columns.
+        for index, eye in enumerate(EYES):
+            grid.addWidget(QLabel(f"{eye.capitalize()} eye"), 0, 1 + 2 * index, 1, 2)
+            grid.addWidget(_helper("Mean"), 1, 1 + 2 * index)
+            grid.addWidget(_helper("Worst"), 1, 2 + 2 * index)
+        self._quality_cells: list[list[QLabel]] = []
+        for row, (label, *_keys) in enumerate(QUALITY_ROWS, 2):
             grid.addWidget(QLabel(label), row, 0)
-            cells = (QLabel(), QLabel())
-            grid.addWidget(cells[0], row, 1)
-            grid.addWidget(cells[1], row, 2)
+            cells = [QLabel() for _ in range(2 * len(EYES))]
+            for column, cell in enumerate(cells, 1):
+                grid.addWidget(cell, row, column)
             self._quality_cells.append(cells)
-        grid.setColumnStretch(3, 1)
+        grid.setColumnStretch(1 + 2 * len(EYES), 1)
         quality_layout.addWidget(self._quality_grid)
-        # The study tolerance (accuracy <= 2.5 deg in at least one eye, as in
-        # ABCCT): a plain line when met, a warning banner when not.
+        # The study tolerance (worst-target accuracy <= 2.5 deg in at least one
+        # eye): a plain line when met, a warning banner when not.
         self._tolerance_ok = _helper("")
         self._tolerance_warning = QLabel()
         self._tolerance_warning.setObjectName("ModeBanner")
@@ -314,8 +332,8 @@ class CalibrationPage(QWidget):
         self._tolerance_ok.setVisible(passed)
         self._tolerance_warning.setText(describe_tolerance(verdict) if failed else "")
         self._tolerance_warning.setVisible(failed)
-        for (left_cell, right_cell), (_label, left, right) in zip(
+        for cells, (_label, values) in zip(
             self._quality_cells, quality_rows(validation)
         ):
-            left_cell.setText(left)
-            right_cell.setText(right)
+            for cell, value in zip(cells, values):
+                cell.setText(value)
