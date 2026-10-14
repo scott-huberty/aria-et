@@ -65,6 +65,25 @@ and ``MaximalCalibrationError`` (accuracy, in degrees) to each eye's
 ``CalibrationCount``. ETM calibrations and skipped validations have no quality
 numbers.
 
+Study tolerance
+~~~~~~~~~~~~~~~
+
+A calibration is good enough when its validation **accuracy is at most 2.5°
+in at least one eye**. This matches the ABCCT criterion ("calibration error
+< 2.5°", ABCCT ET MOP v5.1 and Shic et al. 2022), which ABCCT also applied when
+either eye met it. ABCCT checked it per trial during the tasks; aria-et checks
+it at validation, right after calibrating, so it's a minimum bar: accuracy
+tends to worsen during a session. Precision and data loss are shown for
+information only.
+
+The results screen shows the verdict under the quality table (green when
+within tolerance, amber when not, with "re-calibrate before collecting data").
+The GUI quality card shows the same line, as a warning banner when the
+calibration is above tolerance, and each history entry ends with "within
+tolerance" or "above tolerance". The verdict is also saved in
+``calibration.json`` (``validation.tolerance``). The threshold is
+``ACCURACY_TOLERANCE_DEG`` in ``aria_et/calibration.py``.
+
 Options
 -------
 

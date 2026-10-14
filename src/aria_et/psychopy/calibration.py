@@ -31,10 +31,12 @@ from aria_et.calibration_quality import (
     EYES,
     QUALITY_COLUMNS,
     adcs_to_ucs,
+    describe_tolerance,
     format_quality,
     gaze_on_display,
     point_quality,
     summarize,
+    tolerance_verdict,
 )
 
 StatusSink = Callable[[str], None]
@@ -240,6 +242,8 @@ def _calibrate_validate_review(
             )
             validation_attempts += 1
             status(describe_validation(validation))
+            if validation.get("tolerance"):
+                status(describe_tolerance(validation["tolerance"]))
             shown = (point_metadata, validation, gaze)
         point_metadata, validation, gaze = shown
         action = show_validation_results(
@@ -255,6 +259,10 @@ def _calibrate_validate_review(
     )
     return True
 
+
+# Tolerance line colours on the results screen (rgb255): calm green / amber.
+TOLERANCE_PASS_COLOR = (120, 200, 120)
+TOLERANCE_FAIL_COLOR = (240, 170, 80)
 
 # Footer on the results screen. Escape also accepts: the calibration is already
 # active on the tracker, so it has to be recorded.
@@ -355,7 +363,9 @@ def _results_stimuli(window, visual, validation, gaze, colors) -> list:
 
     # Quality table, laid out like Titta's.
     summary = validation.get("summary")
-    top = 0.16 * height
+    # Above the centre target (gaze clouds sit there) and inside the corner
+    # targets, which are 10% in from each edge.
+    top = 0.30 * height
     if summary:
         column_width = 0.12 * width
         first_column = -1.0 * column_width * (len(QUALITY_COLUMNS) - 1)
@@ -372,13 +382,24 @@ def _results_stimuli(window, visual, validation, gaze, colors) -> list:
                     )
                 )
                 stimuli.append(text(value, (x, top - 0.08 * height), color=color))
+        verdict = tolerance_verdict(summary)
+        stimuli.append(
+            text(
+                describe_tolerance(verdict),
+                (0, top - 0.14 * height),
+                color=TOLERANCE_PASS_COLOR
+                if verdict["passed"]
+                else TOLERANCE_FAIL_COLOR,
+                size=0.026,
+            )
+        )
         if validation.get("status") == "partial":
             collected = len(validation.get("points") or ())
             planned = len(validation.get("points_adcs") or ()) or collected
             stimuli.append(
                 text(
                     f"Partial validation: {collected} of {planned} targets.",
-                    (0, top - 0.13 * height),
+                    (0, top - 0.19 * height),
                 )
             )
     else:
@@ -638,6 +659,7 @@ def run_validation(
         ],
         summary=summarize(results) if results else None,
     )
+    record["tolerance"] = tolerance_verdict(record["summary"])
     return record
 
 

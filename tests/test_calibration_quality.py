@@ -116,3 +116,45 @@ def test_summarize_with_no_data_returns_none():
 
     assert summary["left"]["accuracy_deg"] is None
     assert summary["right"]["max_accuracy_deg"] is None
+
+
+def _summary(left, right):
+    return {
+        "left": {"accuracy_deg": left},
+        "right": {"accuracy_deg": right},
+    }
+
+
+def test_tolerance_passes_when_at_least_one_eye_is_within_2_5_degrees():
+    from aria_et.calibration_quality import tolerance_verdict
+
+    verdict = tolerance_verdict(_summary(1.2, 3.4))
+
+    assert verdict["eyes"] == {"left": True, "right": False}
+    assert verdict["passed"] is True
+    assert verdict["tolerance_deg"] == 2.5
+    assert verdict["metric"] == "accuracy_deg"
+
+
+def test_tolerance_fails_when_both_eyes_are_above_and_counts_the_boundary_as_within():
+    from aria_et.calibration_quality import tolerance_verdict
+
+    assert tolerance_verdict(_summary(2.6, 3.0))["passed"] is False
+    assert tolerance_verdict(_summary(2.5, 9.0))["passed"] is True
+    # An eye with no valid data can't pass on its own.
+    assert tolerance_verdict(_summary(None, 3.0))["eyes"]["left"] is None
+    assert tolerance_verdict(_summary(None, 3.0))["passed"] is False
+    assert tolerance_verdict(None) is None
+
+
+def test_describe_tolerance_names_each_eye():
+    from aria_et.calibration_quality import describe_tolerance, tolerance_verdict
+
+    assert describe_tolerance(tolerance_verdict(_summary(1.2, 3.4))) == (
+        "Within the 2.5° accuracy tolerance (left within, right above)."
+    )
+    assert describe_tolerance(tolerance_verdict(_summary(2.6, None))) == (
+        "No eye within the 2.5° accuracy tolerance (left above, right n/a): "
+        "re-calibrate before collecting data."
+    )
+    assert describe_tolerance(None) == ""

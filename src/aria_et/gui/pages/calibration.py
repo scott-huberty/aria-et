@@ -21,7 +21,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from aria_et.calibration_quality import QUALITY_COLUMNS, format_quality
+from aria_et.calibration_quality import (
+    QUALITY_COLUMNS,
+    describe_tolerance,
+    format_quality,
+    tolerance_verdict,
+)
 from aria_et.config import AriaEtConfig
 from aria_et.gui import artifacts
 from aria_et.gui.state import CalibrationOptions, SessionState, build_calibrate_args
@@ -66,6 +71,8 @@ def describe_calibration(record: artifacts.CalibrationRecord) -> str:
     if summary:
         left, right = format_quality(summary, "accuracy_deg")
         text += f"  —  accuracy L {left}° R {right}°"
+        verdict = tolerance_verdict(summary)
+        text += "  —  within tolerance" if verdict["passed"] else "  —  above tolerance"
     return text
 
 
@@ -194,6 +201,14 @@ class CalibrationPage(QWidget):
             self._quality_cells.append(cells)
         grid.setColumnStretch(3, 1)
         quality_layout.addWidget(self._quality_grid)
+        # The study tolerance (accuracy <= 2.5 deg in at least one eye, as in
+        # ABCCT): a plain line when met, a warning banner when not.
+        self._tolerance_ok = _helper("")
+        self._tolerance_warning = QLabel()
+        self._tolerance_warning.setObjectName("ModeBanner")
+        self._tolerance_warning.setWordWrap(True)
+        quality_layout.addWidget(self._tolerance_ok)
+        quality_layout.addWidget(self._tolerance_warning)
 
         history_card, history_layout = _card("Calibration history")
         history_layout.addWidget(_helper(HISTORY_PREAMBLE))
@@ -291,6 +306,14 @@ class CalibrationPage(QWidget):
         validation = record.validation if record is not None else None
         has_summary = bool((validation or {}).get("summary"))
         self._quality_grid.setVisible(has_summary)
+        # Judged from the saved summary, so older calibrations get it too.
+        verdict = tolerance_verdict((validation or {}).get("summary"))
+        passed = verdict is not None and verdict["passed"]
+        failed = verdict is not None and not verdict["passed"]
+        self._tolerance_ok.setText(describe_tolerance(verdict) if passed else "")
+        self._tolerance_ok.setVisible(passed)
+        self._tolerance_warning.setText(describe_tolerance(verdict) if failed else "")
+        self._tolerance_warning.setVisible(failed)
         for (left_cell, right_cell), (_label, left, right) in zip(
             self._quality_cells, quality_rows(validation)
         ):

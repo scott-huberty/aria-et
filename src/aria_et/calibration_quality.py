@@ -28,6 +28,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from aria_et.calibration import ACCURACY_TOLERANCE_DEG
+
 EYES = ("left", "right")
 
 Vector = Sequence[float]
@@ -138,6 +140,48 @@ def format_quality(summary: Mapping[str, Mapping] | None, key: str) -> tuple[str
     values = [((summary or {}).get(eye) or {}).get(key) for eye in EYES]
     return tuple(
         "n/a" if value is None else f"{value * scale:.{decimals}f}" for value in values
+    )
+
+
+def tolerance_verdict(
+    summary: Mapping[str, Mapping] | None,
+    tolerance_deg: float = ACCURACY_TOLERANCE_DEG,
+) -> dict[str, object] | None:
+    """Whether a validation meets the study's accuracy tolerance.
+
+    The rule matches ABCCT: an eye is within tolerance if its mean accuracy is
+    at most ``tolerance_deg``, and the calibration is good enough if at least
+    one eye is. Returns None when there is no validation summary to judge.
+    """
+    if not summary:
+        return None
+    eyes = {}
+    for eye in EYES:
+        accuracy = (summary.get(eye) or {}).get("accuracy_deg")
+        eyes[eye] = None if accuracy is None else accuracy <= tolerance_deg
+    return {
+        "metric": "accuracy_deg",
+        "tolerance_deg": tolerance_deg,
+        "rule": "at least one eye",
+        "eyes": eyes,
+        "passed": any(eyes.values()),
+    }
+
+
+def describe_tolerance(verdict: Mapping[str, object] | None) -> str:
+    """One line for the results screen and the GUI, e.g. after the table."""
+    if verdict is None:
+        return ""
+    tolerance = f"{verdict['tolerance_deg']:g}°"
+    per_eye = ", ".join(
+        f"{eye} {'n/a' if within is None else 'within' if within else 'above'}"
+        for eye, within in verdict["eyes"].items()
+    )
+    if verdict["passed"]:
+        return f"Within the {tolerance} accuracy tolerance ({per_eye})."
+    return (
+        f"No eye within the {tolerance} accuracy tolerance ({per_eye}): "
+        "re-calibrate before collecting data."
     )
 
 

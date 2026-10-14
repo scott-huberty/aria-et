@@ -34,6 +34,14 @@ DEFAULT_VALIDATION_POINTS = (
     (0.1, 0.9),
     (0.9, 0.9),
 )
+# Study tolerance on calibration quality, matching ABCCT: calibration error
+# (accuracy: mean angular offset of gaze from the targets) below 2.5 degrees,
+# met by at least one eye. ABCCT MOP v5.1 "Valid Trials per Paradigm"
+# ("Minimum calibration error < 2.5 degrees") and Shic et al. 2022 ("Cal Error
+# <= 2.5 deg"). ABCCT checked it per trial during the tasks; here it's checked
+# at validation, right after calibrating.
+ACCURACY_TOLERANCE_DEG = 2.5
+
 # After the operator presses Space, validation waits for the eyes to settle for
 # DeToX's own ``focus_time`` (the same wait its calibration uses before
 # collecting), then records gaze for this long.

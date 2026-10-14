@@ -807,3 +807,53 @@ def test_eye_colour_defaults_match_the_installed_detox():
 
     assert tuple(left) == DetoxColorDefaults.left_eye
     assert tuple(right) == DetoxColorDefaults.right_eye
+
+
+def test_validation_saves_the_tolerance_verdict(tmp_path, window):
+    _, metadata, _ = _calibrate(tmp_path, window)
+
+    tolerance = metadata["validation"]["tolerance"]
+    accuracy = [
+        metadata["validation"]["summary"][eye]["accuracy_deg"]
+        for eye in ("left", "right")
+    ]
+    assert tolerance["tolerance_deg"] == 2.5
+    assert tolerance["rule"] == "at least one eye"
+    assert tolerance["passed"] is any(value <= 2.5 for value in accuracy)
+
+
+def test_results_screen_shows_the_tolerance_in_colour():
+    from aria_et.psychopy.calibration import (
+        TOLERANCE_FAIL_COLOR,
+        TOLERANCE_PASS_COLOR,
+        _results_stimuli,
+    )
+
+    def tolerance_line(left, right):
+        validation = {
+            "status": "complete",
+            "points_adcs": [[0.5, 0.5]],
+            "points": [{}],
+            "summary": {
+                "left": {"accuracy_deg": left, "precision_rms_deg": 0.1, "data_loss": 0.0},
+                "right": {"accuracy_deg": right, "precision_rms_deg": 0.1, "data_loss": 0.0},
+            },
+        }
+        stimuli = _results_stimuli(
+            FakeWindow(),
+            SimpleNamespace(
+                TextStim=FakeStim, Circle=FakeStim, ElementArrayStim=FakeElementArray
+            ),
+            validation,
+            [],
+            {"left": (1, 2, 3, 4), "right": (5, 6, 7, 8)},
+        )
+        return next(s for s in stimuli if "tolerance" in str(s.kwargs.get("text")))
+
+    passing = tolerance_line(0.8, 3.0)
+    failing = tolerance_line(2.7, 3.0)
+
+    assert passing.kwargs["text"].startswith("Within the 2.5° accuracy tolerance")
+    assert passing.kwargs["color"] == TOLERANCE_PASS_COLOR
+    assert failing.kwargs["text"].startswith("No eye within the 2.5° accuracy tolerance")
+    assert failing.kwargs["color"] == TOLERANCE_FAIL_COLOR

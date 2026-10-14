@@ -305,3 +305,42 @@ def test_quality_card_without_a_session(qapp, config):
 
     assert page._quality_status.text() == NO_QUALITY_TEXT
     assert not page._quality_grid.isVisibleTo(page)
+
+
+def test_quality_card_shows_a_passing_tolerance_plainly(qapp, config, session):
+    _write_calibration(
+        session, "calibration-20260202", "child-friendly-detox", VALIDATION
+    )
+    page = CalibrationPage(config)
+
+    page.set_session(session)
+
+    assert page._tolerance_ok.isVisibleTo(page)
+    assert page._tolerance_ok.text().startswith("Within the 2.5° accuracy tolerance")
+    assert not page._tolerance_warning.isVisibleTo(page)
+    assert "within tolerance" in page._history.text().splitlines()[0]
+
+
+def test_quality_card_warns_when_both_eyes_are_above_tolerance(qapp, config, session):
+    above = json.loads(json.dumps(VALIDATION))
+    above["summary"]["left"]["accuracy_deg"] = 2.9
+    above["summary"]["right"]["accuracy_deg"] = 3.4
+    _write_calibration(session, "calibration-20260202", "child-friendly-detox", above)
+    page = CalibrationPage(config)
+
+    page.set_session(session)
+
+    assert page._tolerance_warning.isVisibleTo(page)
+    assert "re-calibrate before collecting data" in page._tolerance_warning.text()
+    assert not page._tolerance_ok.isVisibleTo(page)
+    assert "above tolerance" in page._history.text().splitlines()[0]
+
+
+def test_quality_card_has_no_tolerance_line_without_validation(qapp, config, session):
+    _write_calibration(session, "calibration-20260202", "tobii-pro-eye-tracker-manager")
+    page = CalibrationPage(config)
+
+    page.set_session(session)
+
+    assert not page._tolerance_ok.isVisibleTo(page)
+    assert not page._tolerance_warning.isVisibleTo(page)
