@@ -27,7 +27,15 @@ from aria_et.calibration import (
     RESULTS_VISUALIZATION_STYLE,
     VALIDATION_COLLECT_SECONDS,
 )
-from aria_et.calibration_quality import EYES, adcs_to_ucs, point_quality, summarize
+from aria_et.calibration_quality import (
+    EYES,
+    QUALITY_COLUMNS,
+    adcs_to_ucs,
+    format_quality,
+    gaze_on_display,
+    point_quality,
+    summarize,
+)
 
 StatusSink = Callable[[str], None]
 ImportModule = Callable[[str], object]
@@ -115,36 +123,22 @@ def run_child_friendly_eyetracker_calibration(
         # DeToX discards the calibration result; keep it for the point positions.
         recorder = _RecordingCalibration(controller.calibration)
         controller.calibration = recorder
-        succeeded = _run_detox_calibration(
-            controller,
+        succeeded = _calibrate_validate_review(
+            window,
+            controller=controller,
+            recorder=recorder,
+            eyetracker=eyetracker,
+            tobii_research=tobii_research,
+            detox=detox,
+            import_module=import_module,
             status=status,
             play_sound=play_sound,
             calibration_points=calibration_points,
             shuffle=shuffle,
             animation=animation,
             show_positioning=show_positioning,
+            extra_metadata=extra_metadata,
         )
-        if succeeded:
-            calibration_point_metadata = recorder.point_metadata()
-            extra_metadata["calibration_points"] = calibration_point_metadata
-            # Validate at the calibration's own positions, so both steps cover
-            # the same area; fall back to DeToX's default layout if unknown.
-            validation_points = [
-                tuple(point) for point in calibration_point_metadata["positions_adcs"]
-            ] or DEFAULT_VALIDATION_POINTS
-            validation = run_validation(
-                window,
-                eyetracker=eyetracker,
-                tobii_research=tobii_research,
-                stimulus_dir=_detox_stimulus_dir(detox),
-                play_sound=play_sound,
-                status=status,
-                animation=animation,
-                animation_settings=_detox_animation_settings(import_module),
-                points=validation_points,
-            )
-            extra_metadata["validation"] = validation
-            status(describe_validation(validation))
     finally:
         status("Closing PsychoPy window...")
         window.close()
@@ -169,6 +163,249 @@ def run_child_friendly_eyetracker_calibration(
 
     status(f"Saved calibration data to {artifact_dir}.")
     return 0
+
+
+def _calibrate_validate_review(
+    window,
+    *,
+    controller,
+    recorder: _RecordingCalibration,
+    eyetracker,
+    tobii_research,
+    detox,
+    import_module: ImportModule,
+    status: StatusSink,
+    play_sound: bool,
+    calibration_points: int,
+    shuffle: bool,
+    animation: str,
+    show_positioning: bool,
+    extra_metadata: dict[str, object],
+) -> bool:
+    """Calibrate, validate and show the results until the operator accepts.
+
+    On the results screen the operator can accept, re-validate, or
+    re-calibrate. The calibration is applied on the tracker as soon as DeToX
+    accepts it, so whatever is accepted here is what gets saved. If a
+    re-calibration is aborted, the previous calibration is still the active
+    one, so its results are shown again. Returns False only if the first
+    calibration never succeeded (nothing to save).
+    """
+    animation_settings = _detox_animation_settings(import_module)
+    colors = _detox_colors(import_module)
+    calibration_attempts = 0
+    validation_attempts = 0
+    shown = None  # (calibration point metadata, validation, gaze) on screen
+    action = "recalibrate"
+    while True:
+        if action == "recalibrate":
+            calibrated = _run_detox_calibration(
+                controller,
+                status=status,
+                play_sound=play_sound,
+                calibration_points=calibration_points,
+                shuffle=shuffle,
+                animation=animation,
+                show_positioning=show_positioning,
+            )
+            if calibrated:
+                calibration_attempts += 1
+                point_metadata = recorder.point_metadata()
+                action = "revalidate"
+            elif shown is None:
+                return False
+            else:
+                status(
+                    "Re-calibration aborted; the previous calibration is still "
+                    "active on the tracker."
+                )
+        if action == "revalidate":
+            # Validate at the calibration's own positions, so both steps cover
+            # the same area; fall back to DeToX's default layout if unknown.
+            validation_points = [
+                tuple(point) for point in point_metadata["positions_adcs"]
+            ] or DEFAULT_VALIDATION_POINTS
+            gaze: list[dict] = []
+            validation = run_validation(
+                window,
+                eyetracker=eyetracker,
+                tobii_research=tobii_research,
+                stimulus_dir=_detox_stimulus_dir(detox),
+                play_sound=play_sound,
+                status=status,
+                animation=animation,
+                animation_settings=animation_settings,
+                points=validation_points,
+                gaze_out=gaze,
+            )
+            validation_attempts += 1
+            status(describe_validation(validation))
+            shown = (point_metadata, validation, gaze)
+        point_metadata, validation, gaze = shown
+        action = show_validation_results(
+            window, validation=validation, gaze=gaze, colors=colors
+        )
+        if action == "accept":
+            break
+    extra_metadata.update(
+        calibration_points=point_metadata,
+        validation=validation,
+        calibration_attempts=calibration_attempts,
+        validation_attempts=validation_attempts,
+    )
+    return True
+
+
+# Footer on the results screen. Escape also accepts: the calibration is already
+# active on the tracker, so it has to be recorded.
+RESULTS_KEYS_HINT = "Space: accept      V: re-validate      C: re-calibrate"
+_RESULTS_KEYS = {
+    "space": "accept",
+    "return": "accept",
+    "escape": "accept",
+    "v": "revalidate",
+    "c": "recalibrate",
+}
+
+
+def show_validation_results(window, *, validation, gaze, colors) -> str:
+    """Titta-style results: targets, gaze per eye, and the quality table.
+
+    Waits for a key and returns "accept", "revalidate" or "recalibrate".
+    """
+    from psychopy import event, visual
+
+    stimuli = _results_stimuli(window, visual, validation, gaze, colors)
+    event.clearEvents()
+    while True:
+        for stimulus in stimuli:
+            stimulus.draw()
+        window.flip()
+        for key in event.getKeys(keyList=list(_RESULTS_KEYS)):
+            return _RESULTS_KEYS[key]
+
+
+def _results_stimuli(window, visual, validation, gaze, colors) -> list:
+    width, height = window.size
+
+    def to_pix(point):
+        return ((point[0] - 0.5) * width, (0.5 - point[1]) * height)
+
+    def text(message, pos, *, color=(230, 230, 230), size=0.022):
+        return visual.TextStim(
+            window,
+            text=message,
+            pos=pos,
+            height=size * height,
+            color=color,
+            colorSpace="rgb255",
+            units="pix",
+            # PsychoPy's default wrap width is narrower than the footer line.
+            wrapWidth=0.9 * width,
+        )
+
+    stimuli = []
+    # Gaze: one element array per eye, so thousands of dots draw quickly.
+    for eye in EYES:
+        positions = [to_pix(xy) for target in gaze for xy in target[eye]]
+        if not positions:
+            continue
+        red, green, blue, alpha = colors[eye]
+        stimuli.append(
+            visual.ElementArrayStim(
+                window,
+                units="pix",
+                nElements=len(positions),
+                xys=positions,
+                sizes=0.005 * height,
+                elementTex=None,
+                elementMask="circle",
+                colors=(red, green, blue),
+                colorSpace="rgb255",
+                opacities=alpha / 255,
+            )
+        )
+
+    # Target markers on top of the gaze: a hollow ring (dots stay visible
+    # inside it) with a centre dot, so the target shows even under a cloud.
+    for point in validation.get("points_adcs") or ():
+        stimuli.append(
+            visual.Circle(
+                window,
+                radius=0.02 * height,
+                pos=to_pix(point),
+                lineColor=(235, 235, 235),
+                lineWidth=2,
+                fillColor=None,
+                colorSpace="rgb255",
+                units="pix",
+            )
+        )
+        stimuli.append(
+            visual.Circle(
+                window,
+                radius=0.003 * height,
+                pos=to_pix(point),
+                fillColor=(235, 235, 235),
+                lineColor=None,
+                colorSpace="rgb255",
+                units="pix",
+            )
+        )
+
+    # Quality table, laid out like Titta's.
+    summary = validation.get("summary")
+    top = 0.16 * height
+    if summary:
+        column_width = 0.12 * width
+        first_column = -1.0 * column_width * (len(QUALITY_COLUMNS) - 1)
+        for index, (label, key, _scale, _decimals) in enumerate(QUALITY_COLUMNS):
+            centre = first_column + 2 * index * column_width
+            stimuli.append(text(label, (centre, top)))
+            values = format_quality(summary, key)
+            for offset, eye, value in zip((-0.5, 0.5), EYES, values):
+                x = centre + offset * column_width
+                color = tuple(colors[eye][:3])
+                stimuli.append(
+                    text(
+                        f"{eye.capitalize()} eye", (x, top - 0.04 * height), color=color
+                    )
+                )
+                stimuli.append(text(value, (x, top - 0.08 * height), color=color))
+        if validation.get("status") == "partial":
+            collected = len(validation.get("points") or ())
+            planned = len(validation.get("points_adcs") or ()) or collected
+            stimuli.append(
+                text(
+                    f"Partial validation: {collected} of {planned} targets.",
+                    (0, top - 0.13 * height),
+                )
+            )
+    else:
+        stimuli.append(
+            text("Validation skipped: no calibration quality to show.", (0, top))
+        )
+    stimuli.append(text(RESULTS_KEYS_HINT, (0, -0.44 * height)))
+    return stimuli
+
+
+class DetoxColorDefaults:
+    """DeToX 0.2.1's ``ETSettings.colors`` eye colours (RGBA, 0-255).
+
+    Only used if DeToX's own settings can't be read.
+    """
+
+    left_eye = (100, 200, 255, 120)
+    right_eye = (255, 100, 120, 120)
+
+
+def _detox_colors(import_module: ImportModule) -> dict[str, tuple]:
+    """Eye colours for the gaze dots, matching DeToX's calibration results."""
+    try:
+        settings = import_module("DeToX.ETSettings").colors
+    except (ImportError, AttributeError):
+        settings = DetoxColorDefaults()
+    return {eye: tuple(getattr(settings, f"{eye}_eye")) for eye in EYES}
 
 
 def run_child_friendly_calibration_demo(
@@ -292,6 +529,7 @@ def run_validation(
     settle_seconds: float | None = None,
     collect_seconds: float = VALIDATION_COLLECT_SECONDS,
     rng: random.Random | None = None,
+    gaze_out: list | None = None,
 ) -> dict[str, object]:
     """Show validation targets, record gaze at each, and compute quality.
 
@@ -302,6 +540,10 @@ def run_validation(
     validation; the calibration is kept either way. Targets are animated the
     same way as DeToX's calibration targets (``animation`` and DeToX's
     ``ETSettings.animation``), so the child sees the same thing in both steps.
+
+    If ``gaze_out`` is given, each collected target's valid on-screen gaze
+    positions are appended to it, for the results screen. They aren't part of
+    the returned record, which is what gets saved.
     """
     from psychopy import core, event, sound, visual
 
@@ -363,6 +605,13 @@ def run_validation(
             finally:
                 _stop_sound(attention_sound)
             target_ucs = adcs_to_ucs(point, display_area)
+            if gaze_out is not None:
+                gaze_out.append(
+                    {
+                        "target_adcs": list(point),
+                        **{eye: gaze_on_display(samples, eye) for eye in EYES},
+                    }
+                )
             results.append(
                 {
                     "target_adcs": list(point),

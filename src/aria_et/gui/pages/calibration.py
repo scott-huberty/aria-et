@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from aria_et.calibration_quality import QUALITY_COLUMNS, format_quality
 from aria_et.config import AriaEtConfig
 from aria_et.gui import artifacts
 from aria_et.gui.state import CalibrationOptions, SessionState, build_calibrate_args
@@ -48,13 +49,9 @@ NO_VALIDATION_TEXT = (
 )
 VALIDATION_SKIPPED_TEXT = "Validation was skipped for the latest calibration."
 
-# (row label, summary key, scale, decimals) for the quality table.
-QUALITY_ROWS = (
-    ("Accuracy (deg)", "accuracy_deg", 1, 2),
-    ("Precision (deg)", "precision_rms_deg", 1, 2),
-    ("Data loss (%)", "data_loss", 100, 0),
-)
-EYES = ("left", "right")
+# The same table, with the same formatting, is shown on the stimulus screen
+# after validation (aria_et.calibration_quality).
+QUALITY_ROWS = QUALITY_COLUMNS
 
 
 # Display names for calibration methods in the history; calibration.json keeps
@@ -65,22 +62,17 @@ METHOD_LABELS = {"child-friendly-detox": "child friendly"}
 def describe_calibration(record: artifacts.CalibrationRecord) -> str:
     method = METHOD_LABELS.get(record.method, record.method) or "unknown method"
     text = f"{record.created_at or record.calibration_id}  —  {method}"
-    accuracy = _summary_values(record.validation, "accuracy_deg")
-    if accuracy is not None:
-        left, right = (_format_value(value, 1, 2) for value in accuracy)
+    summary = (record.validation or {}).get("summary")
+    if summary:
+        left, right = format_quality(summary, "accuracy_deg")
         text += f"  —  accuracy L {left}° R {right}°"
     return text
 
 
 def quality_rows(validation: dict | None) -> list[tuple[str, str, str]]:
     """Rows of (label, left eye, right eye) for the quality table."""
-    rows = []
-    for label, key, scale, decimals in QUALITY_ROWS:
-        values = _summary_values(validation, key) or (None, None)
-        rows.append(
-            (label, *(_format_value(value, scale, decimals) for value in values))
-        )
-    return rows
+    summary = (validation or {}).get("summary")
+    return [(label, *format_quality(summary, key)) for label, key, _, _ in QUALITY_ROWS]
 
 
 def describe_quality_status(record: artifacts.CalibrationRecord | None) -> str:
@@ -98,17 +90,6 @@ def describe_quality_status(record: artifacts.CalibrationRecord | None) -> str:
     if status == "partial":
         return f"Latest calibration ({when}): validation partial, {points} of {planned} targets."
     return f"Latest calibration ({when}): validated at {points} targets."
-
-
-def _summary_values(validation: dict | None, key: str) -> tuple | None:
-    summary = (validation or {}).get("summary")
-    if not summary:
-        return None
-    return tuple((summary.get(eye) or {}).get(key) for eye in EYES)
-
-
-def _format_value(value: float | None, scale: float, decimals: int) -> str:
-    return "n/a" if value is None else f"{value * scale:.{decimals}f}"
 
 
 def _card(title: str | None = None) -> tuple[QFrame, QVBoxLayout]:

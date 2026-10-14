@@ -8,6 +8,7 @@ import pytest
 
 from aria_et.psychopy.calibration import (
     CALIBRATION_METHOD,
+    RESULTS_KEYS_HINT,
     describe_validation,
     run_child_friendly_calibration_demo,
     run_child_friendly_eyetracker_calibration,
@@ -56,6 +57,7 @@ class FakeTracker:
         for eye in ("left", "right"):
             sample[f"{eye}_gaze_origin_in_user_coordinate_system"] = EYE_ORIGIN
             sample[f"{eye}_gaze_point_in_user_coordinate_system"] = SCREEN_CENTRE
+            sample[f"{eye}_gaze_point_on_display_area"] = (0.5, 0.5)
             sample[f"{eye}_gaze_origin_validity"] = 1
             sample[f"{eye}_gaze_point_validity"] = 1
         for callback in list(self.subscribers):
@@ -79,12 +81,19 @@ class FakeWindow:
 
 
 class FakeStim:
+    created = []  # every stimulus built, so tests can inspect the results screen
+
     def __init__(self, *args, **kwargs):
         self.kwargs = kwargs
         self.size = kwargs.get("size")
+        FakeStim.created.append(self)
 
     def draw(self):
         pass
+
+
+class FakeElementArray(FakeStim):
+    pass
 
 
 class FakeSound:
@@ -152,6 +161,7 @@ def window(monkeypatch, keys):
             TextStim=FakeStim,
             ImageStim=FakeStim,
             Circle=FakeStim,
+            ElementArrayStim=FakeElementArray,
         ),
         core=SimpleNamespace(Clock=FakeClock),
         event=keys,
@@ -187,7 +197,13 @@ class FakeDetox:
         positions=DETOX_POSITIONS,
     ):
         self.trackers = trackers
-        self.calibrate_result = calibrate_result
+        # One result per calibrate() call; the last one repeats.
+        self.calibrate_results = (
+            list(calibrate_result)
+            if isinstance(calibrate_result, list)
+            else [calibrate_result]
+        )
+        self.calibrate_calls = 0
         self.controllers = []
         if stimulus_dir is not None:
             self.__file__ = str(stimulus_dir.parent / "__init__.py")
@@ -210,10 +226,13 @@ class FakeDetox:
 
             def calibrate(self, **kwargs):
                 self.calls.append(("calibrate", kwargs))
-                if not self.simulate:
+                results = detox.calibrate_results
+                succeeded = results[min(detox.calibrate_calls, len(results) - 1)]
+                detox.calibrate_calls += 1
+                if succeeded and not self.simulate:
                     # DeToX computes through its calibration object, then drops it.
                     self.calibration.compute_and_apply()
-                return detox.calibrate_result
+                return succeeded
 
         self.ETracker = ETracker
 
@@ -624,3 +643,167 @@ def test_validation_fades_the_sound_during_the_settle(window, stimulus_dir):
     assert len(fade) >= 3
     assert fade == sorted(fade, reverse=True)  # only ever gets quieter
     assert volumes[-1] == 1.0  # reset, ready for the next target
+
+
+# Keypress scripts: start the validation, collect the 5 targets, then this key
+# on the results screen. Unscripted calls return Space, which accepts.
+VALIDATE_THEN = [["space"]] * 6
+
+
+def test_results_screen_accepts_and_saves_one_attempt(tmp_path, window):
+    FakeStim.created.clear()
+
+    exit_code, metadata, _ = _calibrate(tmp_path, window)
+
+    assert exit_code == 0
+    assert metadata["calibration_attempts"] == 1
+    assert metadata["validation_attempts"] == 1
+    assert window.closed
+    texts = [stim.kwargs.get("text") for stim in FakeStim.created]
+    assert RESULTS_KEYS_HINT in texts
+    assert "Accuracy (deg)" in texts
+
+
+def test_results_screen_can_revalidate(tmp_path, window, keys):
+    keys.script = VALIDATE_THEN + [["v"]]
+
+    _, metadata, tracker = _calibrate(tmp_path, window)
+
+    assert metadata["validation_attempts"] == 2
+    assert metadata["calibration_attempts"] == 1
+    assert metadata["validation"]["status"] == "complete"
+    assert tracker.unsubscribed == [GAZE_STREAM, GAZE_STREAM]
+
+
+def test_results_screen_can_recalibrate(tmp_path, window, keys):
+    keys.script = VALIDATE_THEN + [["c"]]
+    tracker = FakeTracker()
+    window.tracker = tracker
+    detox = FakeDetox([tracker])
+
+    run_child_friendly_eyetracker_calibration(
+        calibration_output_dir=tmp_path / "calibrations",
+        import_module=_import_module([tracker], detox),
+        status_sink=lambda message: None,
+    )
+
+    metadata = json.loads(
+        next((tmp_path / "calibrations").glob("*/calibration.json")).read_text()
+    )
+    calls = [call[0] for call in detox.controllers[0].calls]
+    # Re-calibrating shows the positioning screen again, then DeToX.
+    assert calls == ["show_status", "calibrate", "show_status", "calibrate"]
+    assert metadata["calibration_attempts"] == 2
+    assert metadata["validation_attempts"] == 2
+
+
+def test_aborted_recalibration_keeps_the_previous_results(tmp_path, window, keys):
+    keys.script = VALIDATE_THEN + [["c"]]
+    tracker = FakeTracker()
+    window.tracker = tracker
+    detox = FakeDetox([tracker], calibrate_result=[True, False])
+    messages = []
+
+    exit_code = run_child_friendly_eyetracker_calibration(
+        calibration_output_dir=tmp_path / "calibrations",
+        import_module=_import_module([tracker], detox),
+        status_sink=messages.append,
+    )
+
+    metadata = json.loads(
+        next((tmp_path / "calibrations").glob("*/calibration.json")).read_text()
+    )
+    assert exit_code == 0
+    assert detox.calibrate_calls == 2
+    # No new validation: the first calibration (still active) is saved.
+    assert metadata["calibration_attempts"] == 1
+    assert metadata["validation_attempts"] == 1
+    assert any("previous calibration is still active" in m for m in messages)
+
+
+def test_escape_on_the_results_screen_still_saves(tmp_path, window, keys):
+    keys.script = VALIDATE_THEN + [["escape"]]
+
+    exit_code, metadata, _ = _calibrate(tmp_path, window)
+
+    assert exit_code == 0
+    assert metadata["validation"]["status"] == "complete"
+
+
+def test_results_screen_explains_a_skipped_validation(tmp_path, window, keys):
+    keys.script = [["escape"]]  # skip validation at its instructions
+    FakeStim.created.clear()
+
+    _, metadata, _ = _calibrate(tmp_path, window)
+
+    texts = [stim.kwargs.get("text") for stim in FakeStim.created]
+    assert metadata["validation"]["status"] == "skipped"
+    assert "Validation skipped: no calibration quality to show." in texts
+    assert not [s for s in FakeStim.created if isinstance(s, FakeElementArray)]
+
+
+def test_results_screen_plots_valid_gaze_per_eye_in_detox_colours():
+    from aria_et.psychopy.calibration import DetoxColorDefaults, _results_stimuli
+
+    FakeStim.created.clear()
+    validation = {
+        "status": "complete",
+        "points_adcs": [[0.5, 0.5], [0.1, 0.1]],
+        "points": [{}, {}],
+        "summary": {
+            "left": {"accuracy_deg": 0.761, "precision_rms_deg": 0.07, "data_loss": 0.0},
+            "right": {"accuracy_deg": 0.94, "precision_rms_deg": 0.06, "data_loss": 0.0},
+        },
+    }
+    gaze = [
+        {"target_adcs": [0.5, 0.5], "left": [(0.5, 0.5), (0.5, 0.5)], "right": [(0.5, 0.5)]},
+        {"target_adcs": [0.1, 0.1], "left": [(0.1, 0.1)], "right": []},
+    ]
+    colors = {
+        "left": DetoxColorDefaults.left_eye,
+        "right": DetoxColorDefaults.right_eye,
+    }
+
+    stimuli = _results_stimuli(
+        FakeWindow(),
+        SimpleNamespace(
+            TextStim=FakeStim, Circle=FakeStim, ElementArrayStim=FakeElementArray
+        ),
+        validation,
+        gaze,
+        colors,
+    )
+
+    arrays = [s for s in stimuli if isinstance(s, FakeElementArray)]
+    assert [a.kwargs["nElements"] for a in arrays] == [3, 1]  # left, right
+    assert arrays[0].kwargs["xys"][0] == (0.0, 0.0)  # screen centre in pix
+    assert arrays[0].kwargs["colors"] == DetoxColorDefaults.left_eye[:3]
+    assert arrays[1].kwargs["colors"] == DetoxColorDefaults.right_eye[:3]
+    texts = [s.kwargs.get("text") for s in stimuli]
+    # The same formatting as the GUI quality card.
+    assert ["0.76", "0.94"] == [t for t in texts if t in ("0.76", "0.94")]
+    # Two markers (ring + centre) per target.
+    assert sum(1 for s in stimuli if "radius" in s.kwargs) == 4
+
+
+def test_eye_colour_defaults_match_the_installed_detox():
+    import importlib.util
+    import subprocess
+
+    from aria_et.psychopy.calibration import DetoxColorDefaults
+
+    # find_spec, not importorskip: importing DeToX here would import PsychoPy.
+    if importlib.util.find_spec("DeToX") is None:
+        pytest.skip("DeToX not installed")
+    script = (
+        "import json; from DeToX import ETSettings as cfg; "
+        "print(json.dumps([list(cfg.colors.left_eye), list(cfg.colors.right_eye)]))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, timeout=120
+    )
+    assert result.returncode == 0, result.stderr
+    left, right = json.loads(result.stdout.strip().splitlines()[-1])
+
+    assert tuple(left) == DetoxColorDefaults.left_eye
+    assert tuple(right) == DetoxColorDefaults.right_eye

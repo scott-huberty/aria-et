@@ -120,6 +120,42 @@ def summarize(points: Iterable[Mapping[str, EyeQuality]]) -> dict[str, dict]:
     return summary
 
 
+# The quality table shown on the GUI Calibration page and on the stimulus
+# screen after validation: (label, summary key, scale, decimals). Both use
+# format_quality so the two always show the same numbers.
+QUALITY_COLUMNS = (
+    ("Accuracy (deg)", "accuracy_deg", 1, 2),
+    ("Precision (deg)", "precision_rms_deg", 1, 2),
+    ("Data loss (%)", "data_loss", 100, 0),
+)
+
+
+def format_quality(summary: Mapping[str, Mapping] | None, key: str) -> tuple[str, str]:
+    """(left, right) display strings for one quality column; "n/a" if missing."""
+    _label, _key, scale, decimals = next(
+        column for column in QUALITY_COLUMNS if column[1] == key
+    )
+    values = [((summary or {}).get(eye) or {}).get(key) for eye in EYES]
+    return tuple(
+        "n/a" if value is None else f"{value * scale:.{decimals}f}" for value in values
+    )
+
+
+def gaze_on_display(samples: Sequence[Mapping[str, object]], eye: str) -> list:
+    """Valid on-screen gaze positions (ADCS, 0-1) of one eye, for plotting."""
+    positions = []
+    for sample in samples:
+        if not sample.get(f"{eye}_gaze_point_validity"):
+            continue
+        point = sample.get(f"{eye}_gaze_point_on_display_area")
+        if point is None or len(point) != 2:
+            continue
+        x, y = float(point[0]), float(point[1])
+        if math.isfinite(x) and math.isfinite(y):
+            positions.append((x, y))
+    return positions
+
+
 def _gaze_vectors(
     sample: Mapping[str, object], eye: str
 ) -> tuple[np.ndarray | None, np.ndarray | None]:

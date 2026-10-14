@@ -33,6 +33,14 @@ calibration to DeToX:
    looks at each one; after the same settle DeToX uses before collecting
    (``focus_time``, 0.5 s, while the sound fades out), 1 s of gaze is
    recorded. Escape skips the rest of the validation and keeps the calibration.
+5. **Results.** Like Titta, the stimulus screen then shows each target with
+   the validation gaze of each eye (in DeToX's eye colours) and the quality
+   table (accuracy, precision and data loss per eye, the same numbers as the
+   GUI). Keys: **Space** accepts and saves; **V** re-runs the validation;
+   **C** re-calibrates (positioning, DeToX, then validation again). If a
+   re-calibration is aborted, the previous calibration is still active on the
+   tracker, so its results are shown again. **Escape** also accepts: the
+   calibration is already active on the tracker, so it is always recorded.
 
 An accepted calibration is applied on the tracker and saved under the session's
 ``calibrations/`` folder (``calibration.bin`` and ``calibration.json``, method
