@@ -124,15 +124,19 @@ def test_build_check_args_parse(parser):
     assert args.address == "tobii-prp://169.254.10.180"
 
 
-def test_build_calibrate_args_parse_for_the_etm_routine(parser, session):
-    argv = state.build_calibrate_args(session, state.CalibrationOptions())
+def test_build_calibrate_args_always_run_child_friendly(parser, session):
+    argv = state.build_calibrate_args(session, state.CalibrationOptions(screen=1))
     args = parser.parse_args(argv)
 
     assert args.command == "calibrate-eyetracker"
-    assert args.routine == "etm"
+    assert args.routine == "child-friendly"
     assert args.subject == "abby"
     assert args.session == "01"
-    assert "--point-duration" not in argv
+    assert args.screen == 1
+    assert args.fullscreen is True
+    # The tracker comes from the CLI's saved-tracker default, not the GUI.
+    for flag in ("--serial-number", "--manager", "--address"):
+        assert flag not in argv
 
 
 def test_build_calibrate_args_include_child_friendly_flags(parser, session):
@@ -140,7 +144,6 @@ def test_build_calibrate_args_include_child_friendly_flags(parser, session):
         state.build_calibrate_args(
             session,
             state.CalibrationOptions(
-                routine="child-friendly",
                 fullscreen=False,
                 window_size="800x600",
                 play_sound=False,

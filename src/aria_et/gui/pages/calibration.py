@@ -1,9 +1,11 @@
-"""Calibration page: routine selection, ETM path check, and history."""
+"""Calibration page: child-friendly calibration, its quality, and history.
+
+The GUI always runs the child-friendly (DeToX) calibration with validation.
+Eye Tracker Manager calibration stays available from the CLI
+(``aria-et calibrate-eyetracker --routine etm``), which records it.
+"""
 
 from __future__ import annotations
-
-from dataclasses import replace
-from pathlib import Path
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
@@ -20,23 +22,9 @@ from PySide6.QtWidgets import (
 )
 
 from aria_et.config import AriaEtConfig
-from aria_et.eyetracker import default_eyetracker_manager_path
 from aria_et.gui import artifacts
 from aria_et.gui.state import CalibrationOptions, SessionState, build_calibrate_args
-from aria_et.gui.widgets.inputs import (
-    WheelSafeComboBox,
-    WheelSafeSpinBox,
-)
-
-ETM_ROUTINE = "etm"
-CHILD_FRIENDLY_ROUTINE = "child-friendly"
-
-CHILD_FRIENDLY_NOTE = (
-    "Child-friendly calibration uses DeToX with the study's 5-point protocol. "
-    "After the positioning screen (Space to continue), number keys select a "
-    "point, Space collects, Enter shows the results, and Escape aborts. On the "
-    "results screen, pick points to redo or press Enter to accept."
-)
+from aria_et.gui.widgets.inputs import WheelSafeSpinBox
 
 EDIT_SETTINGS_TEXT = "Change settings"
 LOCK_SETTINGS_TEXT = "Lock settings"
@@ -51,12 +39,6 @@ HISTORY_PREAMBLE = (
     "A run records the most recent calibration under the same subject and "
     "session, newest first:"
 )
-
-
-def resolve_manager_path(config: AriaEtConfig) -> tuple[str, bool]:
-    """Return the manager executable the CLI will use and whether it exists."""
-    path = config.eye_tracker_manager or default_eyetracker_manager_path()
-    return path, Path(path).exists()
 
 
 NO_QUALITY_TEXT = "No calibration yet for this session."
@@ -75,8 +57,13 @@ QUALITY_ROWS = (
 EYES = ("left", "right")
 
 
+# Display names for calibration methods in the history; calibration.json keeps
+# the full method name for provenance and BIDS.
+METHOD_LABELS = {"child-friendly-detox": "child friendly"}
+
+
 def describe_calibration(record: artifacts.CalibrationRecord) -> str:
-    method = record.method or "unknown method"
+    method = METHOD_LABELS.get(record.method, record.method) or "unknown method"
     text = f"{record.created_at or record.calibration_id}  —  {method}"
     accuracy = _summary_values(record.validation, "accuracy_deg")
     if accuracy is not None:
@@ -124,15 +111,16 @@ def _format_value(value: float | None, scale: float, decimals: int) -> str:
     return "n/a" if value is None else f"{value * scale:.{decimals}f}"
 
 
-def _card(title: str) -> tuple[QFrame, QVBoxLayout]:
+def _card(title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
     frame = QFrame()
     frame.setObjectName("Card")
     layout = QVBoxLayout(frame)
     layout.setContentsMargins(16, 14, 16, 16)
     layout.setSpacing(10)
-    heading = QLabel(title)
-    heading.setObjectName("SectionHeading")
-    layout.addWidget(heading)
+    if title is not None:
+        heading = QLabel(title)
+        heading.setObjectName("SectionHeading")
+        layout.addWidget(heading)
     return frame, layout
 
 
@@ -154,51 +142,24 @@ class CalibrationPage(QWidget):
         heading = QLabel("Calibration")
         heading.setObjectName("PageHeading")
 
-        routine_card, routine_layout = _card("Routine")
-        self._routine = WheelSafeComboBox()
-        self._routine.addItem("Eye Tracker Manager", ETM_ROUTINE)
-        self._routine.addItem("Child-friendly", CHILD_FRIENDLY_ROUTINE)
-        self._routine.currentIndexChanged.connect(self._on_routine_changed)
-        routine_layout.addWidget(self._routine)
-
-        self._manager_label = _helper("")
-        self._manager_warning = QLabel()
-        self._manager_warning.setObjectName("ModeBanner")
-        self._manager_warning.setWordWrap(True)
-        routine_layout.addWidget(self._manager_label)
-        routine_layout.addWidget(self._manager_warning)
-
-        settings_card, settings_layout = _card("Settings")
+        # No heading: the page title already says Calibration.
+        settings_card, settings_layout = _card()
         # Production calibrations want the defaults, so the fields start locked
         # and must be unlocked deliberately, as on the Battery page.
         self._settings_fields = QWidget()
         self._settings_fields.setObjectName("CardFields")
-        fields_layout = QVBoxLayout(self._settings_fields)
-        fields_layout.setContentsMargins(0, 0, 0, 0)
-        fields_layout.setSpacing(6)
-
+        form = QFormLayout(self._settings_fields)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setVerticalSpacing(6)
         self._screen = WheelSafeSpinBox()
         self._screen.setRange(0, 8)
-        screen_form = QFormLayout()
-        screen_form.setVerticalSpacing(6)
-        screen_form.addRow("Screen", self._screen)
-        fields_layout.addLayout(screen_form)
-
-        self._child_options = QWidget()
-        child_layout = QVBoxLayout(self._child_options)
-        child_layout.setContentsMargins(0, 0, 0, 0)
-        child_layout.setSpacing(6)
-        child_form = QFormLayout()
-        child_form.setVerticalSpacing(6)
         self._fullscreen = QCheckBox("Fullscreen")
         self._window_size = QLineEdit()
         self._sound = QCheckBox("Play sound")
-        child_form.addRow("Display", self._fullscreen)
-        child_form.addRow("Window size", self._window_size)
-        child_form.addRow("Sound", self._sound)
-        child_layout.addLayout(child_form)
-        child_layout.addWidget(_helper(CHILD_FRIENDLY_NOTE))
-        fields_layout.addWidget(self._child_options)
+        form.addRow("Screen", self._screen)
+        form.addRow("Display", self._fullscreen)
+        form.addRow("Window size", self._window_size)
+        form.addRow("Sound", self._sound)
         settings_layout.addWidget(self._settings_fields)
 
         self._custom_notice = QLabel(CUSTOM_SETTINGS_NOTICE)
@@ -226,20 +187,12 @@ class CalibrationPage(QWidget):
         ):
             changed.connect(self._sync_settings_state)
 
-        tracker_card, tracker_layout = _card("Tracker")
-        self._serial = QLineEdit()
-        self._serial.setPlaceholderText(
-            "Optional — leave blank to use the saved tracker"
-        )
-        tracker_form = QFormLayout()
-        tracker_form.setVerticalSpacing(6)
-        tracker_form.addRow("Serial number", self._serial)
-        tracker_layout.addLayout(tracker_form)
-
+        # Calibrates the tracker connected on the Hardware page (the saved
+        # tracker); the CLI resolves it, so no tracker field is needed here.
         self._calibrate_button = QPushButton("Run calibration")
         self._calibrate_button.setObjectName("Primary")
         self._calibrate_button.clicked.connect(self._request_calibration)
-        tracker_layout.addWidget(self._calibrate_button)
+        settings_layout.addWidget(self._calibrate_button)
 
         quality_card, quality_layout = _card("Latest calibration quality")
         self._quality_status = _helper("")
@@ -272,30 +225,20 @@ class CalibrationPage(QWidget):
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(14)
         layout.addWidget(heading)
-        layout.addWidget(routine_card)
         layout.addWidget(settings_card)
-        layout.addWidget(tracker_card)
         layout.addWidget(quality_card)
         layout.addWidget(history_card)
         layout.addStretch(1)
 
-        self._on_routine_changed()
+        self._restore_defaults()
         self.refresh()
 
     def set_session(self, session: SessionState | None) -> None:
         self._session = session
         self.refresh()
 
-    def selected_routine(self) -> str:
-        return self._routine.currentData()
-
     def calibration_options(self) -> CalibrationOptions:
-        routine = self.selected_routine()
-        manager, _ = resolve_manager_path(self._config)
         return CalibrationOptions(
-            routine=routine,
-            serial_number=self._serial.text().strip() or None,
-            manager=manager if routine == ETM_ROUTINE else None,
             screen=self._screen.value(),
             fullscreen=self._fullscreen.isChecked(),
             window_size=self._window_size.text().strip() or "1024x768",
@@ -315,23 +258,8 @@ class CalibrationPage(QWidget):
         )
 
     def default_calibration_options(self) -> CalibrationOptions:
-        """Production settings for the selected routine.
-
-        ETM and PsychoPy number displays differently, so each routine has its
-        own configured screen: ETM opens on ``etm_screen``, the child-friendly
-        PsychoPy window on ``psychopy_screen`` (the EIZO stimulus display).
-        """
-        routine = self.selected_routine()
-        manager, _ = resolve_manager_path(self._config)
-        return CalibrationOptions(
-            routine=routine,
-            manager=manager if routine == ETM_ROUTINE else None,
-            screen=(
-                self._config.etm_screen
-                if routine == ETM_ROUTINE
-                else self._config.psychopy_screen
-            ),
-        )
+        """Production settings: the PsychoPy window on the stimulus display."""
+        return CalibrationOptions(screen=self._config.psychopy_screen)
 
     def _restore_defaults(self) -> None:
         defaults = self.default_calibration_options()
@@ -356,31 +284,9 @@ class CalibrationPage(QWidget):
         self._window_size.setEnabled(not self._fullscreen.isChecked())
 
     def _sync_settings_state(self) -> None:
-        options = self.calibration_options()
-        defaults = self.default_calibration_options()
-        if self.selected_routine() == ETM_ROUTINE:
-            # Only the screen applies to ETM; hidden child options don't count.
-            customised = options.screen != defaults.screen
-        else:
-            customised = replace(options, serial_number=None) != defaults
+        customised = self.calibration_options() != self.default_calibration_options()
         self._custom_notice.setVisible(customised)
         self._restore_defaults_button.setEnabled(customised)
-
-    def _on_routine_changed(self) -> None:
-        is_etm = self.selected_routine() == ETM_ROUTINE
-        self._child_options.setVisible(not is_etm)
-        # Each routine has its own screen, so switching resets to its defaults.
-        self._restore_defaults()
-        path, exists = resolve_manager_path(self._config)
-        self._manager_label.setText(f"Manager executable: {path}")
-        self._manager_label.setVisible(is_etm)
-        self._manager_warning.setText(
-            ""
-            if exists
-            else f"No executable at {path}. Set eye_tracker_manager "
-            "in the config or install Tobii Pro Eye Tracker Manager."
-        )
-        self._manager_warning.setVisible(is_etm and not exists)
 
     def refresh(self) -> None:
         self._calibrate_button.setEnabled(self._session is not None)

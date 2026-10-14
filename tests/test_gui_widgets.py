@@ -371,13 +371,13 @@ def test_main_window_hides_the_banner_in_acquisition_mode(qapp, config):
 @pytest.mark.parametrize(
     "psychopy_screen, etm_screen, expected",
     [
-        (1, 2, 2),  # lab defaults: both mean the second display
-        (0, 1, 1),  # both on the primary display
-        (1, 3, 3),  # ETM on the third display
+        (1, 2, 2),  # lab defaults: the stimulus on the second display
+        (0, 1, 1),  # stimulus on the primary display
+        (1, 3, 2),  # the ETM screen no longer counts: the GUI doesn't run ETM
         (2, 1, 3),  # stimulus on the third display
     ],
 )
-def test_required_display_count_uses_each_screen_numbering(
+def test_required_display_count_follows_the_stimulus_screen(
     tmp_path, psychopy_screen, etm_screen, expected
 ):
     config = AriaEtConfig(
@@ -404,3 +404,12 @@ def test_setup_warns_only_when_the_default_screens_need_more_displays(
     warning = _display_warning(page)
     assert warning.isHidden() is not shown
     assert "expects at least 2" in warning.text()
+
+
+def test_setup_summary_no_longer_lists_an_eye_tracker_manager_screen(qapp, config):
+    page = SetupPage(config, screen_count=2)
+
+    texts = [label.text() for label in page.findChildren(QLabel)]
+
+    assert "Stimulus screen" in texts
+    assert not any("Eye Tracker Manager" in text or "ETM" in text for text in texts)

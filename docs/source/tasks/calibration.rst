@@ -85,3 +85,18 @@ Options
 
 ``aria-et demo-calibration`` previews the same procedure without a tracker,
 using the mouse in place of gaze. Nothing is saved.
+
+Eye Tracker Manager calibration
+-------------------------------
+
+The GUI always runs the child-friendly calibration. If a session needs a
+standard Tobii Pro Eye Tracker Manager calibration instead, run it from the
+command line so aria-et records it:
+
+.. code-block:: powershell
+
+   aria-et calibrate-eyetracker --routine etm --subject <label> --session <label>
+
+Don't calibrate in the Eye Tracker Manager application directly: the
+calibration would be applied on the tracker but not recorded, so later runs
+would record the previous aria-et calibration as the one in effect.

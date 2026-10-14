@@ -43,7 +43,7 @@ Observed Validated Stack
      - Encoded in ``platform_runtime_TOBIIPRONETWORK_MAC_x64_service``.
    * - Tobii Pro Eye Tracker Manager
      - ``2.7.2`` / build ``2.7.2.2562``
-     - Used for the standard ETM calibration routine.
+     - Used by the CLI ETM calibration routine (``--routine etm``); the GUI uses the child-friendly routine.
    * - Tracker model
      - ``Tobii Pro Spectrum``
      - Observed through the Tobii SDK.

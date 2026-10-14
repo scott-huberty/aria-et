@@ -66,11 +66,13 @@ class PresentationOptions:
     debug_render: bool = False
 
 
+CHILD_FRIENDLY_ROUTINE = "child-friendly"
+
+
 @dataclass(frozen=True)
 class CalibrationOptions:
-    routine: str = "etm"
-    serial_number: str | None = None
-    manager: str | None = None
+    """Settings for the GUI's calibration, which is always child-friendly."""
+
     screen: int | None = None
     fullscreen: bool = True
     window_size: str = "1024x768"
@@ -153,10 +155,12 @@ def build_save_tracker_args(serial_number: str) -> list[str]:
 
 
 def build_calibrate_args(state: SessionState, options: CalibrationOptions) -> list[str]:
+    # The GUI always runs the child-friendly (DeToX) calibration on the tracker
+    # resolved by the CLI (the saved tracker); ETM stays available in the CLI.
     args = [
         "calibrate-eyetracker",
         "--routine",
-        options.routine,
+        CHILD_FRIENDLY_ROUTINE,
         "--subject",
         state.subject,
         "--session",
@@ -166,22 +170,17 @@ def build_calibrate_args(state: SessionState, options: CalibrationOptions) -> li
     ]
     if state.tracker_address:
         args += ["--address", state.tracker_address]
-    if options.serial_number:
-        args += ["--serial-number", options.serial_number]
-    if options.manager:
-        args += ["--manager", options.manager]
     if options.screen is not None:
         args += ["--screen", str(options.screen)]
-    if options.routine == "child-friendly":
-        args += _display_args(
-            fullscreen=options.fullscreen,
-            window_size=options.window_size,
-            screen=None,
-        )
-        # DeToX procedure settings (points, order, animation, positioning) use
-        # the CLI's protocol defaults; the GUI doesn't expose them.
-        if not options.play_sound:
-            args.append("--no-sound")
+    args += _display_args(
+        fullscreen=options.fullscreen,
+        window_size=options.window_size,
+        screen=None,
+    )
+    # DeToX procedure settings (points, order, animation, positioning) use the
+    # CLI's protocol defaults; the GUI doesn't expose them.
+    if not options.play_sound:
+        args.append("--no-sound")
     return args
 
 

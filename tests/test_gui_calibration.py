@@ -6,22 +6,18 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QWheelEvent
-from PySide6.QtWidgets import QApplication, QComboBox
+from PySide6.QtWidgets import QApplication, QComboBox, QLineEdit
 
 from aria_et.cli import build_parser
 from aria_et.config import AriaEtConfig
-from aria_et.eyetracker import default_eyetracker_manager_path
 from aria_et.gui import state
 from aria_et.gui.artifacts import find_calibrations
 from aria_et.gui.pages.calibration import (
-    CHILD_FRIENDLY_ROUTINE,
-    ETM_ROUTINE,
     NO_HISTORY_TEXT,
     NO_QUALITY_TEXT,
     NO_VALIDATION_TEXT,
     VALIDATION_SKIPPED_TEXT,
     CalibrationPage,
-    resolve_manager_path,
 )
 
 pytestmark = pytest.mark.qt_gui
@@ -86,61 +82,31 @@ def _quality_table(page):
     ]
 
 
-def test_manager_path_falls_back_to_the_bundled_default(config):
-    path, _ = resolve_manager_path(config)
-
-    assert path == default_eyetracker_manager_path()
-
-
-def test_manager_path_prefers_the_configured_executable(tmp_path):
-    executable = tmp_path / "etm"
-    executable.write_text("", encoding="utf-8")
-    config = AriaEtConfig(eye_tracker_manager=str(executable))
-
-    assert resolve_manager_path(config) == (str(executable), True)
-
-
-def test_calibration_warns_when_the_manager_is_missing(qapp, config):
+def test_calibration_page_has_no_routine_or_tracker_choice(qapp, config):
     page = CalibrationPage(config)
 
-    _, exists = resolve_manager_path(config)
-    assert page._manager_warning.isVisibleTo(page) is not exists
+    # Only the window size (WxH) is free text; no serial-number box. (Qt's
+    # spin boxes contain an internal line edit, which doesn't count.)
+    line_edits = [
+        widget
+        for widget in page.findChildren(QLineEdit)
+        if widget.objectName() != "qt_spinbox_lineedit"
+    ]
+    assert line_edits == [page._window_size]
+    assert page.findChildren(QComboBox) == []
+    assert not hasattr(page, "_routine")
 
 
-def test_calibration_hides_child_options_in_etm_mode(qapp, config):
-    page = CalibrationPage(config)
-
-    assert page.selected_routine() == ETM_ROUTINE
-    assert not page._child_options.isVisibleTo(page)
-
-
-def test_calibration_reveals_child_options_for_the_child_routine(qapp, config):
-    page = CalibrationPage(config)
-
-    page._routine.setCurrentIndex(1)
-
-    assert page.selected_routine() == CHILD_FRIENDLY_ROUTINE
-    assert page._child_options.isVisibleTo(page)
-    assert not page._manager_label.isVisibleTo(page)
-
-
-def test_calibration_screen_follows_the_routine(qapp):
+def test_calibration_defaults_to_the_stimulus_screen(qapp):
     config = AriaEtConfig(etm_screen=2, psychopy_screen=1)
     page = CalibrationPage(config)
 
-    assert page.calibration_options().screen == 2
-
-    page._routine.setCurrentIndex(1)
     # The child-friendly PsychoPy window must open on the EIZO display.
     assert page.calibration_options().screen == 1
-
-    page._routine.setCurrentIndex(0)
-    assert page.calibration_options().screen == 2
 
 
 def test_child_friendly_defaults(qapp, config):
     page = CalibrationPage(config)
-    page._routine.setCurrentIndex(1)
 
     options = page.calibration_options()
 
@@ -150,7 +116,6 @@ def test_child_friendly_defaults(qapp, config):
 
 def test_calibration_settings_start_locked(qapp, config):
     page = CalibrationPage(config)
-    page._routine.setCurrentIndex(1)
 
     assert not page._settings_fields.isEnabled()
     assert not page._custom_notice.isVisibleTo(page)
@@ -162,7 +127,6 @@ def test_calibration_settings_start_locked(qapp, config):
 
 def test_custom_calibration_settings_show_a_notice_until_restored(qapp, config):
     page = CalibrationPage(config)
-    page._routine.setCurrentIndex(1)
     page._edit_settings_button.click()
 
     page._sound.setChecked(False)
@@ -174,19 +138,6 @@ def test_custom_calibration_settings_show_a_notice_until_restored(qapp, config):
 
     assert page.calibration_options().play_sound is True
     assert not page._custom_notice.isVisibleTo(page)
-    assert not page._settings_fields.isEnabled()
-
-
-def test_switching_routine_restores_and_locks_settings(qapp, config):
-    page = CalibrationPage(config)
-    page._routine.setCurrentIndex(1)
-    page._edit_settings_button.click()
-    page._sound.setChecked(False)
-
-    page._routine.setCurrentIndex(0)
-    page._routine.setCurrentIndex(1)
-
-    assert page.calibration_options().play_sound is True
     assert not page._settings_fields.isEnabled()
 
 
@@ -204,16 +155,19 @@ def test_calibration_emits_args_the_cli_accepts(qapp, config, session):
 
     page._request_calibration()
 
-    build_parser(config).parse_args(emitted[0])
+    args = build_parser(config).parse_args(emitted[0])
     assert emitted[0][0] == "calibrate-eyetracker"
+    assert args.routine == "child-friendly"
+    assert args.screen == config.psychopy_screen
     assert "--subject" in emitted[0]
     assert "--session" in emitted[0]
+    for flag in ("--serial-number", "--manager"):
+        assert flag not in emitted[0]
 
 
 def test_child_friendly_calibration_args_still_parse(qapp, config, session):
     page = CalibrationPage(config)
     page.set_session(session)
-    page._routine.setCurrentIndex(1)
     page._sound.setChecked(False)
     emitted = []
     page.calibrate_requested.connect(emitted.append)
@@ -270,10 +224,9 @@ def test_calibration_re_enables_its_button_after_a_refused_start(qapp, config, s
     assert page._calibrate_button.isEnabled()
 
 
-@pytest.mark.parametrize("field", ["_routine", "_screen"])
+@pytest.mark.parametrize("field", ["_screen"])
 def test_mouse_wheel_does_not_change_calibration_inputs(qapp, config, field):
     page = CalibrationPage(config)
-    page._routine.setCurrentIndex(1)
     page._edit_settings_button.click()  # locked fields ignore input anyway
     widget = getattr(page, field)
 
@@ -314,7 +267,10 @@ def test_quality_table_shows_the_latest_validation(qapp, config, session):
         ("0", "12"),
     ]
     assert "validated at 5 targets" in page._quality_status.text()
-    assert "accuracy L 0.76° R 0.94°" in page._history.text().splitlines()[0]
+    latest = page._history.text().splitlines()[0]
+    assert "accuracy L 0.76° R 0.94°" in latest
+    assert "—  child friendly  —" in latest
+    assert "detox" not in latest.lower()
 
 
 def test_quality_card_explains_a_skipped_validation(qapp, config, session):
