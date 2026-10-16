@@ -30,6 +30,9 @@ LINUX_EYETRACKER_MANAGER_PATH = (
     "/opt/TobiiProEyeTrackerManager/TobiiProEyeTrackerManager"
 )
 DEFAULT_CALIBRATION_DIR = "calibrations"
+# Retries when replacing gaze_writer.json is refused (Windows, GUI reading it).
+HEALTH_REPLACE_ATTEMPTS = 3
+HEALTH_REPLACE_RETRY_SECONDS = 0.01
 
 
 def default_eyetracker_manager_path(
@@ -339,6 +342,7 @@ class TobiiGazeRecorder:
         self.written_queue_samples = 0
         self.dropped_queue_samples = 0
         self.gaze_file_flush_count = 0
+        self.health_snapshot_failures = 0
 
     def __enter__(self) -> Self:
         self.start()
@@ -376,6 +380,7 @@ class TobiiGazeRecorder:
         self.written_queue_samples = 0
         self.dropped_queue_samples = 0
         self.gaze_file_flush_count = 0
+        self.health_snapshot_failures = 0
         self._write_writer_health_snapshot()
         self._writer_thread = threading.Thread(
             target=self._write_gaze_samples,
@@ -507,6 +512,7 @@ class TobiiGazeRecorder:
             "max_queue_samples": self.max_queue_samples,
             "queued_samples": self._queue.qsize(),
             "flush_count": self.gaze_file_flush_count,
+            "health_snapshot_failures": self.health_snapshot_failures,
             "flush_every_samples": self.flush_every_samples,
             "flush_every_seconds": self.flush_every_seconds,
             "last_flush_at": self._last_flush_at,
@@ -521,18 +527,38 @@ class TobiiGazeRecorder:
         }
 
     def _write_writer_health_snapshot(self) -> None:
+        """Publish writer health; best effort, it must never stop gaze writing.
+
+        The GUI reads this file during a run. On Windows, replacing a file
+        fails with "Access is denied" while another process has it open, so a
+        refused replace is retried briefly and otherwise skipped: the next
+        flush writes a fresh snapshot. Skipped snapshots are counted.
+        """
         if self.writer_health_path is None:
             return
 
-        self.writer_health_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.writer_health_path.with_suffix(
-            self.writer_health_path.suffix + ".tmp"
-        )
-        tmp_path.write_text(
-            json.dumps(self.writer_health(), indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        tmp_path.replace(self.writer_health_path)
+        try:
+            self.writer_health_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self.writer_health_path.with_suffix(
+                self.writer_health_path.suffix + ".tmp"
+            )
+            tmp_path.write_text(
+                json.dumps(self.writer_health(), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            for attempt in range(HEALTH_REPLACE_ATTEMPTS):
+                try:
+                    self._replace_health_file(tmp_path, self.writer_health_path)
+                    return
+                except PermissionError:
+                    if attempt + 1 == HEALTH_REPLACE_ATTEMPTS:
+                        raise
+                    time.sleep(HEALTH_REPLACE_RETRY_SECONDS)
+        except OSError:
+            self.health_snapshot_failures += 1
+
+    def _replace_health_file(self, tmp_path: Path, health_path: Path) -> None:
+        tmp_path.replace(health_path)
 
 
 def create_tobii_gaze_recorder(

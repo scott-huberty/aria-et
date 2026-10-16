@@ -717,3 +717,74 @@ def test_run_eyetracker_manager_calibration_rejects_address_and_serial(capsys):
 
     assert exit_code == 51
     assert "either --address or --serial-number" in capsys.readouterr().err
+
+
+class LockedHealthFileRecorder(TobiiGazeRecorder):
+    """Simulates Windows refusing to replace gaze_writer.json while the GUI
+    has it open ("Access is denied"), for the first ``refusals`` attempts."""
+
+    def __init__(self, *, refusals, **kwargs):
+        super().__init__(**kwargs)
+        self.refusals = refusals
+        self.replace_attempts = 0
+
+    def _replace_health_file(self, tmp_path, health_path):
+        self.replace_attempts += 1
+        if self.replace_attempts <= self.refusals:
+            raise PermissionError(13, "Access is denied")
+        super()._replace_health_file(tmp_path, health_path)
+
+
+def _locked_recorder(tmp_path, refusals):
+    tracker = FakeEyeTracker()
+    recorder = LockedHealthFileRecorder(
+        refusals=refusals,
+        eyetracker=tracker,
+        tobii_research=FakeTobiiModule,
+        gaze_path=tmp_path / "gaze.jsonl",
+        tracker_metadata_path=tmp_path / "tracker.json",
+        writer_health_path=tmp_path / "gaze_writer.json",
+        clock=ManualClock(),
+        flush_every_samples=1,
+        flush_every_seconds=60.0,
+    )
+    return tracker, recorder
+
+
+def test_a_briefly_locked_health_file_is_retried(tmp_path):
+    tracker, recorder = _locked_recorder(tmp_path, refusals=1)
+
+    recorder.start()
+    try:
+        tracker.subscriptions[0]["callback"]({"system_time_stamp": 1})
+        recorder._queue.join()
+    finally:
+        recorder.stop()
+
+    health = json.loads((tmp_path / "gaze_writer.json").read_text())
+    assert health["health_snapshot_failures"] == 0
+    assert health["writer_error"] is None
+
+
+def test_a_locked_health_file_never_stops_gaze_writing(tmp_path):
+    # Refuse every replace while samples flow: snapshots are skipped, not fatal.
+    tracker, recorder = _locked_recorder(tmp_path, refusals=10**6)
+
+    recorder.start()
+    try:
+        callback = tracker.subscriptions[0]["callback"]
+        for stamp in range(1, 21):
+            callback({"system_time_stamp": stamp})
+        recorder._queue.join()
+        assert recorder._writer_thread.is_alive()
+    finally:
+        recorder.refusals = 0  # the GUI lets go; the final snapshot lands
+        recorder.stop()
+
+    lines = (tmp_path / "gaze.jsonl").read_text().splitlines()
+    health = json.loads((tmp_path / "gaze_writer.json").read_text())
+    assert len(lines) == 20
+    assert health["written_queue_samples"] == 20
+    assert health["dropped_queue_samples"] == 0
+    assert health["writer_error"] is None
+    assert health["health_snapshot_failures"] > 0
