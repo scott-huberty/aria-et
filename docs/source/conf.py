@@ -27,6 +27,7 @@ exclude_patterns = []
 html_theme = "furo"
 html_title = "Eyetracking"
 html_static_path = ["_static"]
+html_favicon = "_static/favicon.ico"
 html_css_files = ["aria.css"]
 
 _dark_css_variables = {
@@ -52,6 +53,8 @@ _dark_css_variables = {
 }
 
 html_theme_options = {
+    "light_logo": "aria_logo.svg",
+    "dark_logo": "aria_logo_dark.svg",
     "source_repository": "https://github.com/scott-huberty/aria-et/",
     "source_branch": "main",
     "source_directory": "docs/source/",
