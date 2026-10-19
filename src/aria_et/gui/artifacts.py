@@ -46,6 +46,15 @@ class RunProgress:
     trials_started: int = 0
     trials_ended: int = 0
     trial_count: int | None = None
+    planned_trial_count: int | None = None
+
+    @property
+    def total_trials(self) -> int | None:
+        return (
+            self.trial_count
+            if self.trial_count is not None
+            else self.planned_trial_count
+        )
 
 
 @dataclass(frozen=True)
@@ -204,11 +213,16 @@ def apply_events(
     trials_started = progress.trials_started
     trials_ended = progress.trials_ended
     trial_count = progress.trial_count
+    planned_trial_count = progress.planned_trial_count
 
     for event in events:
         name = event.get("name")
         if name == f"{task_id}.started":
             started = True
+            payload = event.get("payload") or {}
+            reported = payload.get("planned_trial_count")
+            if isinstance(reported, int):
+                planned_trial_count = reported
         elif name == f"{task_id}.ended":
             ended = True
             payload = event.get("payload") or {}
@@ -227,6 +241,7 @@ def apply_events(
         trials_started=trials_started,
         trials_ended=trials_ended,
         trial_count=trial_count,
+        planned_trial_count=planned_trial_count,
     )
 
 

@@ -1,6 +1,8 @@
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+
+import pytest
 
 from aria_et.psychopy.pupillary_light_reflex import (
     PsychoPyPupillaryLightReflexPresenter,
@@ -88,6 +90,46 @@ def test_pupillary_light_reflex_presenter_presents_trials_in_sequence_order():
     ]
     assert event_sink.events[0].name == "pupillary-light-reflex.started"
     assert event_sink.events[-1].name == "pupillary-light-reflex.ended"
+
+
+@pytest.mark.parametrize("limit", [None, 2, 1000])
+def test_pupillary_light_reflex_started_event_reports_selected_trial_count(limit):
+    sequence = build_pupillary_light_reflex_sequence()
+    sink = RecordingEventSink()
+    result = make_presenter(FakeWindow(), FakeFactories(), trial_limit=limit).present(
+        sequence, ManualClock(), sink
+    )
+
+    selected = sequence.blocks if limit is None else sequence.blocks[:limit]
+    expected = sum(len(block.trials) for block in selected)
+    assert sink.events[0].payload == {
+        "sequence_id": sequence.sequence_id,
+        "planned_trial_count": expected,
+    }
+    assert (
+        sink.events[-1].payload["trial_count"]
+        == len(result.presented_trials)
+        == expected
+    )
+
+
+def test_pupillary_light_reflex_planned_count_limits_blocks_instead_of_trials():
+    sequence = build_pupillary_light_reflex_sequence()
+    first_block = sequence.blocks[0]
+    sequence = replace(
+        sequence,
+        blocks=(
+            replace(first_block, trials=first_block.trials * 3),
+            *sequence.blocks[1:],
+        ),
+    )
+    sink = RecordingEventSink()
+    result = make_presenter(FakeWindow(), FakeFactories(), trial_limit=1).present(
+        sequence, ManualClock(), sink
+    )
+
+    assert sink.events[0].payload["planned_trial_count"] == 3
+    assert len(result.presented_trials) == 3
 
 
 def test_pupillary_light_reflex_presenter_uses_frame_and_sound_factories_with_plr_metadata():

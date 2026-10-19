@@ -50,7 +50,19 @@ def test_describe_progress_reports_the_current_trial(tmp_path):
         started=True, trials_started=3, trials_ended=2, trial_count=4
     )
 
-    assert describe_progress(RunStatus.RUNNING, progress) == "Running — trial 3 of 4"
+    assert describe_progress(RunStatus.RUNNING, progress) == (
+        "Running — trial 3 of 4 · 2 left"
+    )
+
+
+def test_describe_progress_counts_the_trial_in_progress_as_remaining():
+    progress = RunProgress(
+        started=True, trials_started=3, trials_ended=2, planned_trial_count=12
+    )
+
+    assert describe_progress(RunStatus.RUNNING, progress) == (
+        "Running — trial 3 of 12 · 10 left"
+    )
 
 
 def test_describe_progress_tolerates_an_unknown_trial_count():

@@ -1,6 +1,8 @@
 import sys
 from dataclasses import dataclass, field
 
+import pytest
+
 from aria_et.psychopy.social_interactive import (
     PsychoPySocialInteractivePresenter,
     run_social_interactive_session,
@@ -115,6 +117,28 @@ def test_social_interactive_presenter_uses_movie_factory_with_play_condition_met
     assert factories.movie_plays[1][0].endswith("sibs5_non_15s.mp4")
     assert event_sink.events[1].payload["block_id"] == "SI-B1"
     assert event_sink.events[1].payload["play_condition"] == "parallel-play"
+
+
+@pytest.mark.parametrize("limit", [None, 2, 1000])
+def test_social_interactive_started_event_reports_selected_trial_count(limit):
+    sequence = build_social_interactive_sequence()
+    sink = RecordingEventSink()
+    result = make_presenter(FakeWindow(), FakeFactories(), trial_limit=limit).present(
+        sequence, ManualClock(), sink
+    )
+
+    expected = (
+        len(sequence.trials) if limit is None else min(limit, len(sequence.trials))
+    )
+    assert sink.events[0].payload == {
+        "sequence_id": sequence.sequence_id,
+        "planned_trial_count": expected,
+    }
+    assert (
+        sink.events[-1].payload["trial_count"]
+        == len(result.presented_trials)
+        == expected
+    )
 
 
 def test_social_interactive_presenter_honors_trial_timing():

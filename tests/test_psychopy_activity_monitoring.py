@@ -145,6 +145,28 @@ def test_activity_monitoring_presenter_uses_image_and_movie_factories():
     assert factories.image_draws[0].endswith("ams_a4_s6_b4_ga_d1_f1.jpg")
 
 
+@pytest.mark.parametrize("limit", [None, 2, 1000])
+def test_activity_monitoring_started_event_reports_selected_trial_count(limit):
+    sequence = build_activity_monitoring_sequence()
+    sink = RecordingEventSink()
+    result = make_presenter(FakeWindow(), FakeFactories(), trial_limit=limit).present(
+        sequence, ManualClock(), sink
+    )
+
+    expected = (
+        len(sequence.trials) if limit is None else min(limit, len(sequence.trials))
+    )
+    assert sink.events[0].payload == {
+        "sequence_id": sequence.sequence_id,
+        "planned_trial_count": expected,
+    }
+    assert (
+        sink.events[-1].payload["trial_count"]
+        == len(result.presented_trials)
+        == expected
+    )
+
+
 def test_activity_monitoring_presenter_honors_trial_timing():
     sequence = build_activity_monitoring_sequence()
     window = FakeWindow()

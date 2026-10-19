@@ -113,6 +113,21 @@ audio backend selection. Each captured line is prefixed with a local wall-clock
 ISO timestamp so it can be aligned with events, gaze samples, and OS crash
 reports.
 
+Monitoring Trial Progress
+-------------------------
+
+During an acquisition or dry run, each Battery task card shows how many trials
+are complete and how many remain. The trial currently in progress counts as
+remaining. The total reflects the selected trial limit; for Pupillary Light
+Reflex, that limit selects blocks and the total counts trials in those blocks.
+
+.. image:: _static/battery_trial_progress.png
+   :alt: Activity Monitoring dry run: trial 2 of 3, 2 left, 1 of 3 trials done.
+   :width: 760px
+
+The bar shows a busy animation until the task reports its total. Preview
+continues to use the busy animation because it does not write run artifacts.
+
 How To Verify The Current Stack
 -------------------------------
 
