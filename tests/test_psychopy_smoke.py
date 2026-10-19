@@ -17,6 +17,7 @@ def test_demo_activity_monitoring_gui_smoke(trial_limit, timeout):
         "--screen",
         "0",
         "--windowed",
+        "--no-sound",
         "--size",
         "800x600",
         "--trial-limit",

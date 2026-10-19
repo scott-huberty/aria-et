@@ -21,8 +21,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # Only these two LFS images are embedded in the documentation.
+      - uses: actions/cache@v4
         with:
-          lfs: true
+          path: .git/lfs
+          key: lfs-docs-${{ hashFiles('src/aria_et/assets/abcct/activity-monitoring/images/ams_a0_s3_b3_gm_d1_f1.jpg', 'src/aria_et/assets/abcct/static-social-scenes/images/popout1_f0.jpg') }}
+
+      - name: Fetch documentation images
+        run: >-
+          git lfs pull
+          --include="src/aria_et/assets/abcct/activity-monitoring/images/ams_a0_s3_b3_gm_d1_f1.jpg,src/aria_et/assets/abcct/static-social-scenes/images/popout1_f0.jpg"
+          --exclude=""
 
       - uses: mamba-org/setup-micromamba@v2
         with:

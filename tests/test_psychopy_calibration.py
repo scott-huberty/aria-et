@@ -578,7 +578,7 @@ def test_validation_trill_rotates_at_a_fixed_size():
     assert target._stim.ori == 0
 
 
-def test_animation_defaults_match_the_installed_detox():
+def test_animation_defaults_match_the_installed_detox(tmp_path):
     import importlib.util
     import subprocess
 
@@ -590,15 +590,19 @@ def test_animation_defaults_match_the_installed_detox():
 
     names = [name for name in vars(DetoxAnimationDefaults) if not name.startswith("_")]
     # In a subprocess: importing DeToX imports PsychoPy, which other tests forbid.
+    # PsychoPy may flush warnings to stdout at shutdown, after the JSON result.
+    settings_path = tmp_path / "animation-defaults.json"
     script = (
-        "import json; from DeToX import ETSettings as cfg; "
-        f"print(json.dumps({{n: getattr(cfg.animation, n) for n in {names!r}}}))"
+        "import json; from pathlib import Path; from DeToX import ETSettings as cfg; "
+        f"Path({str(settings_path)!r}).write_text("
+        f"json.dumps({{n: getattr(cfg.animation, n) for n in {names!r}}}), "
+        "encoding='utf-8')"
     )
     result = subprocess.run(
         [sys.executable, "-c", script], capture_output=True, text=True, timeout=120
     )
     assert result.returncode == 0, result.stderr
-    installed = json.loads(result.stdout.strip().splitlines()[-1])
+    installed = json.loads(settings_path.read_text(encoding="utf-8"))
 
     assert installed == {name: getattr(DetoxAnimationDefaults, name) for name in names}
 
@@ -786,7 +790,7 @@ def test_results_screen_plots_valid_gaze_per_eye_in_detox_colours():
     assert sum(1 for s in stimuli if "radius" in s.kwargs) == 4
 
 
-def test_eye_colour_defaults_match_the_installed_detox():
+def test_eye_colour_defaults_match_the_installed_detox(tmp_path):
     import importlib.util
     import subprocess
 
@@ -795,15 +799,18 @@ def test_eye_colour_defaults_match_the_installed_detox():
     # find_spec, not importorskip: importing DeToX here would import PsychoPy.
     if importlib.util.find_spec("DeToX") is None:
         pytest.skip("DeToX not installed")
+    settings_path = tmp_path / "colour-defaults.json"
     script = (
-        "import json; from DeToX import ETSettings as cfg; "
-        "print(json.dumps([list(cfg.colors.left_eye), list(cfg.colors.right_eye)]))"
+        "import json; from pathlib import Path; from DeToX import ETSettings as cfg; "
+        f"Path({str(settings_path)!r}).write_text("
+        "json.dumps([list(cfg.colors.left_eye), list(cfg.colors.right_eye)]), "
+        "encoding='utf-8')"
     )
     result = subprocess.run(
         [sys.executable, "-c", script], capture_output=True, text=True, timeout=120
     )
     assert result.returncode == 0, result.stderr
-    left, right = json.loads(result.stdout.strip().splitlines()[-1])
+    left, right = json.loads(settings_path.read_text(encoding="utf-8"))
 
     assert tuple(left) == DetoxColorDefaults.left_eye
     assert tuple(right) == DetoxColorDefaults.right_eye
