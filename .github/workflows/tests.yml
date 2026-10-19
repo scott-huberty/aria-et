@@ -60,7 +60,8 @@ jobs:
 
       - name: Cache Activity Monitoring media
         if: matrix.job == 'psychopy-smoke'
-        uses: actions/cache@v4
+        id: smoke-lfs
+        uses: actions/cache/restore@v4
         with:
           path: .git/lfs
           key: lfs-am-${{ hashFiles('src/aria_et/assets/abcct/activity-monitoring/**') }}
@@ -68,6 +69,14 @@ jobs:
       - name: Fetch only Activity Monitoring media
         if: matrix.job == 'psychopy-smoke'
         run: git lfs pull --include="src/aria_et/assets/abcct/activity-monitoring/**" --exclude=""
+
+      # Save before the experimental tests, so failures still preserve media.
+      - name: Save Activity Monitoring media
+        if: matrix.job == 'psychopy-smoke' && steps.smoke-lfs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .git/lfs
+          key: ${{ steps.smoke-lfs.outputs.cache-primary-key }}
 
       - name: Install Mesa software OpenGL
         if: matrix.job == 'psychopy-smoke'
