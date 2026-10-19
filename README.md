@@ -1,5 +1,7 @@
 # aria-et
 
+[![tests](https://github.com/scott-huberty/aria-et/actions/workflows/tests.yml/badge.svg)](https://github.com/scott-huberty/aria-et/actions/workflows/tests.yml)
+
 Eye-tracking paradigms for the ARIA ABCCT battery recreation.
 
 ## Development

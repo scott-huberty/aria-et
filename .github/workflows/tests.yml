@@ -1,0 +1,98 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  tests:
+    name: ${{ matrix.job }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - job: lint
+            command: python -m ruff check .
+            experimental: false
+          - job: unit
+            command: python -m pytest -ra
+            experimental: false
+          - job: qt-gui
+            command: python -m pytest -m qt_gui -ra
+            experimental: false
+          - job: psychopy-smoke
+            command: python -m pytest -m psychopy_smoke -ra
+            experimental: true
+
+    steps:
+      # Unit and Qt tests need media paths only: leave LFS pointers in place.
+      - uses: actions/checkout@v4
+
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: environment.yml
+          init-shell: powershell
+          cache-environment: true
+          cache-downloads: true
+
+      - name: Install package
+        run: python -m pip install --no-build-isolation -e .
+
+      - name: Match the pre-commit Ruff version
+        if: matrix.job == 'lint'
+        run: python -m pip install ruff==0.16.3
+
+      - name: Cache Activity Monitoring media
+        if: matrix.job == 'psychopy-smoke'
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-am-${{ hashFiles('src/aria_et/assets/abcct/activity-monitoring/**') }}
+
+      - name: Fetch only Activity Monitoring media
+        if: matrix.job == 'psychopy-smoke'
+        run: git lfs pull --include="src/aria_et/assets/abcct/activity-monitoring/**" --exclude=""
+
+      - name: Install Mesa software OpenGL
+        if: matrix.job == 'psychopy-smoke'
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'mesa.7z'
+          Invoke-WebRequest 'https://github.com/pal1000/mesa-dist-win/releases/download/26.2.4/mesa3d-26.2.4-release-msvc.7z' -OutFile $archive
+          $expected = '351fc8c8b695878ffb3eaa044b3ead08672a48b1a045e3c3e3975811df0f6695'
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+            throw 'Mesa archive SHA256 mismatch'
+          }
+          $mesa = Join-Path $env:RUNNER_TEMP 'mesa'
+          7z x $archive "-o$mesa" -y
+          if ($LASTEXITCODE -ne 0) { throw 'Mesa extraction failed' }
+          $pythonDirectory = python -c "import sys; from pathlib import Path; print(Path(sys.executable).parent)"
+          Copy-Item "$mesa/x64/*.dll" $pythonDirectory -Force
+          'GALLIUM_DRIVER=llvmpipe' >> $env:GITHUB_ENV
+          'LIBGL_ALWAYS_SOFTWARE=true' >> $env:GITHUB_ENV
+
+      # conftest.py enables opt-in tests by substring matching -m. Never use
+      # "not requires_eyetracker": it would enable hardware tests. Only name
+      # the positive GUI marker. The unit job logs all six hardware skips.
+      # Qt deliberately uses the native Windows plugin (no QT_QPA_PLATFORM).
+      - name: Run ${{ matrix.job }}
+        run: ${{ matrix.command }}
+
+      - name: Check formatting
+        if: matrix.job == 'lint'
+        run: python -m ruff format --check .
