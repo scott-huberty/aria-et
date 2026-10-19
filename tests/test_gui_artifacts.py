@@ -128,6 +128,51 @@ def test_apply_events_accumulates_across_polls():
     assert second.trials_started == 2
 
 
+def test_apply_events_reads_planned_total_before_trials_finish():
+    first = artifacts.apply_events(
+        artifacts.RunProgress(),
+        [event(f"{TASK_ID}.started", planned_trial_count=12)],
+        TASK_ID,
+    )
+    second = artifacts.apply_events(
+        first, [event(f"{TASK_ID}.trial.ended")], TASK_ID
+    )
+
+    assert second.planned_trial_count == 12
+    assert second.trial_count is None
+    assert second.total_trials == 12
+    assert second.trials_ended == 1
+
+
+@pytest.mark.parametrize("actual", [0, 5])
+def test_reported_trial_count_wins_over_planned_total(actual):
+    progress = artifacts.apply_events(
+        artifacts.RunProgress(),
+        [
+            event(f"{TASK_ID}.started", planned_trial_count=12),
+            event(f"{TASK_ID}.ended", trial_count=actual),
+        ],
+        TASK_ID,
+    )
+
+    assert progress.planned_trial_count == 12
+    assert progress.trial_count == actual
+    assert progress.total_trials == actual
+
+
+@pytest.mark.parametrize("reported", [None, "12", 12.0, {}, []])
+def test_apply_events_ignores_non_integer_planned_counts(reported):
+    progress = artifacts.apply_events(
+        artifacts.RunProgress(),
+        [event(f"{TASK_ID}.started", planned_trial_count=reported)],
+        TASK_ID,
+    )
+
+    assert progress.started
+    assert progress.planned_trial_count is None
+    assert progress.total_trials is None
+
+
 def test_apply_events_ignores_events_from_another_task():
     progress = artifacts.apply_events(
         artifacts.RunProgress(), [event("social-interactive.started")], TASK_ID

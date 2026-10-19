@@ -90,7 +90,12 @@ class PsychoPyPupillaryLightReflexPresenter:
             RuntimeEvent(
                 "pupillary-light-reflex.started",
                 started_at,
-                {"sequence_id": sequence.sequence_id},
+                {
+                    "sequence_id": sequence.sequence_id,
+                    "planned_trial_count": sum(
+                        len(block.trials) for block in selected_blocks
+                    ),
+                },
             )
         )
 

@@ -1,6 +1,8 @@
 import sys
 from dataclasses import dataclass, field
 
+import pytest
+
 from aria_et.psychopy.static_social_scenes import PsychoPyStaticSocialScenesPresenter
 from aria_et.runtime import ManualClock, RecordingEventSink
 from aria_et.static_social_scenes import build_static_social_scenes_sequence
@@ -90,6 +92,28 @@ def test_static_social_scenes_presenter_presents_trials_in_sequence_order():
     ]
     assert [event.name for event in event_sink.events][0] == "static-social-scenes.started"
     assert [event.name for event in event_sink.events][-1] == "static-social-scenes.ended"
+
+
+@pytest.mark.parametrize("limit", [None, 2, 1000])
+def test_static_social_scenes_started_event_reports_selected_trial_count(limit):
+    sequence = build_static_social_scenes_sequence()
+    sink = RecordingEventSink()
+    result = make_presenter(FakeWindow(), FakeFactories(), trial_limit=limit).present(
+        sequence, ManualClock(), sink
+    )
+
+    expected = (
+        len(sequence.trials) if limit is None else min(limit, len(sequence.trials))
+    )
+    assert sink.events[0].payload == {
+        "sequence_id": sequence.sequence_id,
+        "planned_trial_count": expected,
+    }
+    assert (
+        sink.events[-1].payload["trial_count"]
+        == len(result.presented_trials)
+        == expected
+    )
 
 
 def test_static_social_scenes_presenter_uses_image_factory_and_background_colors():

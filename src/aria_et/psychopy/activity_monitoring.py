@@ -137,7 +137,10 @@ class PsychoPyActivityMonitoringPresenter:
             RuntimeEvent(
                 "activity-monitoring.started",
                 started_at,
-                {"sequence_id": sequence.sequence_id},
+                {
+                    "sequence_id": sequence.sequence_id,
+                    "planned_trial_count": len(selected_trials),
+                },
             )
         )
 

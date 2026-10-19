@@ -44,10 +44,10 @@ def describe_progress(
     if status is RunStatus.RUNNING:
         if not progress.started:
             return "Starting…"
-        if progress.trial_count:
-            return (
-                f"Running — trial {progress.trials_started} of {progress.trial_count}"
-            )
+        total = progress.total_trials
+        if total is not None:
+            left = max(0, total - progress.trials_ended)
+            return f"Running — trial {progress.trials_started} of {total} · {left} left"
         return f"Running — trial {progress.trials_started}"
 
     trials = progress.trial_count
@@ -169,10 +169,14 @@ class TaskCard(QFrame):
         self._stop_button.setVisible(True)
         self._stop_button.setEnabled(True)
         self._progress.setVisible(True)
-        if progress.trial_count:
-            self._progress.setRange(0, progress.trial_count)
+        total = progress.total_trials
+        if total is not None and total > 0:
+            self._progress.setRange(0, total)
             self._progress.setValue(progress.trials_ended)
+            self._progress.setTextVisible(True)
+            self._progress.setFormat(f"%v of {total} trials done")
         else:
+            self._progress.setTextVisible(False)
             self._progress.setRange(0, 0)
 
     def set_controls_enabled(self, *, can_run: bool, can_preview: bool) -> None:

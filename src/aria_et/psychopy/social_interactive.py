@@ -79,18 +79,21 @@ class PsychoPySocialInteractivePresenter:
         clock: Clock,
         event_sink: EventSink,
     ) -> SocialInteractiveRunResult:
+        selected = tuple(self._selected_trials(sequence))
         started_at = clock.now()
         event_sink.emit(
             RuntimeEvent(
                 "social-interactive.started",
                 started_at,
-                {"sequence_id": sequence.sequence_id},
+                {
+                    "sequence_id": sequence.sequence_id,
+                    "planned_trial_count": len(selected),
+                },
             )
         )
 
         presented_trials = tuple(
-            self._present_trial(trial, clock, event_sink)
-            for trial in self._selected_trials(sequence)
+            self._present_trial(trial, clock, event_sink) for trial in selected
         )
 
         ended_at = clock.now()

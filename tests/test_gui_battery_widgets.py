@@ -333,6 +333,50 @@ def test_battery_flags_a_run_that_ended_without_a_completion_event(
     assert page._cards[TASK_ID]._status.text().startswith("Incomplete")
 
 
+def test_battery_progress_bar_uses_the_planned_total_while_running(
+    qapp, config, session
+):
+    page = _open(BatteryPage(config), session)
+    page._start_run(TASK_ID)
+    card = page._cards[TASK_ID]
+    assert card._progress.maximum() == 0
+    assert not card._progress.isTextVisible()
+
+    run_dir = session.sourcedata_root / "sub-abby" / "ses-01" / f"task-{TASK_ID}_run-01"
+    run_dir.mkdir(parents=True)
+    (run_dir / "events.jsonl").write_text(
+        json.dumps(
+            {"name": f"{TASK_ID}.started", "payload": {"planned_trial_count": 4}}
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    page._poll()
+    assert card._progress.maximum() == 4
+    assert card._progress.value() == 0
+    assert card._progress.text() == "0 of 4 trials done"
+    assert card._progress.isTextVisible()
+
+    _write_events(
+        run_dir,
+        [
+            f"{TASK_ID}.trial.started",
+            f"{TASK_ID}.trial.ended",
+            f"{TASK_ID}.trial.started",
+        ],
+    )
+    page._poll()
+    assert card._progress.maximum() == 4
+    assert card._progress.value() == 1
+    assert card._progress.text() == "1 of 4 trials done"
+    assert card._status.text() == "Running — trial 2 of 4 · 3 left"
+
+    page.report_exit(0)
+    page._start_preview(TASK_ID)
+    assert card._progress.maximum() == 0
+    assert not card._progress.isTextVisible()
+
+
 def test_battery_marks_a_finished_run_complete(qapp, config, session):
     page = _open(BatteryPage(config), session)
     page._start_run(TASK_ID)

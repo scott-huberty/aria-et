@@ -211,6 +211,7 @@ QLabel#ModeBanner {{
 
 QProgressBar {{
     background-color: {surface_alt};
+    color: {aria_black};
     border: 1px solid {border};
     border-radius: 4px;
     text-align: center;
