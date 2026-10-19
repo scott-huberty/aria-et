@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import sys
+from importlib.resources import as_file
 
-from PySide6.QtGui import QFontDatabase
+from PySide6.QtGui import QFontDatabase, QIcon, QPixmap
 from PySide6.QtWidgets import QApplication
 
+from aria_et.assets import application_icon
 from aria_et.config import load_config
 from aria_et.gui.main_window import MainWindow
 from aria_et.gui.theme import (
@@ -20,6 +22,8 @@ from aria_et.gui.theme import (
 def main(argv: list[str] | None = None) -> int:
     app = QApplication(argv if argv is not None else sys.argv)
     app.setApplicationName("ARIA-ET")
+    with as_file(application_icon()) as icon_path:
+        app.setWindowIcon(QIcon(QPixmap(str(icon_path))))
 
     families = QFontDatabase.families()
     brand_font = resolve_font_family(BRAND_FONT_CANDIDATES, families)

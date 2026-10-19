@@ -1,10 +1,21 @@
 from aria_et.assets import (
     activity_monitoring_assets,
+    application_icon,
     gap_overlap_reward_calibration_assets,
     pupillary_light_reflex_assets,
     social_interactive_assets,
     static_social_scenes_assets,
 )
+
+
+def test_application_icons_are_bundled_and_gui_icon_resolves():
+    icon = application_icon()
+    assert icon.name == "aria_icon.png"
+    assert icon.is_file()
+    assert icon.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    windows_icon = icon.parent.joinpath("aria_icon.ico")
+    assert windows_icon.is_file()
+    assert windows_icon.read_bytes().startswith(b"\x00\x00\x01\x00\x07\x00")
 
 
 def test_gap_overlap_reward_calibration_assets_include_ordered_frame_animations():

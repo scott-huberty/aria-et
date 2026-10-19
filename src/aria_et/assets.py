@@ -1,4 +1,4 @@
-"""Access to bundled stimulus assets."""
+"""Access to bundled stimulus assets and application icons."""
 
 from __future__ import annotations
 
@@ -66,6 +66,11 @@ class PupillaryLightReflexAssets:
 def abcct_asset(relative_path: str) -> Traversable:
     # pathlib.Path supports joinpath.(*args) but we type against Traversable.
     return files(ASSET_PACKAGE).joinpath(ASSET_ROOT).joinpath(relative_path)
+
+
+def application_icon() -> Traversable:
+    """Return the bundled PNG icon, which Qt can render without SVG clipping."""
+    return files(ASSET_PACKAGE).joinpath("assets/icons/aria_icon.png")
 
 
 def gap_overlap_reward_calibration_assets() -> CalibrationRewardAssets:
