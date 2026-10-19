@@ -83,7 +83,7 @@ def canvas(width, height):
 
 
 def gaze_field(width, height):
-    x, y = np.meshgrid(np.linspace(0, 1, 800), np.linspace(0, 1, 300))
+    x, y = np.meshgrid(np.linspace(0, 1, 200), np.linspace(0, 1, 75))
     density = np.zeros_like(x)
     for cx, cy, sx, sy, amplitude in FIXATIONS:
         density += amplitude * np.exp(
@@ -162,7 +162,7 @@ def save_wordmark(letter_font, tagline_font, *, dark=False, small=False):
         transparent=True,
         metadata={"Date": None, "Creator": "ARIA logo generator", "Title": "ARIA"},
     )
-    # Commit raster previews as well: reviewers need no SVG renderer.
+    # Keep raster previews local for PR review; this directory is gitignored.
     fig.savefig(
         PREVIEWS / f"{name}.png",
         dpi=100,
@@ -219,7 +219,7 @@ def main():
         {
             "svg.hashsalt": "aria-et-logo-v1",
             "svg.fonttype": "path",
-            "path.simplify": False,
+            "path.simplify": True,
         }
     ):
         letters, tagline = load_fonts()

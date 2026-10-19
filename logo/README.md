@@ -50,13 +50,17 @@ native rendering libraries can be found on Windows.
 | `docs/source/_static/favicon.ico` | Docs favicon with all seven Windows sizes |
 | `src/aria_et/assets/icons/aria_icon.png` | Transparent 256 × 256 round GUI icon |
 | `src/aria_et/assets/icons/aria_icon.ico` | Windows icon for future installers and shortcuts |
-| `logo/previews/*.png` | Raster previews of each variant for PR review |
+| `logo/previews/*.png` | Local, gitignored raster previews for PR review |
 
 The round icon keeps **ARIA on one line**, matching the wordmarks. Both ICO
 files are made from the PNG with Pillow and contain 16, 24, 32,
 48, 64, 128, and 256 px frames. `favicon.png` and `aria_icon_ico.png` show native
 16–64 px frames followed by a nearest-neighbour enlargement of the 16 px frame.
 Qt uses the PNG because its SVG renderer cannot render these clip paths.
+
+Keep previews out of commits; attach them to the PR description for visual
+review. The 200 × 75 density grid and Matplotlib path simplification keep the
+SVGs compact while retaining the heatmap and contour detail.
 
 `TAGLINE` near the top of the generator is **EYE-TRACKING ACQUISITION**, shortened
 during review. It is shared by both full wordmarks; the generator makes no

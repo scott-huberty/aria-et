@@ -18,6 +18,9 @@ docs/_build/
 docs/README.md
 docs/gen_*
 
+# Generated logo review images; publish previews in the PR description.
+logo/previews/
+
 
 # Output
 runs/
