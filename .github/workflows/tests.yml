@@ -18,6 +18,24 @@ defaults:
     shell: pwsh
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Match the pre-commit Ruff version
+        run: python -m pip install ruff==0.16.3
+      - name: Check lint
+        run: python -m ruff check .
+      - name: Check formatting
+        run: python -m ruff format --check .
+
   tests:
     name: ${{ matrix.job }}
     runs-on: windows-latest
@@ -27,9 +45,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - job: lint
-            command: python -m ruff check .
-            experimental: false
           - job: unit
             command: python -m pytest -ra
             experimental: false
@@ -53,10 +68,6 @@ jobs:
 
       - name: Install package
         run: python -m pip install --no-build-isolation -e .
-
-      - name: Match the pre-commit Ruff version
-        if: matrix.job == 'lint'
-        run: python -m pip install ruff==0.16.3
 
       - name: Cache Activity Monitoring media
         if: matrix.job == 'psychopy-smoke'
@@ -102,6 +113,3 @@ jobs:
       - name: Run ${{ matrix.job }}
         run: ${{ matrix.command }}
 
-      - name: Check formatting
-        if: matrix.job == 'lint'
-        run: python -m ruff format --check .
