@@ -112,4 +112,3 @@ jobs:
       # Qt deliberately uses the native Windows plugin (no QT_QPA_PLATFORM).
       - name: Run ${{ matrix.job }}
         run: ${{ matrix.command }}
-
