@@ -15,3 +15,4 @@ eyetracking battery.
 
    tasks/index
    runtime_stack
+   sys_info

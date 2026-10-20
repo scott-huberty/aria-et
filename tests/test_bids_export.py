@@ -47,6 +47,7 @@ def _write_run(
     if calibration is not None:
         session_metadata["calibration"] = calibration
     _write_json(run_dir / "session.json", session_metadata)
+    _write_json(run_dir / "sys_info.json", {"schema_version": 1, "core": {"psychopy": "2026.2.1"}})
     _write_json(
         run_dir / "tracker.json",
         {
@@ -124,6 +125,8 @@ def test_export_run_to_bids_writes_binocular_physio_and_events(tmp_path):
     run_dir = _write_run(tmp_path / "run")
 
     written = export_run_to_bids(run_dir=run_dir, bids_root=tmp_path / "bids")
+
+    assert not list((tmp_path / "bids").rglob("sys_info.json"))
 
     beh_dir = tmp_path / "bids" / "sub-01" / "ses-baseline" / "beh"
     base = beh_dir / "sub-01_ses-baseline_task-PupillaryLightReflex_run-02"

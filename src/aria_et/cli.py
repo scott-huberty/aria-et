@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -61,6 +62,21 @@ def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
     subparsers.add_parser(
         "list-tasks",
         help="Print the configured battery order.",
+    )
+
+    sys_info = subparsers.add_parser(
+        "sys-info", help="Report software and system provenance."
+    )
+    sys_info.add_argument("--json", action="store_true", help="Print structured JSON.")
+    sys_info_source = sys_info.add_mutually_exclusive_group()
+    sys_info_source.add_argument(
+        "--tracker", action="store_true", help="Also connect to the saved tracker."
+    )
+    sys_info_source.add_argument(
+        "--from",
+        dest="from_path",
+        type=Path,
+        help="Read an archived file or run/calibration directory.",
     )
 
     init_config = subparsers.add_parser(
@@ -488,9 +504,42 @@ def main(
     run_static_social_scenes_runner: RunStaticSocialScenesRunner | None = None,
     run_pupillary_light_reflex_runner: RunPupillaryLightReflexRunner | None = None,
     export_bids_runner: ExportBidsRunner | None = None,
+    sys_info_runner: Callable[..., dict] | None = None,
 ) -> int:
-    config = load_config()
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    # Diagnostics must remain usable even when the user's TOML is broken.
+    config = AriaEtConfig() if arguments[:1] == ["sys-info"] else load_config()
     args = build_parser(config).parse_args(argv)
+    if args.command == "sys-info":
+        from aria_et.sysinfo import collect_sys_info, format_sys_info
+
+        try:
+            if args.from_path is not None:
+                path = args.from_path
+                if path.is_dir():
+                    path = path / "sys_info.json"
+                info = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(info, dict):
+                    raise ValueError("Snapshot must contain a JSON object")
+            else:
+                info = (sys_info_runner or collect_sys_info)(
+                    include_tracker=args.tracker
+                )
+            text = (
+                json.dumps(info, indent=2, sort_keys=True)
+                if args.json
+                else format_sys_info(info)
+            )
+        except Exception as exc:  # noqa: BLE001 - diagnostics must survive broken probes/files
+            info = {"schema_version": 1, "error": " ".join(str(exc).split())[:240]}
+            text = (
+                json.dumps(info, indent=2, sort_keys=True)
+                if args.json
+                else format_sys_info(info)
+            )
+        print(text)
+        return 0
+
     tracker_address, tracker_serial_number = resolve_tracker(
         getattr(args, "address", None), config
     )

@@ -10,6 +10,8 @@ eyetracking files.
 
 Primary runtime commands:
 
+- `pixi run aria-et sys-info` (`--json` for structured output; `--tracker` explicitly connects)
+
 - `aria-et check-eyetracker`
 - `aria-et calibrate-eyetracker`
 - `aria-et run-am`

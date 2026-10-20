@@ -48,6 +48,7 @@ def test_find_run_directories_ignores_unrelated_entries(tmp_path):
     session_dir = tmp_path / "sub-abby" / "ses-01"
     (session_dir / "calibrations").mkdir(parents=True)
     (session_dir / "notes.txt").write_text("hello", encoding="utf-8")
+    (session_dir / "sys_info.json").write_text("{}", encoding="utf-8")
 
     assert artifacts.find_run_directories(tmp_path, "abby", "01") == []
 

@@ -17,6 +17,40 @@ SESSION_LOG_TIMESTAMP = re.compile(
 )
 
 
+@pytest.fixture(autouse=True)
+def isolated_sys_info(monkeypatch):
+    monkeypatch.setattr("aria_et.sysinfo.collect_sys_info", lambda **kwargs: {"core": {"psychopy": "test-version"}})
+
+
+def test_session_archives_json_snapshot(tmp_path):
+    calls = []
+    def collector(**kwargs):
+        calls.append(kwargs)
+        return {"core": {"psychopy": "2026.2.1"}}
+    assert run_recording_session(task_id="test", tracker="none", output_dir=tmp_path / "run",
+                                 present=lambda sink: None, sys_info_collector=collector) == 0
+    run = tmp_path / "run"
+    info = json.loads((run / "sys_info.json").read_text())
+    assert info["schema_version"] == 1
+    assert set(info["collected_at"]) == {"local", "utc"}
+    assert info["core"]["psychopy"] == "2026.2.1"
+    metadata = json.loads((run / "session.json").read_text())
+    assert metadata["sys_info_file"] == "sys_info.json"
+    assert "software" not in metadata
+    assert calls == [{"include_tracker": False}]
+
+
+def test_session_survives_failed_snapshot_collector(tmp_path):
+    def collector(**kwargs):
+        raise RuntimeError("broken collector")
+    run = tmp_path / "run"
+    assert run_recording_session(task_id="test", tracker="none", output_dir=run,
+                                 present=lambda sink: print("presented"), sys_info_collector=collector) == 0
+    assert "broken collector" in json.loads((run / "sys_info.json").read_text())["error"]
+    log = (run / "session.log").read_text()
+    assert "broken collector" in log and "presented" in log
+
+
 class FakeRecorder:
     def __init__(self, gaze_path, tracker_metadata_path, writer_health_path=None):
         self.gaze_path = gaze_path
