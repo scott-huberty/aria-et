@@ -30,7 +30,6 @@ Historical lab hardware and data configuration:
 - Tracker: Tobii Pro Spectrum `TPSP1-010214213025`
 - Tracker address: `tobii-prp://169.254.10.180`
 - Stimulus display: PsychoPy screen `1`, fullscreen `1920x1080`
-- Data root: `/Users/scotterik/aria-et-data`
 
 ## Recent Design Change
 
@@ -154,10 +153,6 @@ PupillaryLightReflex   raw  36,349  eye1  36,349  eye2  36,349
 SocialInteractive      raw  85,072  eye1  85,072  eye2  85,072
 StaticSocialScenes     raw  65,724  eye1  65,724  eye2  65,724
 ```
-
-The BIDS validator reports only recommended-metadata warnings for `sub-abby`.
-The whole BIDS root still has an unrelated real validator error from an earlier
-test session named `ses-flush-test`; BIDS session labels cannot contain `-`.
 
 ## Known Crash
 
