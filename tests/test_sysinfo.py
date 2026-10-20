@@ -175,11 +175,92 @@ def test_editable_install_records_git(collect, tmp_path):
     assert info["aria_et"]["git"] == {"commit": "123abc", "dirty": True}
 
 
+@pytest.mark.parametrize("failure", ["status", "rev-parse", "both", None])
+def test_git_queries_preserve_independent_results(monkeypatch, tmp_path, failure):
+    from aria_et.sysinfo import _git_info
+
+    calls = []
+
+    def run(command, **kwargs):
+        assert kwargs["timeout"] == 2.0
+        action = command[3]
+        calls.append(action)
+        if failure == action or failure == "both":
+            raise subprocess.TimeoutExpired(command, 2.0)
+        return SimpleNamespace(
+            stdout="abc123\n" if action == "rev-parse" else " M file.py\n"
+        )
+
+    monkeypatch.setattr(subprocess, "run", run)
+    info = _git_info(tmp_path)
+    assert calls == ["rev-parse", "status"]
+    if failure not in ("rev-parse", "both"):
+        assert info["commit"] == "abc123"
+    else:
+        assert "commit" not in info
+    if failure not in ("status", "both"):
+        assert info["dirty"] is True
+    else:
+        assert "dirty" not in info
+    if failure:
+        assert "error" in info
+        assert "timed out" in info["error"]
+    else:
+        assert "error" not in info
+
+
+def test_missing_git_records_error(monkeypatch, tmp_path):
+    from aria_et.sysinfo import _git_info
+
+    def run(*args, **kwargs):
+        raise FileNotFoundError("git not found")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    info = _git_info(tmp_path)
+    assert set(info) == {"error"}
+    assert "git not found" in info["error"]
+
+
+def test_git_error_is_visible_in_text():
+    info = {
+        "aria_et": {
+            "version": "0.1.0",
+            "git": {"commit": "abc123", "error": "status: timed out"},
+        }
+    }
+    text = format_sys_info(info)
+    assert "git abc123" in text
+    assert "status: timed out" in text
+
+
+def test_long_tobii_labels_keep_values_aligned():
+    info = {
+        "core": {"numpy": "core-marker"},
+        "tobii": {
+            "installed_software": [
+                {
+                    "name": "A long Tobii software product name",
+                    "version": "version-marker",
+                }
+            ],
+            "saved_tracker": "tracker-marker",
+        },
+    }
+    text = format_sys_info(info)
+    columns = [
+        line.index(marker)
+        for marker in ("core-marker", "version-marker", "tracker-marker")
+        for line in text.splitlines()
+        if marker in line
+    ]
+    assert len(set(columns)) == 1
+
+
 def test_native_worker_is_bounded(monkeypatch):
     def run(*args, **kwargs):
-        assert kwargs["timeout"] == 1.0
+        assert kwargs["timeout"] == 4.0
         assert "--native" in args[0]
-        raise subprocess.TimeoutExpired(args[0], 1.0)
+        raise subprocess.TimeoutExpired(args[0], 4.0)
 
     monkeypatch.setattr(subprocess, "run", run)
     with pytest.raises(subprocess.TimeoutExpired):

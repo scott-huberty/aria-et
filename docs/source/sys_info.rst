@@ -13,7 +13,10 @@ and editable checkout, configuration location and data root, core and media
 packages, bundled native media versions, and installed Tobii software. Each
 probe reports its own error without preventing the rest of the report.
 The default command does not connect to a tracker or import PsychoPy/Qt.
-Native media queries run in a subprocess with a one-second timeout.
+Native media queries run in a subprocess with a four-second timeout to allow
+cold starts. Git revision and status queries each have a two-second timeout
+and report failures independently, so a failed status check preserves the
+commit. A failed dirty-state check is reported as an error, not as a clean tree.
 
 To explicitly query the saved tracker (with discovery by serial number as a
 fallback), use:

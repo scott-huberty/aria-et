@@ -88,17 +88,24 @@ def _git_info(root):
             capture_output=True,
             text=True,
             check=True,
-            timeout=0.25,
+            timeout=2.0,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         ).stdout.strip()
 
-    try:
-        return {
-            "commit": run("rev-parse", "--short", "HEAD"),
-            "dirty": bool(run("status", "--porcelain", "--untracked-files=normal")),
-        }
-    except (OSError, subprocess.SubprocessError):
-        return {}
+    result = {}
+    errors = []
+    for field, args in (
+        ("commit", ("rev-parse", "--short", "HEAD")),
+        ("dirty", ("status", "--porcelain", "--untracked-files=normal")),
+    ):
+        try:
+            value = run(*args)
+            result[field] = bool(value) if field == "dirty" else value
+        except (OSError, subprocess.SubprocessError) as exc:
+            errors.append(f"{args[0]}: {_error(exc)}")
+    if errors:
+        result["error"] = "; ".join(errors)
+    return result
 
 
 def _installation(distribution_lookup, git_reader):
@@ -291,14 +298,14 @@ def _native_versions():
 
 
 def read_native_versions():
-    """Bound native import/driver stalls to one second, including interpreter startup."""
+    """Allow cold starts while bounding native import/driver stalls to four seconds."""
     result = subprocess.run(
         [sys.executable, "-m", "aria_et.sysinfo", "--native"],
         capture_output=True,
         text=True,
         encoding="utf-8",
         check=True,
-        timeout=1.0,
+        timeout=4.0,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     return json.loads(result.stdout)
@@ -462,7 +469,7 @@ def format_sys_info(info: dict) -> str:
     def row(label, value, indent=""):
         if isinstance(value, dict):
             value = "; ".join(f"{k}={v}" for k, v in value.items())
-        lines.append(f"{indent}{label:<22} {value}")
+        lines.append((indent + label, str(value)))
 
     system = info.get("system", {})
     if system:
@@ -487,6 +494,8 @@ def format_sys_info(info: dict) -> str:
             details.append("git " + git["commit"])
             if git.get("dirty"):
                 details.append("dirty")
+        if isinstance(git, dict) and git.get("error"):
+            details.append(git["error"])
         if installation.get("installation"):
             details.append(installation["installation"])
         row(
@@ -559,7 +568,11 @@ def format_sys_info(info: dict) -> str:
                 )
         else:
             row(label, value, "  ")
-    return "\n".join(lines)
+    width = max((len(line[0]) for line in lines if isinstance(line, tuple)), default=22)
+    return "\n".join(
+        f"{line[0]:<{width}} {line[1]}" if isinstance(line, tuple) else line
+        for line in lines
+    )
 
 
 def write_sys_info_snapshot(
