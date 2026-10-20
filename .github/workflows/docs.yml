@@ -34,16 +34,16 @@ jobs:
           --include="src/aria_et/assets/abcct/activity-monitoring/images/ams_a0_s3_b3_gm_d1_f1.jpg,src/aria_et/assets/abcct/static-social-scenes/images/popout1_f0.jpg"
           --exclude=""
 
-      - uses: mamba-org/setup-micromamba@v2
+      - uses: prefix-dev/setup-pixi@v0.11.2
         with:
-          environment-file: environment-docs.yml
-          cache-environment: true
-          cache-downloads: true
+          manifest-path: pyproject.toml
+          pixi-version: v0.82.0
+          environments: docs
+          locked: true
+          cache-key: pixi-docs-
 
       - name: Build docs
-        shell: bash -el {0}
-        run: |
-          sphinx-build -b html docs/source docs/_build/html
+        run: pixi run --locked -e docs docs
 
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

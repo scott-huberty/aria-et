@@ -26,15 +26,15 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: prefix-dev/setup-pixi@v0.11.2
         with:
-          python-version: '3.10'
-      - name: Match the pre-commit Ruff version
-        run: python -m pip install ruff==0.16.3
-      - name: Check lint
-        run: python -m ruff check .
-      - name: Check formatting
-        run: python -m ruff format --check .
+          manifest-path: pyproject.toml
+          pixi-version: v0.82.0
+          environments: lint
+          locked: true
+          cache-key: pixi-lint-
+      - name: Check lint and formatting
+        run: pixi run --locked -e lint lint
 
   tests:
     name: ${{ matrix.job }}
@@ -46,28 +46,28 @@ jobs:
       matrix:
         include:
           - job: unit
-            command: python -m pytest -ra
+            command: pixi run --locked python -m pytest -ra
             experimental: false
           - job: qt-gui
-            command: python -m pytest -m qt_gui -ra
+            command: pixi run --locked python -m pytest -m qt_gui -ra
             experimental: false
           - job: psychopy-smoke
-            command: python -m pytest -m psychopy_smoke -ra
+            command: pixi run --locked python -m pytest -m psychopy_smoke -ra
             experimental: true
 
     steps:
       # Unit and Qt tests need media paths only: leave LFS pointers in place.
       - uses: actions/checkout@v4
 
-      - uses: mamba-org/setup-micromamba@v2
+      - uses: prefix-dev/setup-pixi@v0.11.2
         with:
-          environment-file: environment.yml
-          init-shell: powershell
-          cache-environment: true
-          cache-downloads: true
-
-      - name: Install package
-        run: python -m pip install --no-build-isolation -e .
+          manifest-path: pyproject.toml
+          pixi-version: v0.82.0
+          locked: true
+          cache-key: pixi-default-
+          # Mesa DLLs are injected only for this experimental job; do not
+          # save those overrides into the shared native runtime cache.
+          cache-write: ${{ matrix.job != 'psychopy-smoke' }}
 
       - name: Cache Activity Monitoring media
         if: matrix.job == 'psychopy-smoke'
@@ -101,7 +101,7 @@ jobs:
           $mesa = Join-Path $env:RUNNER_TEMP 'mesa'
           7z x $archive "-o$mesa" -y
           if ($LASTEXITCODE -ne 0) { throw 'Mesa extraction failed' }
-          $pythonDirectory = python -c "import sys; from pathlib import Path; print(Path(sys.executable).parent)"
+          $pythonDirectory = pixi run --locked python -c "import sys; from pathlib import Path; print(Path(sys.executable).parent)"
           Copy-Item "$mesa/x64/*.dll" $pythonDirectory -Force
           'GALLIUM_DRIVER=llvmpipe' >> $env:GITHUB_ENV
           'LIBGL_ALWAYS_SOFTWARE=true' >> $env:GITHUB_ENV

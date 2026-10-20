@@ -1,9 +1,0 @@
-name: aria-et-docs
-channels:
-  - conda-forge
-dependencies:
-  - python=3.10
-  - pip
-  - sphinx
-  - sphinxcontrib-youtube
-  - furo

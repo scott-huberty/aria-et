@@ -7,9 +7,9 @@ requires-python = ">=3.10,<3.11"
 dependencies = [
     "dvst-detox==0.2.1",
     "opencv-python",
-    "psychopy",
+    "psychopy==2026.2.1",
     "tomli",
-    "tobii-research",
+    "tobii-research==2.1.0",
     "typing-extensions",
 ]
 
@@ -87,6 +87,86 @@ src = ["src"]
 [tool.ty.rules]
 
 [tool.ty.environment]
-# TODO: Change this when we setup up Windows PC
-python = "/Users/scotterik/miniforge3/envs/aria-et_310/"
+python = ".pixi/envs/default"
 root = ["./src"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+# Linux is used only by the isolated docs and lint environments in CI.
+platforms = ["win-64", "linux-64"]
+requires-pixi = "==0.82.0"
+
+[tool.pixi.dependencies]
+python = "==3.10.21"
+numpy = "==2.2.6"
+pyside6 = "==6.11.2"
+qt6-main = "==6.11.2"
+pip = "*"
+setuptools = ">=64"
+wheel = "*"
+
+[tool.pixi.pypi-dependencies]
+aria-et = { path = ".", editable = true }
+# These wheel hashes also pin their bundled media DLLs. Do not replace them
+# with conda media packages without repeating the stimulus validation.
+ffpyplayer = "==4.5.3"
+psychtoolbox = "==3.0.22.2"
+pyglet = "==1.4.11"
+python-vlc = "==3.0.11115"
+sounddevice = "==0.5.6"
+soundfile = "==0.14.0"
+moviepy = "==2.2.1"
+imageio-ffmpeg = "==0.6.0"
+opencv-python = "==5.0.0.93"
+pyqt6 = "==6.11.0"
+pyqt6-qt6 = "==6.11.2"
+
+[tool.pixi.tasks]
+gui = "aria-et-gui"
+
+[tool.pixi.feature.test.dependencies]
+pytest = "==9.1.1"
+pytest-cov = "==7.1.0"
+ruff = "==0.16.3"
+ty = "*"
+vulture = "*"
+pre-commit = "*"
+
+[tool.pixi.feature.test.pypi-dependencies]
+bids-validator-deno = "*"
+
+[tool.pixi.feature.test.tasks]
+test = "python -m pytest"
+
+[tool.pixi.feature.docs.dependencies]
+python = "==3.10.21"
+sphinx = "*"
+sphinxcontrib-youtube = "*"
+furo = "*"
+
+[tool.pixi.feature.docs.tasks]
+docs = "sphinx-build -b html docs/source docs/_build/html"
+
+[tool.pixi.feature.lint.dependencies]
+python = "==3.10.21"
+ruff = "==0.16.3"
+
+[tool.pixi.feature.lint.tasks]
+lint = "ruff check . && ruff format --check ."
+
+[tool.pixi.feature.logo.dependencies]
+python = "==3.10.21"
+matplotlib-base = "==3.10.9"
+numpy = "==2.2.6"
+pillow = "==12.3.0"
+tomli = "*"
+
+[tool.pixi.feature.logo.tasks]
+generate-logos = "python logo/generate_aria_logos.py"
+
+[tool.pixi.environments]
+default = { features = ["gui", "test"], solve-group = "runtime", platforms = ["win-64"] }
+prod = { features = ["gui"], solve-group = "runtime", platforms = ["win-64"] }
+docs = { features = ["docs"], no-default-feature = true }
+lint = { features = ["lint"], no-default-feature = true }
+logo = { features = ["logo"], no-default-feature = true, platforms = ["win-64"] }
