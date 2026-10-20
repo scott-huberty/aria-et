@@ -69,6 +69,10 @@ jobs:
           # save those overrides into the shared native runtime cache.
           cache-write: ${{ matrix.job != 'psychopy-smoke' }}
 
+      - name: System info
+        if: matrix.job != 'psychopy-smoke'
+        run: pixi run --locked aria-et sys-info
+
       - name: Cache Activity Monitoring media
         if: matrix.job == 'psychopy-smoke'
         id: smoke-lfs
@@ -105,6 +109,10 @@ jobs:
           Copy-Item "$mesa/x64/*.dll" $pythonDirectory -Force
           'GALLIUM_DRIVER=llvmpipe' >> $env:GITHUB_ENV
           'LIBGL_ALWAYS_SOFTWARE=true' >> $env:GITHUB_ENV
+
+      - name: System info
+        if: matrix.job == 'psychopy-smoke'
+        run: pixi run --locked aria-et sys-info
 
       # conftest.py enables opt-in tests by substring matching -m. Never use
       # "not requires_eyetracker": it would enable hardware tests. Only name

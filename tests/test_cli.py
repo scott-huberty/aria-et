@@ -8,6 +8,49 @@ from aria_et.cli import main, parse_float_pair, parse_window_size
 from aria_et.config import load_config, set_config
 
 
+def test_sys_info_text_and_json_with_injected_runner(capsys):
+    calls = []
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return {"schema_version": 1, "system": {}, "aria_et": {}, "config": {},
+                "core": {"psychopy": "2026.2.1"}, "media": {}, "tobii": {}}
+    assert main(["sys-info"], sys_info_runner=runner) == 0
+    assert "2026.2.1" in capsys.readouterr().out
+    assert main(["sys-info", "--json", "--tracker"], sys_info_runner=runner) == 0
+    info = json.loads(capsys.readouterr().out)
+    assert set(info) == {"schema_version", "system", "aria_et", "config", "core", "media", "tobii"}
+    assert calls == [{"include_tracker": False}, {"include_tracker": True}]
+
+
+def test_sys_info_runner_error_still_exits_zero(capsys):
+    def runner(**kwargs):
+        raise RuntimeError("tracker unavailable")
+    assert main(["sys-info", "--tracker", "--json"], sys_info_runner=runner) == 0
+    assert "tracker unavailable" in json.loads(capsys.readouterr().out)["error"]
+
+
+def test_sys_info_works_with_broken_user_config(tmp_path, capsys):
+    config_dir = tmp_path / ".aria-et"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text("[broken", encoding="utf-8")
+    assert main(["sys-info"], sys_info_runner=lambda **kwargs: {}) == 0
+
+
+@pytest.mark.parametrize("directory", [True, False])
+def test_sys_info_from_archive(tmp_path, capsys, directory):
+    from aria_et.sysinfo import format_sys_info
+    info = {"core": {"psychopy": "archived"}}
+    path = tmp_path / "sys_info.json"
+    path.write_text(json.dumps(info), encoding="utf-8")
+    assert main(["sys-info", "--from", str(tmp_path if directory else path)]) == 0
+    assert capsys.readouterr().out == format_sys_info(info) + "\n"
+
+
+def test_sys_info_from_and_tracker_are_mutually_exclusive():
+    with pytest.raises(SystemExit):
+        main(["sys-info", "--from", "snapshot", "--tracker"])
+
+
 def test_list_tasks_prints_battery_order(capsys):
     exit_code = main(["list-tasks"])
 

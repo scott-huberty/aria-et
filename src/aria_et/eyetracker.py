@@ -621,6 +621,8 @@ def _timestamp_for_metadata(now: datetime) -> str:
 def _allocate_calibration_artifact_dir(
     output_dir: str | Path,
     created_at: datetime,
+    *,
+    sys_info_collector: Callable[..., dict] | None = None,
 ) -> Path:
     calibration_id = f"calibration-{_timestamp_for_path(created_at)}"
     artifact_dir = Path(output_dir) / calibration_id
@@ -629,6 +631,9 @@ def _allocate_calibration_artifact_dir(
         suffix += 1
         artifact_dir = Path(output_dir) / f"{calibration_id}-{suffix}"
     artifact_dir.mkdir(parents=True, exist_ok=False)
+    from aria_et.sysinfo import write_sys_info_snapshot
+
+    write_sys_info_snapshot(artifact_dir, collector=sys_info_collector)
     return artifact_dir
 
 
@@ -669,6 +674,7 @@ def save_current_calibration(
     manager_return_code: int | None = None,
     now: datetime | None = None,
     extra_metadata: dict[str, object] | None = None,
+    sys_info_collector: Callable[..., dict] | None = None,
 ) -> Path:
     """Save the tracker's active calibration and its ``calibration.json``.
 
@@ -677,10 +683,16 @@ def save_current_calibration(
     """
     created_at = now or datetime.now(timezone.utc)
     if artifact_dir is None:
-        artifact_dir = _allocate_calibration_artifact_dir(output_dir, created_at)
+        artifact_dir = _allocate_calibration_artifact_dir(
+            output_dir, created_at, sys_info_collector=sys_info_collector
+        )
     else:
         artifact_dir = Path(artifact_dir)
         artifact_dir.mkdir(parents=True, exist_ok=True)
+        if not (artifact_dir / "sys_info.json").exists():
+            from aria_et.sysinfo import write_sys_info_snapshot
+
+            write_sys_info_snapshot(artifact_dir, collector=sys_info_collector)
 
     calibration_data = eyetracker.retrieve_calibration_data()
     calibration_data_file = artifact_dir / "calibration.bin"
@@ -695,6 +707,7 @@ def save_current_calibration(
         "screen": screen,
         "tracker": _tracker_metadata(eyetracker),
         "calibration_data_file": calibration_data_file.name,
+        "sys_info_file": "sys_info.json",
     }
     if manager_executable is not None:
         metadata["manager_executable"] = manager_executable

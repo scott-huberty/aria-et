@@ -4,6 +4,8 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
+import pytest
+
 from aria_et.config import load_config
 from aria_et.eyetracker import (
     TobiiGazeRecorder,
@@ -15,6 +17,37 @@ from aria_et.eyetracker import (
     run_eyetracker_manager_calibration,
     save_current_calibration,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolated_sys_info(monkeypatch):
+    monkeypatch.setattr("aria_et.sysinfo.collect_sys_info", lambda **kwargs: {"core": {"psychopy": "test-version"}})
+
+
+def test_calibration_explicit_directory_archives_snapshot(tmp_path):
+    artifact_dir = tmp_path / "explicit"
+    calls = []
+    def collector(**kwargs):
+        calls.append(kwargs)
+        return {"core": {"psychopy": "test"}}
+    save_current_calibration(eyetracker=FakeEyeTracker(), artifact_dir=artifact_dir,
+                             method="test", screen=0, sys_info_collector=collector)
+    info = json.loads((artifact_dir / "sys_info.json").read_text())
+    assert info["schema_version"] == 1 and info["collected_at"]
+    assert json.loads((artifact_dir / "calibration.json").read_text())["sys_info_file"] == "sys_info.json"
+    assert calls == [{"include_tracker": False}]
+
+
+def test_calibration_keeps_snapshot_from_initial_allocation(tmp_path):
+    from aria_et.eyetracker import _allocate_calibration_artifact_dir
+    directory = _allocate_calibration_artifact_dir(tmp_path, datetime.now(timezone.utc),
+        sys_info_collector=lambda **kwargs: {"marker": "before calibration"})
+    def must_not_collect_again(**kwargs):
+        raise AssertionError("Snapshot must remain the one from allocation")
+    before = (directory / "sys_info.json").read_bytes()
+    save_current_calibration(eyetracker=FakeEyeTracker(), artifact_dir=directory,
+                             method="test", screen=0, sys_info_collector=must_not_collect_again)
+    assert (directory / "sys_info.json").read_bytes() == before
 
 
 class FakeTobiiResearch:
@@ -534,10 +567,14 @@ def test_save_current_calibration_writes_metadata_and_sdk_payload(tmp_path):
         manager_executable="/Applications/Tobii",
         manager_return_code=0,
         now=datetime(2026, 7, 28, 16, 30, 5, tzinfo=timezone.utc),
+        sys_info_collector=lambda **kwargs: {"core": {"psychopy": "test"}},
     )
 
     assert artifact_dir == tmp_path / "calibrations" / "calibration-20260728T163005Z"
     assert (artifact_dir / "calibration.bin").read_bytes() == b"fake-calibration-data"
+    snapshot = json.loads((artifact_dir / "sys_info.json").read_text())
+    assert snapshot["schema_version"] == 1
+    assert snapshot["collected_at"]["utc"]
     metadata = json.loads((artifact_dir / "calibration.json").read_text())
     assert metadata == {
         "schema_version": 1,
@@ -552,6 +589,7 @@ def test_save_current_calibration_writes_metadata_and_sdk_payload(tmp_path):
             "serial_number": "TPS-123",
         },
         "calibration_data_file": "calibration.bin",
+        "sys_info_file": "sys_info.json",
         "manager_executable": "/Applications/Tobii",
         "manager_return_code": 0,
     }

@@ -178,6 +178,7 @@ def run_recording_session(
     check_eyetracker: EyeTrackerCheck = default_check_eyetracker,
     recorder_factory: RecorderFactory = create_tobii_gaze_recorder,
     error_sink: StatusSink | None = None,
+    sys_info_collector: Callable[..., dict] | None = None,
 ) -> int:
     error = error_sink or (lambda message: print(message, file=sys.stderr))
 
@@ -198,6 +199,11 @@ def run_recording_session(
     output_path.mkdir(parents=True)
 
     with _SessionLog(output_path / "session.log"):
+        from aria_et.sysinfo import write_sys_info_snapshot
+
+        write_sys_info_snapshot(
+            output_path, collector=sys_info_collector, error_sink=print
+        )
         if tracker == "tobii":
             check_exit_code = check_eyetracker(
                 address=tracker_address,
@@ -348,6 +354,7 @@ def _write_session_metadata(
         "task_id": task_id,
         "tracker": tracker,
         "started_at": datetime.now(timezone.utc).isoformat(),
+        "sys_info_file": "sys_info.json",
     }
     if bids is not None:
         metadata["bids"] = {
