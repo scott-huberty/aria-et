@@ -1,6 +1,6 @@
 # ARIA-ET Context
 
-Last updated: 2026-08-19
+Last updated: 2026-10-19
 
 ## Current State
 
@@ -18,14 +18,18 @@ Primary runtime commands:
 - `aria-et run-plr`
 - `aria-et export-bids`
 
-The lab Mac is using:
+The supported runtime is locked for Windows in `pixi.lock`. Run commands from
+the repository root with `pixi run`; production uses `pixi run -e prod`.
+The default Python environment is `.pixi/envs/default` (on Windows its
+interpreter is `.pixi/envs/default/python.exe`).
 
-- Python: `/Users/scotterik/miniforge3/envs/aria-et_310/bin/python`
+Historical lab hardware and data configuration:
+
+- Python: `pixi run python` (locked Python 3.10)
 - Tobii SDK: `2.1.0.1`
 - Tracker: Tobii Pro Spectrum `TPSP1-010214213025`
 - Tracker address: `tobii-prp://169.254.10.180`
 - Stimulus display: PsychoPy screen `1`, fullscreen `1920x1080`
-- Data root: `/Users/scotterik/aria-et-data`
 
 ## Recent Design Change
 
@@ -150,10 +154,6 @@ SocialInteractive      raw  85,072  eye1  85,072  eye2  85,072
 StaticSocialScenes     raw  65,724  eye1  65,724  eye2  65,724
 ```
 
-The BIDS validator reports only recommended-metadata warnings for `sub-abby`.
-The whole BIDS root still has an unrelated real validator error from an earlier
-test session named `ses-flush-test`; BIDS session labels cannot contain `-`.
-
 ## Known Crash
 
 Observed on macOS during:
@@ -194,7 +194,7 @@ matters, gzip the JSONL (~5x smaller for under 1% of a core at 600 Hz).
 Per-run export command:
 
 ```bash
-python -m aria_et.cli export-bids \
+pixi run python -m aria_et.cli export-bids \
   --input /path/to/task-*_run-* \
   --output /Users/scotterik/aria-et-data/bids
 ```
@@ -202,19 +202,18 @@ python -m aria_et.cli export-bids \
 Batch export pattern:
 
 ```bash
-PY=/Users/scotterik/miniforge3/envs/aria-et_310/bin/python
-OUT=/Users/scotterik/aria-et-data/bids
+OUT=/path/to/aria-et-data/bids
 
-find /Users/scotterik/aria-et-data/sourcedata/sub-<subject>/ses-<session> \
+find /path/to/aria-et-data/sourcedata/sub-<subject>/ses-<session> \
   -mindepth 1 -maxdepth 1 -type d -name 'task-*_run-*' | sort | while IFS= read -r run_dir; do
-    "$PY" -m aria_et.cli export-bids --input "$run_dir" --output "$OUT"
+    pixi run python -m aria_et.cli export-bids --input "$run_dir" --output "$OUT"
   done
 ```
 
 Validate:
 
 ```bash
-/Users/scotterik/miniforge3/envs/aria-et_310/bin/bids-validator-deno /Users/scotterik/aria-et-data/bids
+pixi run bids-validator-deno /path/to/aria-et-data/bids
 ```
 
 Expected current warnings:
@@ -285,9 +284,9 @@ row counts match raw gaze sample counts.
 Run on the lab machine with:
 
 ```bash
-pytest -m requires_eyetracker tests/test_hardware_smoke.py
+pixi run python -m pytest -m requires_eyetracker tests/test_hardware_smoke.py
 # connection checks only:
-pytest -m requires_eyetracker -k "check_eyetracker or find_eyetracker"
+pixi run python -m pytest -m requires_eyetracker -k "check_eyetracker or find_eyetracker"
 ```
 
 The tests use the tracker saved in the real `~/.aria-et/config.toml` (they do

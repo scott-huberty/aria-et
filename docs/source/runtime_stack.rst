@@ -135,11 +135,15 @@ Useful checks on the acquisition machine include:
 
 .. code-block:: bash
 
-   sw_vers
-   /Users/scotterik/miniforge3/envs/aria-et_310/bin/python -m aria_et.cli check-eyetracker
-   /Users/scotterik/miniforge3/envs/aria-et_310/bin/python -c "import psychopy; print(psychopy.__version__)"
-   /Users/scotterik/miniforge3/envs/aria-et_310/bin/ffmpeg -version
-   /Users/scotterik/miniforge3/envs/aria-et_310/bin/ffprobe -version
+   pixi run python --version
+   pixi run aria-et check-eyetracker
+   pixi run python -c "import psychopy; print(psychopy.__version__)"
+
+The Windows runtime is pinned in ``pixi.lock``. The validated ffpyplayer wheel
+loads FFmpeg ``6.0-full_build-www.gyan.dev`` and SDL2 ``2.26.4`` from its own
+``share/ffpyplayer`` directory. The separate FFmpeg/FFprobe executables listed
+above describe conversion and inspection tools, not the decoder loaded by
+ffpyplayer for AM/SI movies.
 
 TODO
 ----

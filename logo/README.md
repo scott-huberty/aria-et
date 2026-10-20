@@ -12,20 +12,10 @@ Generation dependencies are recorded separately as the **optional `logo` extra**
 in `pyproject.toml`: Matplotlib 3.10.9, NumPy 2.2.6, and Pillow 12.3.0. They are
 not added to the application's runtime dependency list.
 
-In an existing development environment:
+Use the isolated optional pixi environment from the repository root:
 
 ```powershell
-conda activate aria-et
-python -m pip install --no-build-isolation -e ".[logo]"
-python logo/generate_aria_logos.py
-```
-
-For a throwaway generation environment, without the application's dependencies:
-
-```powershell
-conda create -n aria-logo -c conda-forge python=3.10 matplotlib=3.10.9 numpy=2.2.6 pillow=12.3.0
-conda activate aria-logo
-python logo/generate_aria_logos.py
+pixi run --locked -e logo generate-logos
 ```
 
 Run the script from the repository root. Both fonts are bundled; generation
@@ -37,8 +27,8 @@ The script uses fixed coordinates, a fixed SVG ID salt, and no timestamps or
 randomness. Running it twice with the same rendering environment produces
 identical bytes, including PNG previews. Keep the pinned dependencies when
 regenerating; FreeType and other native renderer versions may affect output
-across platforms. Activate the conda environment before running Python so its
-native rendering libraries can be found on Windows.
+across platforms. `pixi run` activates the environment so its native rendering
+libraries can be found on Windows.
 
 ## Outputs
 
