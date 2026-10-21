@@ -7,6 +7,8 @@ requires-python = ">=3.10,<3.11"
 dependencies = [
     "dvst-detox==0.2.1",
     "opencv-python",
+    # When bumping to >=2027.1.0, remove the ImageStim texture-cleanup
+    # workaround (psychopy#7844); see issues/psychopy-imagestim-gldeletetextures.md.
     "psychopy==2026.2.1",
     "tomli",
     "tobii-research==2.1.0",

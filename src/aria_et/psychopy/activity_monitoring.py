@@ -16,6 +16,7 @@ from aria_et.activity_monitoring import (
     ActivityMonitoringTrial,
     build_activity_monitoring_sequence,
 )
+from aria_et.psychopy.textures import clear_image_textures
 from aria_et.runtime import Clock, EventSink, RuntimeEvent
 
 if TYPE_CHECKING:
@@ -225,7 +226,10 @@ class PsychoPyActivityMonitoringPresenter:
             try:
                 self._draw_for_duration(image, trial.presentation_seconds)
             finally:
-                self._stop_active_sounds()
+                try:
+                    clear_image_textures(image)
+                finally:
+                    self._stop_active_sounds()
 
     def _present_movie_trial(self, trial: ActivityMonitoringTrial) -> None:
         self._render_status(

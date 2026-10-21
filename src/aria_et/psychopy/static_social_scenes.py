@@ -9,6 +9,7 @@ from importlib.resources import as_file
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
+from aria_et.psychopy.textures import clear_image_textures
 from aria_et.runtime import Clock, EventSink, RuntimeEvent
 from aria_et.static_social_scenes import (
     StaticSocialScenesSequence,
@@ -153,7 +154,10 @@ class PsychoPyStaticSocialScenesPresenter:
             )
             with as_file(trial.stimulus.image) as image_path:
                 image = self._image_factory()(self.window, str(image_path))
-                self._draw_for_duration(image, trial.presentation_seconds)
+                try:
+                    self._draw_for_duration(image, trial.presentation_seconds)
+                finally:
+                    clear_image_textures(image)
             self._wait()(trial.post_blank_seconds)
         finally:
             self._stop_active_sounds()
