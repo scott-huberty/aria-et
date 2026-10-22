@@ -22,12 +22,25 @@ import platform
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 from urllib.request import url2pathname
+
+from aria_et.protocols import StatusSink
+
+if TYPE_CHECKING:
+    from aria_et.config import AriaEtConfig
+
+Json = Any
+"""A JSON value. A probe returns its result, or an ``"error: ..."`` string."""
+
+JsonDict = dict[str, Json]
+"""One section of the ``sys_info.json`` snapshot."""
 
 CORE_PACKAGES = (
     "psychopy",
@@ -55,7 +68,7 @@ def _error(exc: Exception) -> str:
     return "error: " + (" ".join(str(exc).split()) or type(exc).__name__)[:240]
 
 
-def _probe(function, *args, **kwargs):
+def _probe(function: Callable[..., Json], *args: object, **kwargs: object) -> Json:
     try:
         return function(*args, **kwargs)
     except metadata.PackageNotFoundError:
@@ -64,7 +77,7 @@ def _probe(function, *args, **kwargs):
         return _error(exc)
 
 
-def _environment(environ):
+def _environment(environ: Mapping[str, str]) -> JsonDict:
     if environ.get("PIXI_ENVIRONMENT_NAME") or environ.get("PIXI_PROJECT_ROOT"):
         return {
             "kind": "pixi",
@@ -81,8 +94,8 @@ def _environment(environ):
     return {"kind": "python", "name": None, "prefix": sys.prefix}
 
 
-def _git_info(root):
-    def run(*args):
+def _git_info(root: Path) -> JsonDict:
+    def run(*args: str) -> str:
         return subprocess.run(
             ["git", "-C", str(root), *args],
             capture_output=True,
@@ -92,7 +105,7 @@ def _git_info(root):
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         ).stdout.strip()
 
-    result = {}
+    result: JsonDict = {}
     errors = []
     for field, args in (
         ("commit", ("rev-parse", "--short", "HEAD")),
@@ -108,10 +121,13 @@ def _git_info(root):
     return result
 
 
-def _installation(distribution_lookup, git_reader):
+def _installation(
+    distribution_lookup: Callable[[str], metadata.Distribution],
+    git_reader: Callable[[Path], JsonDict],
+) -> JsonDict:
     from aria_et import __version__
 
-    result = {"version": __version__}
+    result: JsonDict = {"version": __version__}
     try:
         raw = distribution_lookup("aria-et").read_text("direct_url.json")
         direct = json.loads(raw) if raw else {}
@@ -128,7 +144,7 @@ def _installation(distribution_lookup, git_reader):
     return result
 
 
-def windows_file_version(path):
+def windows_file_version(path: str | Path) -> str:
     """Read VS_FIXEDFILEINFO through version.dll; no pywin32 dependency."""
     from ctypes import wintypes
 
@@ -179,11 +195,11 @@ def windows_file_version(path):
     )
 
 
-def read_uninstall_registry():
+def read_uninstall_registry() -> list[dict[str, str]]:
     """Read both Windows registry views, including per-user installations."""
     import winreg
 
-    entries = []
+    entries: list[dict[str, str]] = []
     key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
     for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
         for view in (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
@@ -194,7 +210,7 @@ def read_uninstall_registry():
                             with winreg.OpenKey(
                                 root, winreg.EnumKey(root, index)
                             ) as key:
-                                entry = {}
+                                entry: dict[str, str] = {}
                                 for field in (
                                     "DisplayName",
                                     "DisplayVersion",
@@ -216,8 +232,8 @@ def read_uninstall_registry():
     return entries
 
 
-def _tobii_software(entries):
-    result = []
+def _tobii_software(entries: Iterable[Mapping[str, str]]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
     for entry in entries:
         if "error" in entry:
             row = {"error": str(entry["error"])}
@@ -240,12 +256,12 @@ def _tobii_software(entries):
     return sorted(result, key=lambda row: row.get("name", row.get("error", "")))
 
 
-def _ffpyplayer_native():
+def _ffpyplayer_native() -> JsonDict:
     ffpyplayer = importlib.import_module("ffpyplayer")
-    result = {}
+    result: JsonDict = {}
     for name, pattern in (("ffmpeg", "avutil-*.dll"), ("sdl2", "SDL2.dll")):
 
-        def read(name=name, pattern=pattern):
+        def read(name: str = name, pattern: str = pattern) -> dict[str, str]:
             paths = [
                 p
                 for directory in ffpyplayer.dep_bins
@@ -281,8 +297,8 @@ def _ffpyplayer_native():
     return result
 
 
-def _native_versions():
-    def portaudio():
+def _native_versions() -> JsonDict:
+    def portaudio() -> JsonDict:
         value, description = importlib.import_module(
             "sounddevice"
         ).get_portaudio_version()
@@ -297,7 +313,7 @@ def _native_versions():
     }
 
 
-def read_native_versions():
+def read_native_versions() -> JsonDict:
     """Allow cold starts while bounding native import/driver stalls to four seconds."""
     result = subprocess.run(
         [sys.executable, "-m", "aria_et.sysinfo", "--native"],
@@ -311,14 +327,14 @@ def read_native_versions():
     return json.loads(result.stdout)
 
 
-def _qt_version():
+def _qt_version() -> str:
     matches = sorted((Path(sys.prefix) / "conda-meta").glob("qt6-main-*.json"))
     if not matches:
         return "not installed (conda qt6-main)"
     return json.loads(matches[0].read_text(encoding="utf-8"))["version"]
 
 
-def _executable():
+def _executable() -> str:
     if sys.argv[0] in ("-c", "-m", ""):
         return sys.executable
     path = Path(shutil.which(sys.argv[0]) or sys.argv[0]).absolute()
@@ -332,26 +348,28 @@ def _executable():
     return str(path)
 
 
-def _package_version(lookup, name):
+def _package_version(lookup: Callable[[str], str], name: str) -> str:
     return str(lookup(name)).strip()
 
 
 def collect_sys_info(
     *,
     include_tracker: bool = False,
-    version_lookup=metadata.version,
-    distribution_lookup=metadata.distribution,
-    registry_reader=read_uninstall_registry,
-    tracker_opener=None,
-    config_loader=None,
-    config_path=None,
-    etm_path_reader=None,
-    file_version_reader=windows_file_version,
-    native_reader=read_native_versions,
-    git_reader=_git_info,
-    environ=None,
-    platform_name=None,
-) -> dict:
+    version_lookup: Callable[[str], str] = metadata.version,
+    distribution_lookup: Callable[[str], metadata.Distribution] = (
+        metadata.distribution
+    ),
+    registry_reader: Callable[[], list[dict[str, str]]] = read_uninstall_registry,
+    tracker_opener: Callable[..., object] | None = None,
+    config_loader: Callable[[], AriaEtConfig] | None = None,
+    config_path: Callable[[], Path] | None = None,
+    etm_path_reader: Callable[[], str] | None = None,
+    file_version_reader: Callable[[Path], str] = windows_file_version,
+    native_reader: Callable[[], JsonDict] = read_native_versions,
+    git_reader: Callable[[Path], JsonDict] = _git_info,
+    environ: Mapping[str, str] | None = None,
+    platform_name: str | None = None,
+) -> JsonDict:
     """Collect independent, injectable probes; failures stay in their own rows."""
     from aria_et.config import default_config_path, load_config
     from aria_et.eyetracker import default_eyetracker_manager_path, open_eyetracker
@@ -360,7 +378,7 @@ def collect_sys_info(
     platform_name = sys.platform if platform_name is None else platform_name
     path = _probe(config_path or default_config_path)
     config = _probe(config_loader or load_config)
-    info = {
+    info: JsonDict = {
         "schema_version": 1,
         "collected_at": {
             "local": now.isoformat(),
@@ -406,7 +424,7 @@ def collect_sys_info(
     if isinstance(config, str):
         etm_path = _probe(etm_path_reader or default_eyetracker_manager_path)
 
-    def etm():
+    def etm() -> Json:
         if str(etm_path).startswith("error:"):
             return etm_path
         path = Path(etm_path)
@@ -435,7 +453,7 @@ def collect_sys_info(
         info["tobii"]["saved_tracker"] = config
     if include_tracker:
 
-        def connected():
+        def connected() -> Json:
             from aria_et.cli import resolve_tracker
 
             if isinstance(config, str):
@@ -462,12 +480,12 @@ def collect_sys_info(
     return info
 
 
-def format_sys_info(info: dict) -> str:
+def format_sys_info(info: JsonDict) -> str:
     """Render current or archived JSON as an aligned, readable table."""
     # A (label, value) row, or a plain line such as a section heading.
     lines: list[tuple[str, str] | str] = []
 
-    def row(label, value, indent=""):
+    def row(label: str, value: object, indent: str = "") -> None:
         if isinstance(value, dict):
             value = "; ".join(f"{k}={v}" for k, v in value.items())
         lines.append((indent + label, str(value)))
@@ -577,8 +595,11 @@ def format_sys_info(info: dict) -> str:
 
 
 def write_sys_info_snapshot(
-    directory: Path, *, collector=None, error_sink=None
-) -> dict:
+    directory: Path,
+    *,
+    collector: Callable[..., JsonDict] | None = None,
+    error_sink: StatusSink | None = None,
+) -> JsonDict:
     """Best effort provenance: never open a tracker or interrupt acquisition."""
     path = Path(directory) / "sys_info.json"
     try:

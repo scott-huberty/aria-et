@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QLabel, QWidget
 
 from aria_et.gui.theme import PALETTE
 
@@ -31,7 +31,12 @@ def tone_foreground(tone: PillTone) -> str:
 
 
 class StatusPill(QLabel):
-    def __init__(self, text: str = "", tone: PillTone = PillTone.NEUTRAL, parent=None):
+    def __init__(
+        self,
+        text: str = "",
+        tone: PillTone = PillTone.NEUTRAL,
+        parent: QWidget | None = None,
+    ):
         super().__init__(parent)
         self.set_status(text, tone)
 

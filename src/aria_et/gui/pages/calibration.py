@@ -137,7 +137,7 @@ def _helper(text: str) -> QLabel:
 class CalibrationPage(QWidget):
     calibrate_requested = Signal(list)
 
-    def __init__(self, config: AriaEtConfig, parent=None):
+    def __init__(self, config: AriaEtConfig, parent: QWidget | None = None):
         super().__init__(parent)
         self._config = config
         self._session: SessionState | None = None

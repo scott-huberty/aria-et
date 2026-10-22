@@ -11,7 +11,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from aria_et.protocols import MovieLike, StatusSink, Wait, WindowLike
-from aria_et.psychopy.environment import PsychoPyClock
+from aria_et.psychopy.environment import (
+    PsychoPyClock,
+    bids_session_metadata,
+    stimulus_display_metadata,
+)
 from aria_et.runtime import Clock, EventSink, RuntimeEvent
 from aria_et.social_interactive import (
     SocialInteractiveSequence,
@@ -380,8 +384,8 @@ def run_social_interactive_session(
         tracker_address=tracker_address,
         tracker_serial_number=tracker_serial_number,
         output_dir=output_dir,
-        bids=_bids_metadata(subject, session, run),
-        stimulus_display=_stimulus_display_metadata(
+        bids=bids_session_metadata(subject, session, run),
+        stimulus_display=stimulus_display_metadata(
             screen=screen,
             fullscreen=fullscreen,
             window_size=window_size,
@@ -390,31 +394,4 @@ def run_social_interactive_session(
             screen_size_meters=screen_size_meters,
         ),
         present=present,
-    )
-
-
-def _bids_metadata(subject: str, session: str | None, run: str | None):
-    from aria_et.session import BidsSessionMetadata
-
-    return BidsSessionMetadata(subject=subject, session=session, run=run)
-
-
-def _stimulus_display_metadata(
-    *,
-    screen: int,
-    fullscreen: bool,
-    window_size: tuple[int, int],
-    screen_distance_meters: float,
-    screen_resolution_pixels: tuple[int, int],
-    screen_size_meters: tuple[float, float],
-):
-    from aria_et.session import StimulusDisplayMetadata
-
-    return StimulusDisplayMetadata(
-        screen_distance_meters=screen_distance_meters,
-        screen_resolution_pixels=screen_resolution_pixels,
-        screen_size_meters=screen_size_meters,
-        psychopy_screen=screen,
-        fullscreen=fullscreen,
-        window_size_pixels=screen_resolution_pixels if fullscreen else window_size,
     )

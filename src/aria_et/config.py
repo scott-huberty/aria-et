@@ -19,6 +19,9 @@ DEFAULT_EIZO_SCREEN_SIZE_METERS = "0.527x0.296"
 DEFAULT_MONITOR_NAME = "EIZO_EV2480"
 DEFAULT_AUDIO_SPEAKER = "EV2480"
 
+ConfigValue = str | int | float
+"""A value that ``set_config`` stores: the config file is flat TOML."""
+
 
 @dataclass(frozen=True)
 class AriaEtConfig:
@@ -151,13 +154,15 @@ def load_config(path: str | Path | None = None) -> AriaEtConfig:
     )
 
 
-def get_config_value(key: str, path: str | Path | None = None) -> Any:
+def get_config_value(key: str, path: str | Path | None = None) -> object:
     """Return the raw value stored under a dotted ``section.key``, or None."""
     section, name = _split_key(key)
     return _read_raw_config(_config_path(path)).get(section, {}).get(name)
 
 
-def set_config(key: str, value: Any, path: str | Path | None = None) -> AriaEtConfig:
+def set_config(
+    key: str, value: ConfigValue, path: str | Path | None = None
+) -> AriaEtConfig:
     """Persist ``value`` under a dotted ``section.key`` in the user config.
 
     Creates the config file from the lab defaults if it does not exist yet.
@@ -194,7 +199,7 @@ def _split_key(key: str) -> tuple[str, str]:
     return section, name
 
 
-def _coerce_value(key: str, value: Any) -> str | int | float:
+def _coerce_value(key: str, value: ConfigValue) -> ConfigValue:
     value_type = CONFIG_KEYS[key]
     try:
         if value_type is Path:
@@ -242,7 +247,7 @@ def _write_raw_config(
     config_path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _toml_value(value: Any) -> str:
+def _toml_value(value: object) -> str:
     # The config only holds flat strings and numbers. JSON string escapes are
     # valid TOML basic-string escapes, so json.dumps covers quoting.
     if isinstance(value, bool):

@@ -24,7 +24,7 @@ from aria_et.calibration import (
     POSITION_STALE_SECONDS,
     POSITION_Z_TOLERANCE,
 )
-from aria_et.protocols import GazeSample, ImportModule
+from aria_et.protocols import GazeSample, GazeSource, ImportModule
 
 EYES = ("left", "right")
 Position = tuple[float, float, float]
@@ -143,8 +143,8 @@ class PositionMonitor:
         self._clock = clock
         self._lock = threading.Lock()
         self._latest: PositionSample | None = None
-        self._tracker = None
-        self._stream = None
+        # The tracker and stream to unsubscribe from, while subscribed.
+        self._subscription: tuple[GazeSource, str] | None = None
         self._generation = 0
         self.status = "stopped"  # stopped | connecting | running | unavailable
         self.message = ""
@@ -177,12 +177,11 @@ class PositionMonitor:
         """Unsubscribe; safe to call at any time, including twice."""
         with self._lock:
             self._generation += 1
-            tracker, stream = self._tracker, self._stream
-            self._tracker = self._stream = None
+            subscription, self._subscription = self._subscription, None
             self._latest = None
             self.status = "stopped"
-        if tracker is not None:
-            self._unsubscribe_quietly(tracker, stream)
+        if subscription is not None:
+            self._unsubscribe_quietly(*subscription)
 
     def latest(self) -> PositionSample | None:
         with self._lock:
@@ -214,13 +213,13 @@ class PositionMonitor:
             return
         with self._lock:
             if generation == self._generation:
-                self._tracker, self._stream = tracker, stream
+                self._subscription = (tracker, stream)
                 self.status = "running"
                 return
         # stop() or a newer start() happened while connecting.
         self._unsubscribe_quietly(tracker, stream)
 
-    def _unsubscribe_quietly(self, tracker, stream) -> None:
+    def _unsubscribe_quietly(self, tracker: GazeSource, stream: str) -> None:
         # Shutting down: a tracker that has gone away can't be unsubscribed from,
         # and there is nothing to recover.
         with contextlib.suppress(Exception):

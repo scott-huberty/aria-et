@@ -14,8 +14,7 @@ import time
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
-from types import ModuleType
-from typing import Any
+from types import ModuleType, TracebackType
 
 from typing_extensions import Self
 
@@ -360,7 +359,12 @@ class TobiiGazeRecorder:
         self.start()
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         self.stop()
 
     def start(self) -> None:
@@ -601,7 +605,7 @@ def create_tobii_gaze_recorder(
     )
 
 
-def _json_safe(value: Any) -> Any:
+def _json_safe(value: object) -> object:
     if isinstance(value, dict):
         return {str(key): _json_safe(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):

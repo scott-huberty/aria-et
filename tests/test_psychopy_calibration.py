@@ -2,8 +2,8 @@ import json
 import math
 import random
 import sys
-from types import SimpleNamespace
-from typing import Any
+from types import ModuleType, SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -16,6 +16,12 @@ from aria_et.psychopy.calibration import (
     run_child_friendly_eyetracker_calibration,
     run_validation,
 )
+
+class _FakeTobiiModule(ModuleType):
+    EYETRACKER_GAZE_DATA = "gaze_data"
+
+
+FAKE_TOBII = _FakeTobiiModule("tobii_research")
 
 # A 527 x 296 mm screen; the eye sits 650 mm in front of its centre.
 DISPLAY_AREA = SimpleNamespace(
@@ -467,7 +473,7 @@ def test_validation_shuffles_targets_with_the_given_rng(window):
     validation = run_validation(
         window,
         eyetracker=tracker,
-        tobii_research=SimpleNamespace(EYETRACKER_GAZE_DATA=GAZE_STREAM),
+        tobii_research=FAKE_TOBII,
         stimulus_dir=None,
         play_sound=True,
         status=lambda message: None,
@@ -626,7 +632,7 @@ def _validate(window, **kwargs):
     return run_validation(
         window,
         eyetracker=tracker,
-        tobii_research=SimpleNamespace(EYETRACKER_GAZE_DATA=GAZE_STREAM),
+        tobii_research=FAKE_TOBII,
         status=lambda message: None,
         points=[(0.5, 0.5)],
         **kwargs,
@@ -786,10 +792,11 @@ def test_results_screen_plots_valid_gaze_per_eye_in_detox_colours():
         SimpleNamespace(
             TextStim=FakeStim, Circle=FakeStim, ElementArrayStim=FakeElementArray
         ),
-        validation,
+        cast(ValidationRecord, validation),
         gaze,
         colors,
     )
+    stimuli = cast(list[FakeStim], stimuli)
 
     arrays = [s for s in stimuli if isinstance(s, FakeElementArray)]
     assert [a.kwargs["nElements"] for a in arrays] == [3, 1]  # left, right
@@ -875,7 +882,7 @@ def test_results_screen_shows_the_tolerance_in_colour():
             SimpleNamespace(
                 TextStim=FakeStim, Circle=FakeStim, ElementArrayStim=FakeElementArray
             ),
-            validation,
+            cast(ValidationRecord, validation),
             [],
             {"left": (1, 2, 3, 4), "right": (5, 6, 7, 8)},
         )

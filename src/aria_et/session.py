@@ -10,7 +10,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, Protocol
+from types import TracebackType
+from typing import Literal, Protocol, TextIO
+
+from typing_extensions import Self
 
 from aria_et.eyetracker import (
     TobiiSdkUnavailableError,
@@ -30,7 +33,12 @@ class GazeRecorder(Protocol):
     """Structural interface for e.g. TobiiGazeRecorder."""
 
     def __enter__(self) -> object: ...
-    def __exit__(self, exc_type, exc_value, traceback) -> None: ...
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None: ...
     def writer_health(self) -> dict[str, object]: ...
 
 
@@ -87,7 +95,7 @@ class JsonLinesEventSink:
 
 
 class _TeeStream:
-    def __init__(self, terminal_stream, log_stream):
+    def __init__(self, terminal_stream: TextIO, log_stream: _TimestampedLogStream):
         self._terminal_stream = terminal_stream
         self._log_stream = log_stream
 
@@ -105,7 +113,7 @@ class _TeeStream:
 
 
 class _TimestampedLogStream:
-    def __init__(self, stream):
+    def __init__(self, stream: TextIO):
         self._stream = stream
         self._at_line_start = True
 
@@ -131,7 +139,7 @@ class _SessionLog:
         self._stdout = None
         self._stderr = None
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         self._file = self.path.open("w", encoding="utf-8")
         self._log_stream = _TimestampedLogStream(self._file)
         self._stdout = sys.stdout
@@ -140,7 +148,12 @@ class _SessionLog:
         sys.stderr = _TeeStream(sys.stderr, self._log_stream)
         return self
 
-    def __exit__(self, exc_type, exc_value, exc_traceback) -> bool:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        exc_traceback: TracebackType | None,
+    ) -> bool:
         assert self._file is not None
         assert self._log_stream is not None
         assert self._stdout is not None

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 # Exact values from the ARIA Google Doc template colour table. Do not adjust
 # these without a corresponding change to the template.
 PALETTE: dict[str, str] = {
@@ -29,7 +31,9 @@ BRAND_FONT_CANDIDATES = ("Nunito Sans", "Montserrat")
 MONOSPACE_FONT_CANDIDATES = ("SF Mono", "Menlo", "Consolas", "Courier New")
 
 
-def resolve_font_family(candidates, available) -> str | None:
+def resolve_font_family(
+    candidates: Iterable[str], available: Iterable[str]
+) -> str | None:
     available_set = set(available)
     for candidate in candidates:
         if candidate in available_set:

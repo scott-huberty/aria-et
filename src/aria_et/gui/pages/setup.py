@@ -77,7 +77,9 @@ class SetupPage(QWidget):
     session_closed = Signal()
     create_config_requested = Signal()
 
-    def __init__(self, config: AriaEtConfig, screen_count: int = 1, parent=None):
+    def __init__(
+        self, config: AriaEtConfig, screen_count: int = 1, parent: QWidget | None = None
+    ):
         super().__init__(parent)
         self._config = config
         self._screen_count = screen_count

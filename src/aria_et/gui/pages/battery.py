@@ -27,6 +27,7 @@ from aria_et.gui.artifacts import (
     RunDirectory,
     RunProgress,
     RunStatus,
+    WriterHealth,
     apply_events,
     derive_status,
 )
@@ -112,7 +113,7 @@ class BatteryPage(QWidget):
     run_requested = Signal(list)
     stop_requested = Signal()
 
-    def __init__(self, config: AriaEtConfig, parent=None):
+    def __init__(self, config: AriaEtConfig, parent: QWidget | None = None):
         super().__init__(parent)
         self._config = config
         self._session: SessionState | None = None
@@ -361,7 +362,7 @@ class BatteryPage(QWidget):
                 self._progress, self._events_tail.read_new(), self._active_task
             )
 
-    def _health(self):
+    def _health(self) -> WriterHealth | None:
         if self._active_run is None:
             return None
         return artifacts.read_writer_health(self._active_run.path)
