@@ -1,14 +1,17 @@
-# first time users: run pre-commit install to set up the git hook scripts
+# first time users: run `pixi run pre-commit install` to set up the git hook scripts.
+# Each hook runs a pixi task from pyproject.toml, so the hooks and CI use the
+# same tool versions (from pixi.lock) and cannot diverge.
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.3
-    hooks:
-    - id: ruff-check
-      args: [ --fix ]
-    - id: ruff-format
   - repo: local
     hooks:
-    # Same command as the CI typecheck job (pixi task in pyproject.toml).
+    # Fixes and formats. CI runs the check-only `lint` task.
+    - id: lint
+      name: ruff
+      entry: pixi run --locked -e lint lint-fix
+      language: system
+      pass_filenames: false
+      types_or: [python, pyi, toml]
+    # Same command as the CI typecheck job.
     - id: typecheck
       name: ty
       entry: pixi run --locked typecheck

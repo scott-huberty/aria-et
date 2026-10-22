@@ -169,6 +169,8 @@ ruff = "==0.16.3"
 
 [tool.pixi.feature.lint.tasks]
 lint = "ruff check . && ruff format --check ."
+# The pre-commit hook runs this; CI runs the check-only `lint` above.
+lint-fix = "ruff check --fix . && ruff format ."
 
 [tool.pixi.feature.logo.dependencies]
 python = "==3.10.21"
