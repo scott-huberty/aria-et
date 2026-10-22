@@ -15,11 +15,12 @@ import math
 import random
 import sys
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from types import ModuleType
 from typing import TypedDict
 
-from typing_extensions import NotRequired
+from typing_extensions import NotRequired, Unpack
 
 from aria_et.calibration import (
     DEFAULT_ANIMATION,
@@ -46,7 +47,39 @@ from aria_et.calibration_quality import (
     tolerance_mark,
     tolerance_verdict,
 )
-from aria_et.protocols import ImportModule, StatusSink
+from aria_et.protocols import (
+    ClosableWindow,
+    DetoxController,
+    DrawableLike,
+    DrawingWindow,
+    FadingSound,
+    GazeSample,
+    ImportModule,
+    PsychoPyModule,
+    ScreenBasedCalibration,
+    StatusSink,
+    TobiiEyeTracker,
+    TrackerIdentity,
+)
+
+Point = Sequence[float]
+"""A position in the active display area (ADCS: 0-1, origin top-left)."""
+
+GazePlot = dict[str, list]
+"""One validation target and the valid on-screen gaze of each eye."""
+
+
+class WindowOptions(TypedDict):
+    """The display settings that ``open_window`` takes."""
+
+    fullscreen: bool
+    screen: int
+    window_size: tuple[int, int]
+    screen_distance_meters: float
+    screen_resolution_pixels: tuple[int, int]
+    screen_size_meters: tuple[float, float]
+    monitor_name: str
+    audio_speaker: str | None
 
 
 class CalibrationPoints(TypedDict):
@@ -194,13 +227,13 @@ def run_child_friendly_eyetracker_calibration(
 
 
 def _calibrate_validate_review(
-    window,
+    window: DrawingWindow,
     *,
-    controller,
+    controller: DetoxController,
     recorder: _RecordingCalibration,
-    eyetracker,
-    tobii_research,
-    detox,
+    eyetracker: TobiiEyeTracker,
+    tobii_research: ModuleType,
+    detox: ModuleType,
     import_module: ImportModule,
     status: StatusSink,
     play_sound: bool,
@@ -304,7 +337,13 @@ _RESULTS_KEYS = {
 }
 
 
-def show_validation_results(window, *, validation, gaze, colors) -> str:
+def show_validation_results(
+    window: DrawingWindow,
+    *,
+    validation: ValidationRecord,
+    gaze: list[GazePlot],
+    colors: Mapping[str, tuple[int, ...]],
+) -> str:
     """Titta-style results: targets, gaze per eye, and the quality table.
 
     Waits for a key and returns "accept", "revalidate" or "recalibrate".
@@ -321,13 +360,25 @@ def show_validation_results(window, *, validation, gaze, colors) -> str:
             return _RESULTS_KEYS[key]
 
 
-def _results_stimuli(window, visual, validation, gaze, colors) -> list:
+def _results_stimuli(
+    window: DrawingWindow,
+    visual: PsychoPyModule,
+    validation: ValidationRecord,
+    gaze: list[GazePlot],
+    colors: Mapping[str, tuple[int, ...]],
+) -> list[DrawableLike]:
     width, height = window.size
 
-    def to_pix(point):
+    def to_pix(point: Point) -> tuple[float, float]:
         return ((point[0] - 0.5) * width, (0.5 - point[1]) * height)
 
-    def text(message, pos, *, color=(230, 230, 230), size=0.022):
+    def text(
+        message: str,
+        pos: tuple[float, float],
+        *,
+        color: tuple[int, ...] = (230, 230, 230),
+        size: float = 0.022,
+    ) -> DrawableLike:
         return visual.TextStim(
             window,
             text=message,
@@ -541,7 +592,7 @@ def run_child_friendly_calibration_demo(
 
 
 def _run_detox_calibration(
-    controller,
+    controller: DetoxController,
     *,
     status: StatusSink,
     play_sound: bool,
@@ -575,15 +626,15 @@ class _RecordingCalibration:
     proxy records it so the calibration point positions can be saved.
     """
 
-    def __init__(self, calibration):
+    def __init__(self, calibration: ScreenBasedCalibration) -> None:
         self._calibration = calibration
-        self.result = None
+        self.result: object = None
 
-    def compute_and_apply(self):
+    def compute_and_apply(self) -> object:
         self.result = self._calibration.compute_and_apply()
         return self.result
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> object:
         return getattr(self._calibration, name)
 
     def point_metadata(self) -> CalibrationPoints:
@@ -596,20 +647,20 @@ class _RecordingCalibration:
 
 
 def run_validation(
-    window,
+    window: DrawingWindow,
     *,
-    eyetracker,
-    tobii_research,
+    eyetracker: TobiiEyeTracker,
+    tobii_research: ModuleType,
     stimulus_dir: Path | None,
     play_sound: bool,
     status: StatusSink,
     animation: str = DEFAULT_ANIMATION,
     animation_settings: DetoxAnimationDefaults | None = None,
-    points=DEFAULT_VALIDATION_POINTS,
+    points: Sequence[Point] = DEFAULT_VALIDATION_POINTS,
     settle_seconds: float | None = None,
     collect_seconds: float = VALIDATION_COLLECT_SECONDS,
     rng: random.Random | None = None,
-    gaze_out: list | None = None,
+    gaze_out: list[GazePlot] | None = None,
 ) -> ValidationRecord:
     """Show validation targets, record gaze at each, and compute quality.
 
@@ -741,12 +792,12 @@ def describe_validation(validation: ValidationRecord) -> str:
 class _GazeCollector:
     """Buffers gaze samples from the Tobii callback thread while recording."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._lock = threading.Lock()
         self._recording = False
-        self._samples: list[dict] = []
+        self._samples: list[GazeSample] = []
 
-    def add(self, sample: dict) -> None:
+    def add(self, sample: GazeSample) -> None:
         with self._lock:
             if self._recording:
                 self._samples.append(sample)
@@ -756,7 +807,7 @@ class _GazeCollector:
             self._samples = []
             self._recording = True
 
-    def stop(self) -> list[dict]:
+    def stop(self) -> list[GazeSample]:
         with self._lock:
             self._recording = False
             samples, self._samples = self._samples, []
@@ -792,8 +843,17 @@ class _Target:
     """
 
     def __init__(
-        self, window, visual, core, point, images, index, *, animation, settings
-    ):
+        self,
+        window: DrawingWindow,
+        visual: PsychoPyModule,
+        core: PsychoPyModule,
+        point: Point,
+        images: Sequence[str | Path],
+        index: int,
+        *,
+        animation: str,
+        settings: DetoxAnimationDefaults,
+    ) -> None:
         width, height = window.size
         position = ((point[0] - 0.5) * width, (0.5 - point[1]) * height)
         self._height = height
@@ -839,7 +899,9 @@ class _Target:
         self._stim.draw()
 
 
-def _show_instructions(window, visual, event) -> bool:
+def _show_instructions(
+    window: DrawingWindow, visual: PsychoPyModule, event: PsychoPyModule
+) -> bool:
     text = visual.TextStim(
         window,
         text=(
@@ -863,7 +925,9 @@ def _show_instructions(window, visual, event) -> bool:
             return True
 
 
-def _wait_for_space(window, target: _Target, event) -> bool:
+def _wait_for_space(
+    window: DrawingWindow, target: _Target, event: PsychoPyModule
+) -> bool:
     event.clearEvents()
     while True:
         target.draw()
@@ -876,11 +940,11 @@ def _wait_for_space(window, target: _Target, event) -> bool:
 
 
 def _animate(
-    window,
+    window: DrawingWindow,
     target: _Target,
-    core,
+    core: PsychoPyModule,
     seconds: float,
-    on_progress: Callable[[float], None] | None = None,
+    on_progress: Callable[[float], object] | None = None,
 ) -> None:
     """Keep the target animating for ``seconds``; report progress from 0 to 1."""
     clock = core.Clock()
@@ -891,13 +955,15 @@ def _animate(
         window.flip()
 
 
-def _sound_fader(attention_sound) -> Callable[[float], None] | None:
+def _sound_fader(
+    attention_sound: FadingSound | None,
+) -> Callable[[float], object] | None:
     if attention_sound is None:
         return None
     return lambda progress: attention_sound.setVolume(max(0.0, 1.0 - progress))
 
 
-def _stop_sound(attention_sound) -> None:
+def _stop_sound(attention_sound: FadingSound | None) -> None:
     """Stop, and reset the volume for the next target (as DeToX does)."""
     if attention_sound is None:
         return
@@ -905,7 +971,13 @@ def _stop_sound(attention_sound) -> None:
     attention_sound.setVolume(1.0)
 
 
-def _load_sound(sound, stimulus_dir: Path | None, *, enabled: bool, status):
+def _load_sound(
+    sound: PsychoPyModule,
+    stimulus_dir: Path | None,
+    *,
+    enabled: bool,
+    status: StatusSink,
+) -> FadingSound | None:
     if not enabled or stimulus_dir is None:
         return None
     path = stimulus_dir / "CalibrationSound.wav"
@@ -918,7 +990,9 @@ def _load_sound(sound, stimulus_dir: Path | None, *, enabled: bool, status):
         return None
 
 
-def _detox_animation_settings(import_module: ImportModule):
+def _detox_animation_settings(
+    import_module: ImportModule,
+) -> DetoxAnimationDefaults | None:
     """DeToX's live animation settings, or None to use the bundled defaults."""
     try:
         return import_module("DeToX.ETSettings").animation
@@ -926,7 +1000,7 @@ def _detox_animation_settings(import_module: ImportModule):
         return None
 
 
-def _detox_stimulus_dir(detox) -> Path | None:
+def _detox_stimulus_dir(detox: ModuleType) -> Path | None:
     module_file = getattr(detox, "__file__", None)
     if module_file is None:
         return None
@@ -934,7 +1008,7 @@ def _detox_stimulus_dir(detox) -> Path | None:
     return stimuli if stimuli.is_dir() else None
 
 
-def _discovery_index(tobii_research, eyetracker) -> int:
+def _discovery_index(tobii_research: ModuleType, eyetracker: TrackerIdentity) -> int:
     from aria_et.eyetracker import TobiiTrackerUnavailableError
 
     for index, candidate in enumerate(tobii_research.find_all_eyetrackers()):
@@ -946,7 +1020,9 @@ def _discovery_index(tobii_research, eyetracker) -> int:
     )
 
 
-def _open_calibration_window(*, status: StatusSink, **window_options):
+def _open_calibration_window(
+    *, status: StatusSink, **window_options: Unpack[WindowOptions]
+) -> ClosableWindow:
     status("Importing PsychoPy...")
     from psychopy import monitors, prefs, visual
 

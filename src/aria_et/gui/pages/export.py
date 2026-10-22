@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QUrl, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -106,7 +106,7 @@ def _helper(text: str) -> QLabel:
 class ExportPage(QWidget):
     export_requested = Signal(list)
 
-    def __init__(self, config: AriaEtConfig, parent=None):
+    def __init__(self, config: AriaEtConfig, parent: QWidget | None = None):
         super().__init__(parent)
         self._config = config
         self._session: SessionState | None = None
@@ -280,7 +280,7 @@ class ExportPage(QWidget):
 
     # -- rendering --------------------------------------------------------
 
-    def showEvent(self, event) -> None:
+    def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
         # Runs are recorded after the session opens, so rescan each time the
         # page is navigated to. Skip a window restore (spontaneous) so it

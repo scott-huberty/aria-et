@@ -4,9 +4,20 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING
 
-from aria_et.protocols import ClockLike, ClosableWindow
+from aria_et.protocols import (
+    ClockLike,
+    ClosableWindow,
+    MovieLike,
+    PsychoPyModule,
+    SoundLike,
+    StatusSink,
+    WindowLike,
+)
+
+if TYPE_CHECKING:
+    from aria_et.session import BidsSessionMetadata, StimulusDisplayMetadata
 
 
 @dataclass
@@ -19,7 +30,7 @@ class PsychoPyClock:
         return self.psychopy_clock.getTime()
 
 
-def warn_demo_sound_unavailable(*, sink: Any, error: BaseException) -> None:
+def warn_demo_sound_unavailable(*, sink: StatusSink, error: BaseException) -> None:
     sink(
         "Sound playback is disabled for this demo because PsychoPy could not "
         f"initialize the configured speaker ({error}). Use --no-sound to silence "
@@ -34,11 +45,11 @@ def should_reraise_sound_error(error: BaseException) -> bool:
 
 def demo_sound_factory(
     *,
-    sound_module: Any,
-    prefs_module: Any,
-    status_sink: Any,
-) -> Any:
-    def make_sound(path: str) -> Any:
+    sound_module: PsychoPyModule,
+    prefs_module: PsychoPyModule,
+    status_sink: StatusSink,
+) -> Callable[[str], SoundLike]:
+    def make_sound(path: str) -> SoundLike:
         try:
             return sound_module.Sound(path)
         except BaseException as error:
@@ -56,13 +67,13 @@ def demo_sound_factory(
 
 def demo_movie_factory(
     *,
-    visual_module: Any,
-    prefs_module: Any,
-    status_sink: Any,
+    visual_module: PsychoPyModule,
+    prefs_module: PsychoPyModule,
+    status_sink: StatusSink,
     play_sound: bool,
     audio_speaker: str | None,
-) -> Any:
-    def make_movie(window: Any, path: str) -> Any:
+) -> Callable[[WindowLike, str], MovieLike]:
+    def make_movie(window: WindowLike, path: str) -> MovieLike:
         if not play_sound:
             return visual_module.MovieStim(window, filename=path, noAudio=True)
 
@@ -109,7 +120,7 @@ def effective_window_size(
 
 def configure_monitor(
     *,
-    monitors_module: Any,
+    monitors_module: PsychoPyModule,
     monitor_name: str,
     screen_distance_meters: float,
     screen_resolution_pixels: tuple[int, int],
@@ -158,7 +169,7 @@ def resolve_audio_speaker(
 
 def configure_audio(
     *,
-    prefs_module: Any,
+    prefs_module: PsychoPyModule,
     audio_speaker: str | None,
     speaker_names: Callable[[], Sequence[str]] = available_speaker_names,
 ) -> str | None:
@@ -170,9 +181,9 @@ def configure_audio(
 
 def open_window(
     *,
-    visual_module: Any,
-    monitors_module: Any,
-    prefs_module: Any,
+    visual_module: PsychoPyModule,
+    monitors_module: PsychoPyModule,
+    prefs_module: PsychoPyModule,
     fullscreen: bool,
     screen: int,
     window_size: tuple[int, int],
@@ -206,4 +217,33 @@ def open_window(
         units="pix",
         color="black",
         monitor=monitor,
+    )
+
+
+def bids_session_metadata(
+    subject: str, session: str | None, run: str | None
+) -> BidsSessionMetadata:
+    from aria_et.session import BidsSessionMetadata
+
+    return BidsSessionMetadata(subject=subject, session=session, run=run)
+
+
+def stimulus_display_metadata(
+    *,
+    screen: int,
+    fullscreen: bool,
+    window_size: tuple[int, int],
+    screen_distance_meters: float,
+    screen_resolution_pixels: tuple[int, int],
+    screen_size_meters: tuple[float, float],
+) -> StimulusDisplayMetadata:
+    from aria_et.session import StimulusDisplayMetadata
+
+    return StimulusDisplayMetadata(
+        screen_distance_meters=screen_distance_meters,
+        screen_resolution_pixels=screen_resolution_pixels,
+        screen_size_meters=screen_size_meters,
+        psychopy_screen=screen,
+        fullscreen=fullscreen,
+        window_size_pixels=screen_resolution_pixels if fullscreen else window_size,
     )

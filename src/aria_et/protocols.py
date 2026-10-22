@@ -31,6 +31,16 @@ the display area, or a 3D point in user coordinates.
 
 GazeCallback = Callable[[GazeSample], object]
 
+PsychoPyModule = Any
+"""A PsychoPy module, for example ``psychopy.visual`` or ``psychopy.event``.
+
+PsychoPy has no type stubs, and ty treats its imports as ``Any`` (see
+``pyproject.toml``). The tests pass small fakes in its place.
+"""
+
+DetoxController = Any
+"""A ``DeToX.ETracker``. DeToX has no type stubs."""
+
 
 # -- Tobii Pro SDK ------------------------------------------------------------
 
@@ -71,6 +81,12 @@ class CalibrationSource(Protocol):
     def retrieve_calibration_data(self) -> bytes | None: ...
 
 
+class ScreenBasedCalibration(Protocol):
+    """``tobii_research.ScreenBasedCalibration``."""
+
+    def compute_and_apply(self) -> object: ...
+
+
 class DisplayArea(Protocol):
     """The tracker's display area corners, in user coordinates (mm)."""
 
@@ -101,15 +117,19 @@ class TobiiEyeTracker(TrackerIdentity, GazeSource, CalibrationSource, Protocol):
 # -- PsychoPy -----------------------------------------------------------------
 
 
-class WindowLike(Protocol):
-    """``psychopy.visual.Window``: the members that the presenters use."""
-
-    color: str | tuple[float, float, float]
+class DrawingWindow(Protocol):
+    """``psychopy.visual.Window``: a window to draw into and flip."""
 
     @property
     def size(self) -> Sequence[float]: ...
 
     def flip(self) -> object: ...
+
+
+class WindowLike(DrawingWindow, Protocol):
+    """``psychopy.visual.Window``: the members that the presenters use."""
+
+    color: str | tuple[float, float, float]
 
 
 class ClosableWindow(WindowLike, Protocol):
@@ -138,6 +158,12 @@ class SoundLike(Protocol):
     def play(self) -> object: ...
 
     def stop(self) -> object: ...
+
+
+class FadingSound(SoundLike, Protocol):
+    """A ``psychopy.sound.Sound`` whose volume changes while it plays."""
+
+    def setVolume(self, volume: float) -> object: ...
 
 
 class ClockLike(Protocol):

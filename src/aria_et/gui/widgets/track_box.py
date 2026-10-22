@@ -8,13 +8,14 @@ runs. It reads a :class:`~aria_et.position_monitor.PositionMonitor` on a timer.
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QHideEvent, QPainter, QPaintEvent, QPen, QShowEvent
 from PySide6.QtWidgets import QWidget
 
 from aria_et.calibration import DETOX_EYE_COLORS, POSITION_IDEAL_Z, POSITION_Z_TOLERANCE
 from aria_et.gui.theme import PALETTE
 from aria_et.position_monitor import (
     STATUS_TEXT,
+    PositionSource,
     classify,
     mean_distance,
     panel_position,
@@ -28,7 +29,9 @@ CONNECTING_TEXT = "Connecting to tracker…"
 class TrackBoxPanel(QWidget):
     """Track box with the eye dots, a distance bar and a status line."""
 
-    def __init__(self, monitor=None, parent=None):
+    def __init__(
+        self, monitor: PositionSource | None = None, parent: QWidget | None = None
+    ):
         super().__init__(parent)
         self._monitor = monitor
         self.setMinimumSize(170, 165)
@@ -41,7 +44,7 @@ class TrackBoxPanel(QWidget):
         self._timer.setInterval(REFRESH_MILLISECONDS)
         self._timer.timeout.connect(self.update)
 
-    def set_monitor(self, monitor) -> None:
+    def set_monitor(self, monitor: PositionSource | None) -> None:
         self._monitor = monitor
         self.update()
 
@@ -59,18 +62,18 @@ class TrackBoxPanel(QWidget):
         return CONNECTING_TEXT if key == "connecting" else STATUS_TEXT[key]
 
     # Only refresh while visible, so a hidden panel costs nothing.
-    def showEvent(self, event) -> None:
+    def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
         self._timer.start()
 
-    def hideEvent(self, event) -> None:
+    def hideEvent(self, event: QHideEvent) -> None:
         super().hideEvent(event)
         self._timer.stop()
 
     def is_refreshing(self) -> bool:
         return self._timer.isActive()
 
-    def paintEvent(self, event) -> None:
+    def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         width = self.width()

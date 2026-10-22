@@ -17,7 +17,7 @@ MAX_LOG_LINES = 5000
 class LogPane(QWidget):
     """Bounded log view. The complete record always lives in ``session.log``."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
 
         self._toggle = QToolButton()

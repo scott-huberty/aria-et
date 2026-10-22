@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from aria_et.gui.artifacts import RunProgress, RunStatus, WriterHealth
@@ -75,7 +76,7 @@ class TaskCard(QFrame):
     preview_requested = Signal(str)
     stop_requested = Signal(str)
 
-    def __init__(self, task_id: str, display_name: str, parent=None):
+    def __init__(self, task_id: str, display_name: str, parent: QWidget | None = None):
         super().__init__(parent)
         self.task_id = task_id
         self.setObjectName("Card")

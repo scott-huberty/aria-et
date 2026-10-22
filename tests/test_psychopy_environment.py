@@ -1,5 +1,6 @@
-from typing import Any
+from typing import Any, cast
 
+from aria_et.protocols import WindowLike
 from aria_et.psychopy.environment import (
     configure_audio,
     configure_monitor,
@@ -9,6 +10,9 @@ from aria_et.psychopy.environment import (
     open_window,
     resolve_audio_speaker,
 )
+
+# The movie factory passes the window through; these tests don't draw.
+WINDOW = cast(WindowLike, object())
 
 EIZO_SPEAKER = "EV2480 (HD Audio Driver for Display Audio)"
 SPEAKER_NAMES = ("Speakers (2- Realtek XU)", EIZO_SPEAKER)
@@ -232,7 +236,7 @@ def test_demo_movie_factory_falls_back_to_default_speaker():
         audio_speaker="EV2480",
     )
 
-    assert make_movie("window", "movie.mp4") == {
+    assert make_movie(WINDOW, "movie.mp4") == {
         "movie": {
             "filename": "movie.mp4",
             "noAudio": False,
@@ -271,7 +275,7 @@ def test_demo_movie_factory_falls_back_to_silent_movie_if_default_speaker_fails(
         audio_speaker="EV2480",
     )
 
-    assert make_movie("window", "movie.mp4") == {
+    assert make_movie(WINDOW, "movie.mp4") == {
         "movie": {
             "filename": "movie.mp4",
             "noAudio": True,

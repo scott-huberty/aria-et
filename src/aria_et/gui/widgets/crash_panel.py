@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from aria_et.gui.state import describe_exit_code
@@ -34,7 +35,7 @@ def describe_crash(display_name: str, run_label: str | None, exit_code: int) -> 
 
 
 class CrashPanel(QFrame):
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("Card")
         self._run_dir: Path | None = None

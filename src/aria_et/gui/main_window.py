@@ -6,11 +6,20 @@ from collections import deque
 from collections.abc import Callable
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import (
+    QCloseEvent,
+    QColor,
+    QIcon,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QPushButton,
     QScrollArea,
@@ -253,7 +262,9 @@ class MainWindow(QMainWindow):
         self._setup_page.close_session()
         self._go_to(0)
 
-    def _apply_nav_progress(self, item, label: str, page: PageProgress) -> None:
+    def _apply_nav_progress(
+        self, item: QListWidgetItem, label: str, page: PageProgress
+    ) -> None:
         item.setIcon(self._done_icon if page.done else self._pending_icon)
         item.setText(f"{label}   {page.detail}" if page.detail else label)
         item.setToolTip("Complete" if page.done else "Not complete yet")
@@ -328,7 +339,7 @@ class MainWindow(QMainWindow):
         else:
             self._position_monitor.stop()
 
-    def closeEvent(self, event) -> None:
+    def closeEvent(self, event: QCloseEvent) -> None:
         self._position_monitor.stop()
         super().closeEvent(event)
 

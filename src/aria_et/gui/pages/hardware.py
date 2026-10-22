@@ -82,7 +82,9 @@ class HardwarePage(QWidget):
     check_requested = Signal(list)
     save_requested = Signal(list)
 
-    def __init__(self, config: AriaEtConfig | None = None, parent=None):
+    def __init__(
+        self, config: AriaEtConfig | None = None, parent: QWidget | None = None
+    ):
         super().__init__(parent)
         self._config = config or load_config()
         self._output_lines: list[str] = []

@@ -8,20 +8,21 @@ arrow buttons, and clicking to open a combo box's list still work.
 
 from __future__ import annotations
 
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QSpinBox
 
 
 class WheelSafeSpinBox(QSpinBox):
     """A spin box the mouse wheel never changes."""
 
-    def wheelEvent(self, event) -> None:
+    def wheelEvent(self, event: QWheelEvent) -> None:
         event.ignore()
 
 
 class WheelSafeDoubleSpinBox(QDoubleSpinBox):
     """A double spin box the mouse wheel never changes."""
 
-    def wheelEvent(self, event) -> None:
+    def wheelEvent(self, event: QWheelEvent) -> None:
         event.ignore()
 
 
@@ -32,5 +33,5 @@ class WheelSafeComboBox(QComboBox):
     widget and still scrolls normally.
     """
 
-    def wheelEvent(self, event) -> None:
+    def wheelEvent(self, event: QWheelEvent) -> None:
         event.ignore()
