@@ -42,6 +42,17 @@ Json = Any
 JsonDict = dict[str, Json]
 """One section of the ``sys_info.json`` snapshot."""
 
+__all__ = [
+    "Json",
+    "JsonDict",
+    "collect_sys_info",
+    "format_sys_info",
+    "read_native_versions",
+    "read_uninstall_registry",
+    "windows_file_version",
+    "write_sys_info_snapshot",
+]
+
 CORE_PACKAGES = (
     "psychopy",
     "tobii-research",
@@ -145,7 +156,28 @@ def _installation(
 
 
 def windows_file_version(path: str | Path) -> str:
-    """Read VS_FIXEDFILEINFO through version.dll; no pywin32 dependency."""
+    """Read the file version of a Windows executable.
+
+    The function reads ``VS_FIXEDFILEINFO`` through ``version.dll``, without
+    pywin32.
+
+    Parameters
+    ----------
+    path : str or Path
+        The executable, for example the ETM executable.
+
+    Returns
+    -------
+    str
+        The version, for example ``"2.7.4.0"``.
+
+    Raises
+    ------
+    OSError
+        If Windows cannot read the version resource.
+    ValueError
+        If the version resource is not valid.
+    """
     from ctypes import wintypes
 
     dll = ctypes.WinDLL("version", use_last_error=True)
@@ -196,7 +228,17 @@ def windows_file_version(path: str | Path) -> str:
 
 
 def read_uninstall_registry() -> list[dict[str, str]]:
-    """Read both Windows registry views, including per-user installations."""
+    """Read the installed programs from the Windows uninstall registry.
+
+    The function reads the 64-bit and 32-bit registry views, for all users
+    and for the current user.
+
+    Returns
+    -------
+    list of dict of str to str
+        One entry for each program, with ``DisplayName``, ``DisplayVersion``
+        and ``Publisher`` when present, or ``error`` if a key cannot be read.
+    """
     import winreg
 
     entries: list[dict[str, str]] = []
@@ -314,7 +356,17 @@ def _native_versions() -> JsonDict:
 
 
 def read_native_versions() -> JsonDict:
-    """Allow cold starts while bounding native import/driver stalls to four seconds."""
+    """Read the versions of the bundled native media libraries.
+
+    A subprocess reads the versions, with a time limit of four seconds, so
+    that a broken audio driver cannot stop acquisition.
+
+    Returns
+    -------
+    JsonDict
+        The FFmpeg and SDL2 versions of ffpyplayer, and the PortAudio and
+        libsndfile versions.
+    """
     result = subprocess.run(
         [sys.executable, "-m", "aria_et.sysinfo", "--native"],
         capture_output=True,
@@ -370,7 +422,49 @@ def collect_sys_info(
     environ: Mapping[str, str] | None = None,
     platform_name: str | None = None,
 ) -> JsonDict:
-    """Collect independent, injectable probes; failures stay in their own rows."""
+    """Collect the system and software versions for ``sys_info.json``.
+
+    Each probe is independent. A probe that fails gives an
+    ``"error: ..."`` string in its own field, and the other probes continue.
+    The function does not import PsychoPy.
+
+    Parameters
+    ----------
+    include_tracker : bool
+        True also opens the saved tracker and reads its model, serial number
+        and firmware.
+    version_lookup : callable
+        Gives the version of an installed package. For tests.
+    distribution_lookup : callable
+        Gives the installed distribution of a package. For tests.
+    registry_reader : callable
+        Reads the Windows uninstall registry. For tests.
+    tracker_opener : callable or None
+        Opens the tracker. None uses ``open_eyetracker``. For tests.
+    config_loader : callable or None
+        Reads the user config. None uses ``load_config``. For tests.
+    config_path : callable or None
+        Gives the config path. None uses ``default_config_path``. For tests.
+    etm_path_reader : callable or None
+        Gives the default ETM path. For tests.
+    file_version_reader : callable
+        Reads the file version of an executable. For tests.
+    native_reader : callable
+        Reads the native library versions. For tests.
+    git_reader : callable
+        Reads the git commit of an editable install. For tests.
+    environ : Mapping of str to str or None
+        The environment variables. None uses ``os.environ``. For tests.
+    platform_name : str or None
+        The value of ``sys.platform``. None uses the current platform. For
+        tests.
+
+    Returns
+    -------
+    JsonDict
+        The snapshot: schema version, time, system, aria-et, config, core
+        and media packages, and Tobii software.
+    """
     from aria_et.config import default_config_path, load_config
     from aria_et.eyetracker import default_eyetracker_manager_path, open_eyetracker
 
@@ -424,7 +518,7 @@ def collect_sys_info(
     if isinstance(config, str):
         etm_path = _probe(etm_path_reader or default_eyetracker_manager_path)
 
-    def etm() -> Json:
+    def etm() -> Json:  # numpydoc ignore=GL08
         if str(etm_path).startswith("error:"):
             return etm_path
         path = Path(etm_path)
@@ -481,11 +575,24 @@ def collect_sys_info(
 
 
 def format_sys_info(info: JsonDict) -> str:
-    """Render current or archived JSON as an aligned, readable table."""
+    """Format a snapshot as an aligned table for a person to read.
+
+    Parameters
+    ----------
+    info : JsonDict
+        A snapshot from ``collect_sys_info``, or a saved ``sys_info.json``.
+
+    Returns
+    -------
+    str
+        The table, one line per row.
+    """
     # A (label, value) row, or a plain line such as a section heading.
     lines: list[tuple[str, str] | str] = []
 
-    def row(label: str, value: object, indent: str = "") -> None:
+    def row(  # numpydoc ignore=GL08
+        label: str, value: object, indent: str = ""
+    ) -> None:
         if isinstance(value, dict):
             value = "; ".join(f"{k}={v}" for k, v in value.items())
         lines.append((indent + label, str(value)))
@@ -600,7 +707,27 @@ def write_sys_info_snapshot(
     collector: Callable[..., JsonDict] | None = None,
     error_sink: StatusSink | None = None,
 ) -> JsonDict:
-    """Best effort provenance: never open a tracker or interrupt acquisition."""
+    """Write ``sys_info.json`` to a run or calibration folder.
+
+    This function never opens the tracker and never stops acquisition. If
+    the collection fails, the file contains ``{"schema_version": 1,
+    "error": ...}`` and the error goes to ``error_sink``.
+
+    Parameters
+    ----------
+    directory : Path
+        The run or calibration folder.
+    collector : callable or None
+        Collects the data. None uses ``collect_sys_info``. For tests.
+    error_sink : StatusSink or None
+        Receives an error message. None writes it to ``session.log`` in
+        ``directory``.
+
+    Returns
+    -------
+    JsonDict
+        The data that was written.
+    """
     path = Path(directory) / "sys_info.json"
     try:
         info = (collector or collect_sys_info)(include_tracker=False)

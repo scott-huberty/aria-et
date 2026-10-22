@@ -1,4 +1,4 @@
-"""Eye tracker availability checks."""
+"""Tobii eye tracker access: find, check, record gaze and save calibrations."""
 
 from __future__ import annotations
 
@@ -35,6 +35,20 @@ MACOS_EYETRACKER_MANAGER_PATH = (
 LINUX_EYETRACKER_MANAGER_PATH = (
     "/opt/TobiiProEyeTrackerManager/TobiiProEyeTrackerManager"
 )
+__all__ = [
+    "TobiiGazeRecorder",
+    "TobiiSdkUnavailableError",
+    "TobiiTrackerUnavailableError",
+    "check_eyetracker",
+    "create_tobii_gaze_recorder",
+    "default_eyetracker_manager_path",
+    "find_eyetracker",
+    "load_tobii_research",
+    "open_eyetracker",
+    "run_eyetracker_manager_calibration",
+    "save_current_calibration",
+]
+
 DEFAULT_CALIBRATION_DIR = "calibrations"
 # Retries when replacing gaze_writer.json is refused (Windows, GUI reading it).
 HEALTH_REPLACE_ATTEMPTS = 3
@@ -47,10 +61,22 @@ def default_eyetracker_manager_path(
 ) -> str:
     """Return where Tobii Pro Eye Tracker Manager is installed by default.
 
-    On Windows ETM installs per user under ``%LOCALAPPDATA%\\Programs`` or, for
-    an all-users install, under ``%ProgramFiles%``. The first candidate that
-    exists wins; otherwise the per-user location is returned so the "not
-    found" message points somewhere sensible.
+    On Windows, ETM installs per user under ``%LOCALAPPDATA%\\Programs``, or
+    for all users under ``%ProgramFiles%``. The function returns the first
+    of these paths that exists. If neither exists, it returns the per-user
+    path, so that a "not found" message shows a useful path.
+
+    Parameters
+    ----------
+    platform : str
+        The value of ``sys.platform``. For tests.
+    environ : Mapping of str to str
+        The environment variables. For tests.
+
+    Returns
+    -------
+    str
+        The path of the ETM executable.
     """
     if platform.startswith("win"):
         install_dirs = (
@@ -92,6 +118,23 @@ def load_tobii_research(
     *,
     import_module: ImportModule = importlib.import_module,
 ) -> ModuleType:
+    """Import the Tobii Pro SDK.
+
+    Parameters
+    ----------
+    import_module : ImportModule
+        Imports ``tobii_research``. For tests.
+
+    Returns
+    -------
+    ModuleType
+        The ``tobii_research`` module.
+
+    Raises
+    ------
+    TobiiSdkUnavailableError
+        If the SDK is not installed.
+    """
     try:
         return import_module("tobii_research")
     except ImportError as error:
@@ -108,11 +151,33 @@ def open_eyetracker(
     import_module: ImportModule = importlib.import_module,
     error_sink: StatusSink | None = None,
 ) -> TobiiEyeTracker:
-    """Open a tracker by address, falling back to discovery by serial number.
+    """Open a tracker by address. If that fails, find it by serial number.
 
-    Link-local tracker addresses can change, so when ``address`` cannot be
-    opened and ``serial_number`` is known, the tracker with that serial number
-    is looked up by discovery instead.
+    Link-local tracker addresses can change. If ``address`` cannot be opened
+    and ``serial_number`` is known, discovery finds the tracker with that
+    serial number. Without an address, the function uses discovery.
+
+    Parameters
+    ----------
+    address : str or None
+        The tracker address. None uses discovery.
+    serial_number : str or None
+        The serial number of the tracker.
+    import_module : ImportModule
+        Imports ``tobii_research``. For tests.
+    error_sink : StatusSink or None
+        Receives a warning when discovery finds the tracker at a new address.
+        None prints it to standard error.
+
+    Returns
+    -------
+    TobiiEyeTracker
+        The open tracker.
+
+    Raises
+    ------
+    TobiiTrackerUnavailableError
+        If no tracker can be opened.
     """
     tobii_research = load_tobii_research(import_module=import_module)
     if address is not None:
@@ -172,6 +237,27 @@ def check_eyetracker(
     output_sink: StatusSink | None = None,
     error_sink: StatusSink | None = None,
 ) -> int:
+    """Check that the SDK works and that a tracker is connected.
+
+    Parameters
+    ----------
+    address : str or None
+        The tracker address. None uses discovery.
+    serial_number : str or None
+        The serial number of the tracker.
+    import_module : ImportModule
+        Imports ``tobii_research``. For tests.
+    output_sink : StatusSink or None
+        Receives status messages. None prints them.
+    error_sink : StatusSink or None
+        Receives error messages. None prints them to standard error.
+
+    Returns
+    -------
+    int
+        The exit code: 0 if a tracker is connected, 2 if the SDK is not
+        available, 3 if no tracker is found.
+    """
     output = output_sink or print
     error = error_sink or (lambda message: print(message, file=sys.stderr))
 
@@ -217,7 +303,30 @@ def find_eyetracker(
     output_sink: StatusSink | None = None,
     error_sink: StatusSink | None = None,
 ) -> int:
-    """Discover connected trackers and optionally save one to the user config."""
+    """List the connected trackers, and save one to the user config if asked.
+
+    Parameters
+    ----------
+    save : bool
+        True saves the address and serial number of the tracker to the config.
+    serial_number : str or None
+        The tracker to save if more than one is connected.
+    config_path : str or Path or None
+        The config file. None uses the default path.
+    import_module : ImportModule
+        Imports ``tobii_research``. For tests.
+    output_sink : StatusSink or None
+        Receives status messages. None prints them.
+    error_sink : StatusSink or None
+        Receives error messages. None prints them to standard error.
+
+    Returns
+    -------
+    int
+        The exit code: 0 for success, 2 if the SDK is not available, 3 if no
+        tracker (or no tracker with ``serial_number``) is found, 4 if more
+        than one tracker is found and ``serial_number`` is not given.
+    """
     from aria_et.config import load_config, set_config
 
     output = output_sink or print
@@ -306,6 +415,36 @@ def _report_eyetrackers(
 
 
 class TobiiGazeRecorder:
+    """Records Tobii gaze samples to ``gaze.jsonl`` on a writer thread.
+
+    The Tobii callback only puts each sample in a bounded queue. A writer
+    thread writes one JSON line per sample and flushes the file at a fixed
+    number of samples or seconds. If the queue is full, the sample is
+    dropped and counted. Use the recorder as a context manager.
+
+    Parameters
+    ----------
+    eyetracker : GazeTracker
+        The open tracker.
+    tobii_research : ModuleType
+        The ``tobii_research`` module, for its stream names.
+    gaze_path : str or Path
+        The ``gaze.jsonl`` file. An existing file is replaced.
+    tracker_metadata_path : str or Path
+        The ``tracker.json`` file: address, model, serial and firmware.
+    writer_health_path : str or Path or None
+        The ``gaze_writer.json`` file with the writer counters. None writes no
+        health file.
+    clock : callable
+        Gives the time in seconds when a sample is received.
+    flush_every_samples : int
+        The writer flushes the file after this number of samples.
+    flush_every_seconds : float
+        The writer flushes the file after this number of seconds.
+    max_queue_samples : int
+        The size of the queue. More samples than this are dropped.
+    """
+
     def __init__(
         self,
         *,
@@ -368,6 +507,7 @@ class TobiiGazeRecorder:
         self.stop()
 
     def start(self) -> None:
+        """Write ``tracker.json``, start the writer thread, and subscribe."""
         if self._started:
             return
 
@@ -420,6 +560,13 @@ class TobiiGazeRecorder:
             raise
 
     def stop(self) -> None:
+        """Unsubscribe, write the remaining samples, and close the file.
+
+        Raises
+        ------
+        RuntimeError
+            If the writer thread failed during the recording.
+        """
         if not self._started:
             return
 
@@ -518,6 +665,14 @@ class TobiiGazeRecorder:
         self._write_writer_health_snapshot()
 
     def writer_health(self) -> dict[str, object]:
+        """Return the counters of the gaze writer.
+
+        Returns
+        -------
+        dict of str to object
+            The content of ``gaze_writer.json``: received, written and
+            dropped samples, flushes, and the state of the writer thread.
+        """
         return {
             "schema_version": 1,
             "started_at": self._started_at,
@@ -586,6 +741,28 @@ def create_tobii_gaze_recorder(
     serial_number: str | None = None,
     import_module: ImportModule = importlib.import_module,
 ) -> TobiiGazeRecorder:
+    """Open a tracker and make a ``TobiiGazeRecorder`` for it.
+
+    Parameters
+    ----------
+    gaze_path : str or Path
+        The ``gaze.jsonl`` file.
+    tracker_metadata_path : str or Path
+        The ``tracker.json`` file.
+    writer_health_path : str or Path or None
+        The ``gaze_writer.json`` file. None puts it next to ``gaze_path``.
+    address : str or None
+        The tracker address. None uses discovery.
+    serial_number : str or None
+        The serial number of the tracker.
+    import_module : ImportModule
+        Imports ``tobii_research``. For tests.
+
+    Returns
+    -------
+    TobiiGazeRecorder
+        The recorder. It does not record until it starts.
+    """
     tobii_research = load_tobii_research(import_module=import_module)
     eyetracker = open_eyetracker(
         address=address,
@@ -692,10 +869,45 @@ def save_current_calibration(
     extra_metadata: dict[str, object] | None = None,
     sys_info_collector: Callable[..., dict] | None = None,
 ) -> Path:
-    """Save the tracker's active calibration and its ``calibration.json``.
+    """Save the active calibration of the tracker, with ``calibration.json``.
 
-    ``extra_metadata`` is merged into ``calibration.json``, e.g. the calibration
-    point positions and validation results of a child-friendly calibration.
+    The function writes ``calibration.bin`` (the calibration data),
+    ``calibration.json`` (the metadata) and ``sys_info.json``.
+
+    Parameters
+    ----------
+    eyetracker : CalibratedTracker
+        The tracker with the calibration to save.
+    output_dir : str or Path
+        The ``calibrations`` folder. Used when ``artifact_dir`` is None.
+    artifact_dir : str or Path or None
+        The folder of this calibration. None makes a new
+        ``calibration-<time>`` folder in ``output_dir``.
+    method : str
+        The calibration method, for example ``"child-friendly-detox"``.
+    screen : int
+        The screen that showed the calibration.
+    manager_executable : str or None
+        The ETM executable, for an ETM calibration.
+    manager_return_code : int or None
+        The exit code of ETM, for an ETM calibration.
+    now : datetime or None
+        The time of the calibration. None uses the current time.
+    extra_metadata : dict of str to object or None
+        More data for ``calibration.json``, for example the calibration
+        points and the validation results.
+    sys_info_collector : callable or None
+        Collects the ``sys_info.json`` data. For tests.
+
+    Returns
+    -------
+    Path
+        The folder of the saved calibration.
+
+    Raises
+    ------
+    TobiiTrackerUnavailableError
+        If the tracker has no active calibration.
     """
     created_at = now or datetime.now(timezone.utc)
     if artifact_dir is None:
@@ -782,6 +994,40 @@ def run_eyetracker_manager_calibration(
     output_sink: StatusSink | None = None,
     error_sink: StatusSink | None = None,
 ) -> int:
+    """Run a calibration in Tobii Pro Eye Tracker Manager, then save it.
+
+    Parameters
+    ----------
+    address : str or None
+        The tracker address. Use ``address`` or ``serial_number``, not both.
+    serial_number : str or None
+        The tracker serial number. Use ``address`` or ``serial_number``, not
+        both. If both are None, discovery finds the tracker.
+    screen : int
+        The screen where ETM shows the calibration.
+    executable : str or Path or None
+        The ETM executable. None uses ``default_eyetracker_manager_path()``.
+    calibration_output_dir : str or Path or None
+        The ``calibrations`` folder. None does not save the calibration.
+    import_module : ImportModule
+        Imports ``tobii_research``. For tests.
+    run_command : callable
+        Runs ETM. For tests.
+    now : callable
+        Gives the time of the calibration. For tests.
+    output_sink : StatusSink or None
+        Receives status messages. None prints them.
+    error_sink : StatusSink or None
+        Receives error messages. None prints them to standard error.
+
+    Returns
+    -------
+    int
+        The exit code: the exit code of ETM, 2 if the SDK is not available,
+        3 if no tracker is found, 4 if saving the calibration failed, 44 if
+        ETM is not found, 51 if both ``address`` and ``serial_number`` are
+        given.
+    """
     output = output_sink or print
     error = error_sink or (lambda message: print(message, file=sys.stderr))
     manager = str(

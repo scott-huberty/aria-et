@@ -22,6 +22,16 @@ TASK_BIDS_LABELS = {
 
 @dataclass(frozen=True)
 class BidsExportResult:
+    """The files that one run export wrote.
+
+    Attributes
+    ----------
+    bids_root : Path
+        The root folder of the BIDS dataset.
+    written_files : tuple of Path
+        Each file that the export wrote or replaced.
+    """
+
     bids_root: Path
     written_files: tuple[Path, ...]
 
@@ -31,6 +41,25 @@ def export_run_to_bids(
     run_dir: str | Path,
     bids_root: str | Path,
 ) -> BidsExportResult:
+    """Export one raw run to the BIDS dataset.
+
+    The export writes ``events.tsv`` and ``events.json``, and one
+    ``physio.tsv.gz`` and ``physio.json`` pair for each eye. It replaces
+    the files of an earlier export of the same run.
+
+    Parameters
+    ----------
+    run_dir : str or Path
+        The raw run folder, ``task-<task>_run-<run>``, with ``session.json``,
+        ``tracker.json``, ``events.jsonl`` and ``gaze.jsonl``.
+    bids_root : str or Path
+        The root folder of the BIDS dataset.
+
+    Returns
+    -------
+    BidsExportResult
+        The BIDS root and the files that the export wrote.
+    """
     run_path = Path(run_dir)
     root = Path(bids_root)
     session = _read_json(run_path / "session.json")

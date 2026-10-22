@@ -17,6 +17,18 @@ DEFAULT_EIZO_SCREEN_DISTANCE_METERS = 0.65
 DEFAULT_EIZO_SCREEN_RESOLUTION = "1920x1080"
 DEFAULT_EIZO_SCREEN_SIZE_METERS = "0.527x0.296"
 DEFAULT_MONITOR_NAME = "EIZO_EV2480"
+__all__ = [
+    "CONFIG_KEYS",
+    "AriaEtConfig",
+    "ConfigValue",
+    "default_config_path",
+    "default_config_text",
+    "get_config_value",
+    "load_config",
+    "set_config",
+    "unset_config",
+]
+
 DEFAULT_AUDIO_SPEAKER = "EV2480"
 
 ConfigValue = str | int | float
@@ -25,6 +37,35 @@ ConfigValue = str | int | float
 
 @dataclass(frozen=True)
 class AriaEtConfig:
+    """The settings of one laptop, from ``~/.aria-et/config.toml``.
+
+    Attributes
+    ----------
+    data_root : Path
+        The folder that contains ``sourcedata`` and ``bids``.
+    etm_screen : int
+        The screen number that Tobii Eye Tracker Manager uses.
+    psychopy_screen : int
+        The PsychoPy screen number of the stimulus display.
+    screen_distance_meters : float
+        The distance from the eyes of the participant to the screen.
+    screen_resolution : str
+        The resolution of the stimulus display, for example ``"1920x1080"``.
+    screen_size_meters : str
+        The width and height of the stimulus display, for example
+        ``"0.527x0.296"``.
+    monitor_name : str
+        The name of the PsychoPy monitor profile.
+    audio_speaker : str or None
+        The name, or part of the name, of the speaker for stimulus audio.
+    eye_tracker_manager : str or None
+        The path to Eye Tracker Manager. None uses the default install path.
+    tracker_address : str or None
+        The address of the tracker of this laptop.
+    tracker_serial_number : str or None
+        The serial number of the tracker of this laptop.
+    """
+
     data_root: Path = Path.home() / DEFAULT_DATA_DIR_NAME
     etm_screen: int = DEFAULT_ETM_SCREEN
     psychopy_screen: int = DEFAULT_PSYCHOPY_SCREEN
@@ -56,10 +97,29 @@ CONFIG_KEYS: dict[str, type] = {
 
 
 def default_config_path() -> Path:
+    """Return the path of the user config file.
+
+    Returns
+    -------
+    Path
+        ``~/.aria-et/config.toml``.
+    """
     return Path.home() / ".aria-et" / "config.toml"
 
 
 def default_config_text(config: AriaEtConfig | None = None) -> str:
+    """Return the text of a new config file.
+
+    Parameters
+    ----------
+    config : AriaEtConfig or None
+        The values to write. None writes the lab defaults.
+
+    Returns
+    -------
+    str
+        The TOML text, with comments for the tracker settings.
+    """
     config = config or AriaEtConfig(
         data_root=Path.home() / DEFAULT_DATA_DIR_NAME,
         audio_speaker=DEFAULT_AUDIO_SPEAKER,
@@ -92,6 +152,19 @@ def default_config_text(config: AriaEtConfig | None = None) -> str:
 
 
 def load_config(path: str | Path | None = None) -> AriaEtConfig:
+    """Read the user config file.
+
+    Parameters
+    ----------
+    path : str or Path or None
+        The config file. None reads ``default_config_path()``.
+
+    Returns
+    -------
+    AriaEtConfig
+        The settings. A setting that is not in the file has its default value.
+        If the file does not exist, all settings have their default values.
+    """
     config_path = Path(path).expanduser() if path is not None else default_config_path()
     if not config_path.exists():
         return AriaEtConfig(data_root=Path.home() / DEFAULT_DATA_DIR_NAME)
@@ -155,7 +228,20 @@ def load_config(path: str | Path | None = None) -> AriaEtConfig:
 
 
 def get_config_value(key: str, path: str | Path | None = None) -> object:
-    """Return the raw value stored under a dotted ``section.key``, or None."""
+    """Return the value that the config file stores for one key.
+
+    Parameters
+    ----------
+    key : str
+        A key from ``CONFIG_KEYS``, for example ``"tobii.address"``.
+    path : str or Path or None
+        The config file. None reads ``default_config_path()``.
+
+    Returns
+    -------
+    object
+        The value as stored in the file, or None if the file has no value.
+    """
     section, name = _split_key(key)
     return _read_raw_config(_config_path(path)).get(section, {}).get(name)
 
@@ -163,10 +249,24 @@ def get_config_value(key: str, path: str | Path | None = None) -> object:
 def set_config(
     key: str, value: ConfigValue, path: str | Path | None = None
 ) -> AriaEtConfig:
-    """Persist ``value`` under a dotted ``section.key`` in the user config.
+    """Write one value to the user config file.
 
-    Creates the config file from the lab defaults if it does not exist yet.
-    Rewriting the file drops any comments it contained.
+    If the file does not exist, this function makes it from the lab
+    defaults first. The new file does not keep the comments of the old file.
+
+    Parameters
+    ----------
+    key : str
+        A key from ``CONFIG_KEYS``, for example ``"tobii.address"``.
+    value : ConfigValue
+        The value. It is converted to the type that ``CONFIG_KEYS`` gives.
+    path : str or Path or None
+        The config file. None uses ``default_config_path()``.
+
+    Returns
+    -------
+    AriaEtConfig
+        The settings after the change.
     """
     section, name = _split_key(key)
     config_path = _config_path(path)
@@ -177,7 +277,21 @@ def set_config(
 
 
 def unset_config(key: str, path: str | Path | None = None) -> AriaEtConfig:
-    """Remove a dotted ``section.key`` from the user config, if present."""
+    """Remove one key from the user config file.
+
+    Parameters
+    ----------
+    key : str
+        A key from ``CONFIG_KEYS``, for example ``"tobii.address"``.
+    path : str or Path or None
+        The config file. None uses ``default_config_path()``.
+
+    Returns
+    -------
+    AriaEtConfig
+        The settings after the change. If the file did not have the key,
+        the file does not change.
+    """
     section, name = _split_key(key)
     config_path = _config_path(path)
     raw_config = _read_raw_config(config_path)

@@ -36,6 +36,23 @@ jobs:
       - name: Check lint and formatting
         run: pixi run --locked -e lint lint
 
+  docstring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.11.2
+        with:
+          manifest-path: pyproject.toml
+          pixi-version: v0.82.0
+          environments: lint
+          locked: true
+          cache-key: pixi-lint-
+      - name: Check docstrings (numpydoc)
+        run: pixi run --locked -e lint docstrings
   tests:
     name: ${{ matrix.job }}
     runs-on: windows-latest
