@@ -23,6 +23,17 @@ from aria_et.eyetracker import (
 from aria_et.eyetracker import check_eyetracker as default_check_eyetracker
 from aria_et.runtime import EventSink, RuntimeEvent
 
+__all__ = [
+    "BidsSessionMetadata",
+    "GazeRecorder",
+    "JsonLinesEventSink",
+    "RecorderFactory",
+    "StimulusDisplayMetadata",
+    "TrackerName",
+    "bids_subject_session_dir",
+    "run_recording_session",
+]
+
 TrackerName = Literal["none", "tobii"]
 StatusSink = Callable[[str], None]
 PresenterRunner = Callable[[EventSink], None]
@@ -32,17 +43,36 @@ EyeTrackerCheck = Callable[..., int]
 class GazeRecorder(Protocol):
     """Structural interface for e.g. TobiiGazeRecorder."""
 
-    def __enter__(self) -> object: ...
+    def __enter__(self) -> object:
+        """Start recording.
+
+        Returns
+        -------
+        object
+            The recorder.
+        """
+        ...
+
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None: ...
-    def writer_health(self) -> dict[str, object]: ...
+    def writer_health(self) -> dict[str, object]:
+        """Return the counters of the gaze writer.
+
+        Returns
+        -------
+        dict of str to object
+            For example the number of samples received, written and dropped.
+        """
+        ...
 
 
 class RecorderFactory(Protocol):
+    """Makes the ``GazeRecorder`` of one run, e.g. ``create_tobii_gaze_recorder``."""
+
     def __call__(
         self,
         *,
@@ -56,6 +86,19 @@ class RecorderFactory(Protocol):
 
 @dataclass(frozen=True)
 class BidsSessionMetadata:
+    """The BIDS labels of one run.
+
+    Attributes
+    ----------
+    subject : str
+        The subject label, with or without ``"sub-"``.
+    session : str or None
+        The session label, with or without ``"ses-"``. None for no session.
+    run : str or None
+        The run label, with or without ``"run-"``. None gives the next free
+        run number.
+    """
+
     subject: str
     session: str | None = None
     run: str | None = None
@@ -63,6 +106,26 @@ class BidsSessionMetadata:
 
 @dataclass(frozen=True)
 class StimulusDisplayMetadata:
+    """The stimulus display of one run, as written to ``session.json``.
+
+    Attributes
+    ----------
+    screen_distance_meters : float
+        The distance from the eyes of the participant to the screen.
+    screen_origin : tuple of (str, str)
+        The corner where the pixel coordinates start.
+    screen_resolution_pixels : tuple of (int, int)
+        The width and height of the screen in pixels.
+    screen_size_meters : tuple of (float, float)
+        The width and height of the screen in meters.
+    psychopy_screen : int
+        The PsychoPy screen number.
+    fullscreen : bool
+        True if the PsychoPy window filled the screen.
+    window_size_pixels : tuple of (int, int)
+        The size of the PsychoPy window in pixels.
+    """
+
     screen_distance_meters: float = 0.65
     screen_origin: tuple[str, str] = ("top", "left")
     screen_resolution_pixels: tuple[int, int] = (1920, 1080)
@@ -73,10 +136,25 @@ class StimulusDisplayMetadata:
 
 
 class JsonLinesEventSink:
+    """An ``EventSink`` that writes one JSON line per event and flushes it.
+
+    Parameters
+    ----------
+    path : Path
+        The ``events.jsonl`` file. An existing file is replaced.
+    """
+
     def __init__(self, path: Path):
         self._file = path.open("w", encoding="utf-8")
 
     def emit(self, event: RuntimeEvent) -> None:
+        """Write one event to the file.
+
+        Parameters
+        ----------
+        event : RuntimeEvent
+            The event to write.
+        """
         self._file.write(
             json.dumps(
                 {
@@ -91,6 +169,7 @@ class JsonLinesEventSink:
         self._file.flush()
 
     def close(self) -> None:
+        """Close the file."""
         self._file.close()
 
 
@@ -193,6 +272,48 @@ def run_recording_session(
     error_sink: StatusSink | None = None,
     sys_info_collector: Callable[..., dict] | None = None,
 ) -> int:
+    """Record one run of a task: the run folder, gaze, events and metadata.
+
+    The function makes the run folder, writes ``sys_info.json`` and
+    ``session.json``, checks the tracker, records gaze while ``present``
+    runs, and writes the final gaze writer health. ``session.log`` receives
+    all console output of the run.
+
+    Parameters
+    ----------
+    task_id : str
+        The task id, for example ``"activity-monitoring"``.
+    tracker : TrackerName
+        ``"tobii"`` records gaze. ``"none"`` is a dry run without gaze.
+    output_dir : str or Path
+        The ``sourcedata`` folder.
+    present : PresenterRunner
+        Shows the task. It receives the event sink of the run.
+    bids : BidsSessionMetadata or None
+        The subject, session and run labels. None writes the run to
+        ``output_dir`` directly.
+    stimulus_display : StimulusDisplayMetadata or None
+        The display settings to write to ``session.json``.
+    tracker_address : str or None
+        The tracker address. None uses discovery.
+    tracker_serial_number : str or None
+        The tracker serial number, used if the address is not reachable.
+    check_eyetracker : EyeTrackerCheck
+        Checks the tracker before the run. For tests.
+    recorder_factory : RecorderFactory
+        Makes the gaze recorder. For tests.
+    error_sink : StatusSink or None
+        Receives error messages. None prints them to standard error.
+    sys_info_collector : callable or None
+        Collects the ``sys_info.json`` data. For tests.
+
+    Returns
+    -------
+    int
+        The exit code: 0 for a complete run, 2 if the Tobii SDK is not
+        available, 3 if the tracker is not available, 5 if the run folder
+        exists, or the exit code of ``check_eyetracker``.
+    """
     error = error_sink or (lambda message: print(message, file=sys.stderr))
 
     try:
@@ -296,6 +417,23 @@ def bids_subject_session_dir(
     subject: str,
     session: str | None,
 ) -> Path:
+    """Return the folder of one subject and session in the BIDS layout.
+
+    Parameters
+    ----------
+    output_dir : str or Path
+        The ``sourcedata`` or BIDS root folder.
+    subject : str
+        The subject label, with or without ``"sub-"``.
+    session : str or None
+        The session label, with or without ``"ses-"``. None for no session.
+
+    Returns
+    -------
+    Path
+        ``<output_dir>/sub-<subject>/ses-<session>``, or
+        ``<output_dir>/sub-<subject>`` if there is no session.
+    """
     normalized = _normalize_bids_metadata(
         BidsSessionMetadata(subject=subject, session=session)
     )

@@ -93,6 +93,13 @@ extend-select = ["ANN"]
 mypy-init-return = true
 
 
+[tool.numpydoc_validation]
+# All checks except examples (EX01), See Also (SA01), extended summary (ES01)
+# and GL01: the summary starts on the opening-quote line, as ruff formats it.
+checks = ["all", "EX01", "SA01", "ES01", "GL01"]
+# Private names are not API.
+exclude = ['\._']
+
 [tool.ty.rules]
 
 [tool.ty.environment]
@@ -166,11 +173,15 @@ docs = "sphinx-build -b html docs/source docs/_build/html"
 [tool.pixi.feature.lint.dependencies]
 python = "==3.10.21"
 ruff = "==0.16.3"
+numpydoc = "==1.10.0"
 
 [tool.pixi.feature.lint.tasks]
 lint = "ruff check . && ruff format --check ."
 # The pre-commit hook runs this; CI runs the check-only `lint` above.
 lint-fix = "ruff check --fix . && ruff format ."
+# numpydoc validation of the API modules. The pre-commit hook and the CI
+# `docstring` job both run this task. Add a module here once its docstrings pass.
+docstrings = "numpydoc lint src/aria_et/__init__.py src/aria_et/config.py src/aria_et/bids/__init__.py src/aria_et/bids/export.py src/aria_et/session.py src/aria_et/runtime.py src/aria_et/protocols.py src/aria_et/sysinfo.py src/aria_et/eyetracker.py"
 
 [tool.pixi.feature.logo.dependencies]
 python = "==3.10.21"

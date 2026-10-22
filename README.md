@@ -14,6 +14,7 @@ pixi install --locked
 pixi run test
 pixi run lint
 pixi run typecheck
+pixi run -e lint docstrings
 pixi run gui
 pixi run aria-et list-tasks
 ```
@@ -21,6 +22,11 @@ pixi run aria-et list-tasks
 `pixi run typecheck` runs the `ty` type checker on `src`, `tests` and
 `scripts`. The pre-commit hook and the CI `typecheck` job run the same pixi
 task. To enable the hooks, run `pixi run pre-commit install` once.
+
+`pixi run -e lint docstrings` validates the docstrings of the API modules with
+numpydoc (rules in `[tool.numpydoc_validation]`). The `docstrings` task in
+`pyproject.toml` lists the API modules; add a module there once its docstrings
+pass. The pre-commit hook and the CI `docstring` job run the same task.
 
 The default environment includes the GUI, PsychoPy, Tobii SDK, and test tools.
 `pyproject.toml` declares the environments; `pixi.lock` pins the exact conda

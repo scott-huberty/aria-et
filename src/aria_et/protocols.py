@@ -13,6 +13,32 @@ from collections.abc import Callable, Mapping, Sequence
 from types import ModuleType
 from typing import Any, Protocol
 
+__all__ = [
+    "CalibratedTracker",
+    "CalibrationSource",
+    "ClockLike",
+    "ClosableWindow",
+    "DetoxController",
+    "DisplayArea",
+    "DrawableLike",
+    "DrawingWindow",
+    "FadingSound",
+    "GazeCallback",
+    "GazeSample",
+    "GazeSource",
+    "GazeTracker",
+    "ImportModule",
+    "MovieLike",
+    "PsychoPyModule",
+    "ScreenBasedCalibration",
+    "SoundLike",
+    "StatusSink",
+    "TobiiEyeTracker",
+    "TrackerIdentity",
+    "Wait",
+    "WindowLike",
+]
+
 StatusSink = Callable[[str], None]
 """Receives one line of operator-facing status text."""
 
@@ -49,16 +75,24 @@ class TrackerIdentity(Protocol):
     """The fields that identify a Tobii eye tracker."""
 
     @property
-    def address(self) -> str: ...
+    def address(self) -> str:
+        """The network address, for example ``"tobii-prp://169.254.10.180"``."""
+        ...
 
     @property
-    def model(self) -> str: ...
+    def model(self) -> str:
+        """The model name, for example ``"Tobii Pro Spectrum"``."""
+        ...
 
     @property
-    def serial_number(self) -> str: ...
+    def serial_number(self) -> str:
+        """The serial number."""
+        ...
 
     @property
-    def firmware_version(self) -> str: ...
+    def firmware_version(self) -> str:
+        """The firmware version."""
+        ...
 
 
 class GazeSource(Protocol):
@@ -70,34 +104,78 @@ class GazeSource(Protocol):
         callback: GazeCallback,
         /,
         as_dictionary: bool = False,
-    ) -> object: ...
+    ) -> object:
+        """Start to send the samples of one stream to a callback.
 
-    def unsubscribe_from(self, stream: str, callback: GazeCallback, /) -> object: ...
+        Parameters
+        ----------
+        stream : str
+            The stream, for example ``tobii_research.EYETRACKER_GAZE_DATA``.
+        callback : GazeCallback
+            Receives each sample, on a thread of the Tobii SDK.
+        as_dictionary : bool
+            True sends each sample as a dictionary. aria-et always uses True.
+        """
+        ...
+
+    def unsubscribe_from(self, stream: str, callback: GazeCallback, /) -> object:
+        """Stop to send the samples of one stream to a callback.
+
+        Parameters
+        ----------
+        stream : str
+            The stream that ``subscribe_to`` started.
+        callback : GazeCallback
+            The callback that ``subscribe_to`` received.
+        """
+        ...
 
 
 class CalibrationSource(Protocol):
     """A Tobii eye tracker that can return its active calibration."""
 
-    def retrieve_calibration_data(self) -> bytes | None: ...
+    def retrieve_calibration_data(self) -> bytes | None:
+        """Read the active calibration from the tracker.
+
+        Returns
+        -------
+        bytes or None
+            The calibration data, or None if the tracker has no calibration.
+        """
+        ...
 
 
 class ScreenBasedCalibration(Protocol):
     """``tobii_research.ScreenBasedCalibration``."""
 
-    def compute_and_apply(self) -> object: ...
+    def compute_and_apply(self) -> object:
+        """Compute a calibration from the collected points and apply it.
+
+        Returns
+        -------
+        object
+            The calibration result of the Tobii SDK.
+        """
+        ...
 
 
 class DisplayArea(Protocol):
     """The tracker's display area corners, in user coordinates (mm)."""
 
     @property
-    def top_left(self) -> Sequence[float]: ...
+    def top_left(self) -> Sequence[float]:
+        """The top-left corner (x, y, z)."""
+        ...
 
     @property
-    def top_right(self) -> Sequence[float]: ...
+    def top_right(self) -> Sequence[float]:
+        """The top-right corner (x, y, z)."""
+        ...
 
     @property
-    def bottom_left(self) -> Sequence[float]: ...
+    def bottom_left(self) -> Sequence[float]:
+        """The bottom-left corner (x, y, z)."""
+        ...
 
 
 class GazeTracker(TrackerIdentity, GazeSource, Protocol):
@@ -111,7 +189,15 @@ class CalibratedTracker(TrackerIdentity, CalibrationSource, Protocol):
 class TobiiEyeTracker(TrackerIdentity, GazeSource, CalibrationSource, Protocol):
     """``tobii_research.EyeTracker``: the members that aria-et uses."""
 
-    def get_display_area(self) -> DisplayArea: ...
+    def get_display_area(self) -> DisplayArea:
+        """Read the display area that the tracker uses.
+
+        Returns
+        -------
+        DisplayArea
+            The corners of the display area.
+        """
+        ...
 
 
 # -- PsychoPy -----------------------------------------------------------------
@@ -121,13 +207,29 @@ class DrawingWindow(Protocol):
     """``psychopy.visual.Window``: a window to draw into and flip."""
 
     @property
-    def size(self) -> Sequence[float]: ...
+    def size(self) -> Sequence[float]:
+        """The width and height of the window in pixels."""
+        ...
 
-    def flip(self) -> object: ...
+    def flip(self) -> object:
+        """Show the frame that was drawn, at the next screen refresh.
+
+        Returns
+        -------
+        object
+            Not used by aria-et.
+        """
+        ...
 
 
 class WindowLike(DrawingWindow, Protocol):
-    """``psychopy.visual.Window``: the members that the presenters use."""
+    """``psychopy.visual.Window``: the members that the presenters use.
+
+    Attributes
+    ----------
+    color : str or tuple of (float, float, float)
+        The background colour that the next ``flip`` shows.
+    """
 
     color: str | tuple[float, float, float]
 
@@ -135,38 +237,107 @@ class WindowLike(DrawingWindow, Protocol):
 class ClosableWindow(WindowLike, Protocol):
     """A window that the caller opened and must close."""
 
-    def close(self) -> object: ...
+    def close(self) -> object:
+        """Close the window.
+
+        Returns
+        -------
+        object
+            Not used by aria-et.
+        """
+        ...
 
 
 class DrawableLike(Protocol):
     """A PsychoPy stimulus, for example ``psychopy.visual.ImageStim``."""
 
-    def draw(self) -> object: ...
+    def draw(self) -> object:
+        """Draw the stimulus into the next frame.
+
+        Returns
+        -------
+        object
+            Not used by aria-et.
+        """
+        ...
 
 
 class MovieLike(DrawableLike, Protocol):
     """``psychopy.visual.MovieStim``."""
 
-    def play(self) -> object: ...
+    def play(self) -> object:
+        """Start the movie.
 
-    def unload(self) -> object: ...
+        Returns
+        -------
+        object
+            Not used by aria-et.
+        """
+        ...
+
+    def unload(self) -> object:
+        """Stop the movie and release its decoder and texture.
+
+        Returns
+        -------
+        object
+            Not used by aria-et.
+        """
+        ...
 
 
 class SoundLike(Protocol):
     """``psychopy.sound.Sound``."""
 
-    def play(self) -> object: ...
+    def play(self) -> object:
+        """Start the sound.
 
-    def stop(self) -> object: ...
+        Returns
+        -------
+        object
+            Not used by aria-et.
+        """
+        ...
+
+    def stop(self) -> object:
+        """Stop the sound.
+
+        Returns
+        -------
+        object
+            Not used by aria-et.
+        """
+        ...
 
 
 class FadingSound(SoundLike, Protocol):
     """A ``psychopy.sound.Sound`` whose volume changes while it plays."""
 
-    def setVolume(self, volume: float) -> object: ...
+    def setVolume(self, volume: float) -> object:
+        """Set the volume.
+
+        Parameters
+        ----------
+        volume : float
+            The volume, from 0 (silent) to 1 (full).
+
+        Returns
+        -------
+        object
+            Not used by aria-et.
+        """
+        ...
 
 
 class ClockLike(Protocol):
     """``psychopy.core.Clock``."""
 
-    def getTime(self) -> float: ...
+    def getTime(self) -> float:
+        """Return the time since the clock started.
+
+        Returns
+        -------
+        float
+            The time in seconds.
+        """
+        ...

@@ -11,6 +11,13 @@ repos:
       language: system
       pass_filenames: false
       types_or: [python, pyi, toml]
+    # numpydoc validation of the API modules. Same command as the CI docstring job.
+    - id: docstrings
+      name: numpydoc
+      entry: pixi run --locked -e lint docstrings
+      language: system
+      pass_filenames: false
+      types_or: [python, toml]
     # Same command as the CI typecheck job.
     - id: typecheck
       name: ty
