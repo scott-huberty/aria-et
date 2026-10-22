@@ -464,7 +464,8 @@ def collect_sys_info(
 
 def format_sys_info(info: dict) -> str:
     """Render current or archived JSON as an aligned, readable table."""
-    lines = []
+    # A (label, value) row, or a plain line such as a section heading.
+    lines: list[tuple[str, str] | str] = []
 
     def row(label, value, indent=""):
         if isinstance(value, dict):

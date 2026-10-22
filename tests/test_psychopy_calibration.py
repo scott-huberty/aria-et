@@ -3,12 +3,14 @@ import math
 import random
 import sys
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
 from aria_et.psychopy.calibration import (
     CALIBRATION_METHOD,
     RESULTS_KEYS_HINT,
+    ValidationRecord,
     describe_validation,
     run_child_friendly_calibration_demo,
     run_child_friendly_eyetracker_calibration,
@@ -478,8 +480,19 @@ def test_validation_shuffles_targets_with_the_given_rng(window):
     assert order == expected
 
 
+def _validation(status: str, summary: Any = None) -> ValidationRecord:
+    return {
+        "points_adcs": [],
+        "settle_seconds": 0.5,
+        "collect_seconds": 1.0,
+        "status": status,
+        "points": [],
+        "summary": summary,
+    }
+
+
 def test_describe_validation_summarizes_both_eyes():
-    validation = {
+    validation = _validation(**{
         "status": "complete",
         "summary": {
             "left": {
@@ -495,13 +508,13 @@ def test_describe_validation_summarizes_both_eyes():
                 "max_accuracy_deg": 0.9,
             },
         },
-    }
+    })
 
     assert describe_validation(validation) == (
         "Validation complete: accuracy L 0.72° R 0.61°; "
         "precision L 0.07° R n/a; data loss L 0.00% R 25.00%."
     )
-    assert describe_validation({"status": "skipped", "summary": None}) == (
+    assert describe_validation(_validation(status="skipped")) == (
         "Validation skipped."
     )
 

@@ -5,60 +5,35 @@ from __future__ import annotations
 import math
 import sys
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib.resources import as_file
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 from aria_et.activity_monitoring import (
     ActivityMonitoringSequence,
     ActivityMonitoringTrial,
     build_activity_monitoring_sequence,
 )
+from aria_et.protocols import (
+    DrawableLike,
+    MovieLike,
+    SoundLike,
+    StatusSink,
+    Wait,
+    WindowLike,
+)
+from aria_et.psychopy.environment import PsychoPyClock
 from aria_et.runtime import Clock, EventSink, RuntimeEvent
 
 if TYPE_CHECKING:
     from aria_et.session import TrackerName
 
 
-class WindowLike(Protocol):
-    size: Sequence[float]
-    color: str | tuple[float, float, float]
-
-    def flip(self) -> None:
-        """Present the next frame."""
-
-
-class DrawableLike(Protocol):
-    def draw(self) -> None:
-        """Draw the object into the current PsychoPy frame."""
-
-
-class MovieLike(Protocol):
-    def play(self) -> None:
-        """Start movie playback."""
-
-    def draw(self) -> None:
-        """Draw the current movie frame."""
-
-    def unload(self) -> None:
-        """Stop playback and release movie resources."""
-
-
-class SoundLike(Protocol):
-    def play(self) -> None:
-        """Start sound playback."""
-
-    def stop(self) -> None:
-        """Stop sound playback."""
-
-
 ImageFactory = Callable[[WindowLike, str], DrawableLike]
 MovieFactory = Callable[[WindowLike, str], MovieLike]
 SoundFactory = Callable[[str], SoundLike]
-Wait = Callable[[float], None]
-StatusSink = Callable[[str], None]
 
 
 def video_duration_seconds(path: str) -> float:
@@ -376,14 +351,6 @@ class PsychoPyActivityMonitoringPresenter:
         from aria_et.psychopy.environment import warn_demo_sound_unavailable
 
         warn_demo_sound_unavailable(sink=self.sound_error_sink, error=error)
-
-
-@dataclass
-class PsychoPyClock:
-    psychopy_clock: object
-
-    def now(self) -> float:
-        return self.psychopy_clock.getTime()
 
 
 @dataclass

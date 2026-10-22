@@ -3,6 +3,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -179,7 +180,7 @@ def test_export_run_to_bids_writes_binocular_physio_and_events(tmp_path):
     }
 
 
-VALIDATED_CALIBRATION = {
+VALIDATED_CALIBRATION: dict[str, Any] = {
     "calibration_id": "calibration-20260729T115500Z",
     "created_at": "2026-07-29T11:55:00Z",
     "method": "child-friendly-detox",

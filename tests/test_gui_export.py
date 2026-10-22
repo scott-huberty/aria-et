@@ -57,7 +57,8 @@ def test_export_shows_no_runs_without_a_session(qapp, config):
     page = ExportPage(config)
 
     assert page._boxes == []
-    assert page._runs_container.findChild(QLabel).text() == NO_RUNS_TEXT
+    label = page._runs_container.findChild(QLabel)
+    assert label is not None and label.text() == NO_RUNS_TEXT
 
 
 def test_export_pre_checks_only_complete_runs(qapp, config, session):

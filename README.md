@@ -13,9 +13,14 @@ these commands from the repository root on Windows:
 pixi install --locked
 pixi run test
 pixi run lint
+pixi run typecheck
 pixi run gui
 pixi run aria-et list-tasks
 ```
+
+`pixi run typecheck` runs the `ty` type checker on `src`, `tests` and
+`scripts`. The pre-commit hook and the CI `typecheck` job run the same pixi
+task. To enable the hooks, run `pixi run pre-commit install` once.
 
 The default environment includes the GUI, PsychoPy, Tobii SDK, and test tools.
 `pyproject.toml` declares the environments; `pixi.lock` pins the exact conda

@@ -59,7 +59,8 @@ def test_hardware_page_saves_the_single_discovered_tracker(qapp, tmp_path):
 
     _discover(page, ("TPSP1-010214213025", "tobii-prp://169.254.10.180"))
 
-    assert page._table.item(0, 4).text() == "2.6.2-orbicularis-0"
+    item = page._table.item(0, 4)
+    assert item is not None and item.text() == "2.6.2-orbicularis-0"
     assert page._save_button.isEnabled()
     page._save_button.click()
     assert requests == [

@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib.abc import Traversable
 from importlib.resources import as_file
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
+from aria_et.protocols import DrawableLike, SoundLike, StatusSink, Wait, WindowLike
+from aria_et.psychopy.environment import PsychoPyClock
 from aria_et.pupillary_light_reflex import (
     PupillaryLightReflexSequence,
     PupillaryLightReflexTrial,
@@ -21,27 +23,8 @@ if TYPE_CHECKING:
     from aria_et.session import TrackerName
 
 
-class WindowLike(Protocol):
-    size: Sequence[float]
-
-    def flip(self) -> None:
-        """Present the next frame."""
-
-
-class DrawableLike(Protocol):
-    def draw(self) -> None:
-        """Draw the object into the current PsychoPy frame."""
-
-
-class SoundLike(Protocol):
-    def play(self) -> None:
-        """Start sound playback."""
-
-
 ImageFactory = Callable[[WindowLike, str], DrawableLike]
 SoundFactory = Callable[[str], SoundLike]
-Wait = Callable[[float], None]
-StatusSink = Callable[[str], None]
 
 
 @dataclass(frozen=True)
@@ -296,14 +279,6 @@ class PsychoPyPupillaryLightReflexPresenter:
         from aria_et.psychopy.environment import warn_demo_sound_unavailable
 
         warn_demo_sound_unavailable(sink=self.sound_error_sink, error=error)
-
-
-@dataclass
-class PsychoPyClock:
-    psychopy_clock: object
-
-    def now(self) -> float:
-        return self.psychopy_clock.getTime()
 
 
 @dataclass

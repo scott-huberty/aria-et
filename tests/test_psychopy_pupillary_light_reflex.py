@@ -1,6 +1,7 @@
 import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -61,7 +62,7 @@ class FakeFactories:
 
 
 def make_presenter(window, factories, **overrides):
-    defaults = {"frame_duration_seconds": 10}
+    defaults: dict[str, Any] = {"frame_duration_seconds": 10}
     defaults.update(overrides)
     return PsychoPyPupillaryLightReflexPresenter(
         window=window,

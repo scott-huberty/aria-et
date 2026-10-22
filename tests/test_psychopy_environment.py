@@ -1,3 +1,5 @@
+from typing import Any
+
 from aria_et.psychopy.environment import (
     configure_audio,
     configure_monitor,
@@ -39,7 +41,7 @@ class FakeMonitors:
 
 class FakeVisual:
     def __init__(self):
-        self.window_kwargs = None
+        self.window_kwargs: dict[str, Any] = {}
 
     def Window(self, **kwargs):
         self.window_kwargs = kwargs
@@ -71,7 +73,7 @@ def test_effective_window_size_uses_screen_resolution_for_fullscreen():
 def test_configure_monitor_creates_saved_psychopy_monitor_profile():
     monitors = FakeMonitors()
 
-    monitor = configure_monitor(
+    returned = configure_monitor(
         monitors_module=monitors,
         monitor_name="EIZO_EV2480",
         screen_distance_meters=0.65,
@@ -79,6 +81,8 @@ def test_configure_monitor_creates_saved_psychopy_monitor_profile():
         screen_size_meters=(0.527, 0.296),
     )
 
+    (monitor,) = monitors.created
+    assert returned is monitor
     assert monitor.name == "EIZO_EV2480"
     assert monitor.width == 52.7
     assert monitor.distance == 65.0
@@ -131,7 +135,7 @@ def test_open_window_uses_monitor_audio_and_effective_fullscreen_size():
     monitors = FakeMonitors()
     prefs = FakePrefs()
 
-    window = open_window(
+    open_window(
         visual_module=visual,
         monitors_module=monitors,
         prefs_module=prefs,
@@ -147,6 +151,7 @@ def test_open_window_uses_monitor_audio_and_effective_fullscreen_size():
     )
 
     assert prefs.hardware["audioDevice"] == [EIZO_SPEAKER]
+    window = visual.window_kwargs
     assert window["size"] == (1920, 1080)
     assert window["fullscr"] is True
     assert window["screen"] == 1

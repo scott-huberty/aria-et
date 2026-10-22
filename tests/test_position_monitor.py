@@ -85,6 +85,10 @@ class FakeTracker:
         assert stream == STREAM and as_dictionary
         self.callback = callback
 
+    def send(self, data):
+        assert self.callback is not None
+        self.callback(data)
+
     def unsubscribe_from(self, stream, callback=None):
         assert stream == STREAM
         self.unsubscribed += 1
@@ -112,11 +116,12 @@ def test_monitor_subscribes_and_keeps_the_latest_sample():
     monitor = PositionMonitor(import_module=_import_module(tracker), clock=lambda: next(times))
 
     monitor.start(address="tobii-prp://169.254.10.180", background=False)
-    tracker.callback(_guide(left=(0.4, 0.5, 0.5)))
-    tracker.callback(_guide(right=(0.6, 0.5, 0.6)))
+    tracker.send(_guide(left=(0.4, 0.5, 0.5)))
+    tracker.send(_guide(right=(0.6, 0.5, 0.6)))
 
     assert monitor.status == "running"
     latest = monitor.latest()
+    assert latest is not None
     assert latest.right == (0.6, 0.5, 0.6)
     assert latest.left is None
     assert latest.received_at == 2.0

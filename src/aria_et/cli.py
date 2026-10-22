@@ -7,7 +7,7 @@ import json
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, TypedDict
 
 from aria_et.calibration import (
     ANIMATION_CHOICES,
@@ -931,7 +931,19 @@ def _add_child_friendly_calibration_arguments(parser: argparse.ArgumentParser) -
     )
 
 
-def _child_friendly_calibration_options(args: argparse.Namespace) -> dict[str, object]:
+class ChildFriendlyCalibrationOptions(TypedDict):
+    """Keyword arguments for the child-friendly calibration runners."""
+
+    play_sound: bool
+    calibration_points: int
+    shuffle: bool
+    animation: str
+    show_positioning: bool
+
+
+def _child_friendly_calibration_options(
+    args: argparse.Namespace,
+) -> ChildFriendlyCalibrationOptions:
     return {
         "play_sound": not args.no_sound,
         "calibration_points": args.points,

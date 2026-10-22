@@ -1,5 +1,6 @@
 import sys
 from dataclasses import dataclass, field
+from typing import Any
 
 import pytest
 
@@ -63,7 +64,7 @@ class FakeFactories:
 
 
 def make_presenter(window, factories, **overrides):
-    defaults = {"frame_duration_seconds": 20}
+    defaults: dict[str, Any] = {"frame_duration_seconds": 20}
     defaults.update(overrides)
     return PsychoPyStaticSocialScenesPresenter(
         window=window,

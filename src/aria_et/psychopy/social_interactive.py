@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import sys
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib.resources import as_file
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
+from aria_et.protocols import MovieLike, StatusSink, Wait, WindowLike
+from aria_et.psychopy.environment import PsychoPyClock
 from aria_et.runtime import Clock, EventSink, RuntimeEvent
 from aria_et.social_interactive import (
     SocialInteractiveSequence,
@@ -21,28 +23,7 @@ if TYPE_CHECKING:
     from aria_et.session import TrackerName
 
 
-class WindowLike(Protocol):
-    size: Sequence[float]
-    color: str | tuple[float, float, float]
-
-    def flip(self) -> None:
-        """Present the next frame."""
-
-
-class MovieLike(Protocol):
-    def play(self) -> None:
-        """Start movie playback."""
-
-    def draw(self) -> None:
-        """Draw the current movie frame."""
-
-    def unload(self) -> None:
-        """Stop playback and release movie resources."""
-
-
 MovieFactory = Callable[[WindowLike, str, bool], MovieLike]
-Wait = Callable[[float], None]
-StatusSink = Callable[[str], None]
 
 
 @dataclass(frozen=True)
@@ -223,14 +204,6 @@ class PsychoPySocialInteractivePresenter:
     def _render_status(self, message: str) -> None:
         if self.render_status is not None:
             self.render_status(message)
-
-
-@dataclass
-class PsychoPyClock:
-    psychopy_clock: object
-
-    def now(self) -> float:
-        return self.psychopy_clock.getTime()
 
 
 @dataclass

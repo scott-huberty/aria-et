@@ -19,9 +19,16 @@ from typing import Any
 
 from typing_extensions import Self
 
-ImportModule = Callable[[str], ModuleType]
-StatusSink = Callable[[str], None]
-_QUEUE_STOP = object()
+from aria_et.protocols import (
+    CalibratedTracker,
+    GazeSample,
+    GazeTracker,
+    ImportModule,
+    StatusSink,
+    TobiiEyeTracker,
+    TrackerIdentity,
+)
+
 MACOS_EYETRACKER_MANAGER_PATH = (
     "/Applications/TobiiProEyeTrackerManager.app/Contents/MacOS/"
     "TobiiProEyeTrackerManager"
@@ -101,7 +108,7 @@ def open_eyetracker(
     serial_number: str | None = None,
     import_module: ImportModule = importlib.import_module,
     error_sink: StatusSink | None = None,
-) -> object:
+) -> TobiiEyeTracker:
     """Open a tracker by address, falling back to discovery by serial number.
 
     Link-local tracker addresses can change, so when ``address`` cannot be
@@ -149,7 +156,9 @@ def open_eyetracker(
     return eyetrackers[0]
 
 
-def _find_by_serial_number(tobii_research: ModuleType, serial_number: str):
+def _find_by_serial_number(
+    tobii_research: ModuleType, serial_number: str
+) -> TobiiEyeTracker | None:
     for eyetracker in tobii_research.find_all_eyetrackers():
         if eyetracker.serial_number == serial_number:
             return eyetracker
@@ -268,7 +277,7 @@ def find_eyetracker(
 
 
 def _warn_on_serial_mismatch(
-    eyetracker: object,
+    eyetracker: TrackerIdentity,
     serial_number: str | None,
     error: StatusSink,
 ) -> None:
@@ -281,7 +290,7 @@ def _warn_on_serial_mismatch(
 
 
 def _report_eyetrackers(
-    eyetrackers: tuple[object, ...],
+    eyetrackers: tuple[TrackerIdentity, ...],
     output: StatusSink,
 ) -> None:
     tracker_count = len(eyetrackers)
@@ -301,7 +310,7 @@ class TobiiGazeRecorder:
     def __init__(
         self,
         *,
-        eyetracker: object,
+        eyetracker: GazeTracker,
         tobii_research: ModuleType,
         gaze_path: str | Path,
         tracker_metadata_path: str | Path,
@@ -330,7 +339,10 @@ class TobiiGazeRecorder:
         self.flush_every_seconds = flush_every_seconds
         self.max_queue_samples = max_queue_samples
         self._file = None
-        self._queue: queue.Queue[object] = queue.Queue(maxsize=max_queue_samples)
+        # None asks the writer thread to flush and stop.
+        self._queue: queue.Queue[tuple[float, GazeSample] | None] = queue.Queue(
+            maxsize=max_queue_samples
+        )
         self._writer_thread: threading.Thread | None = None
         self._writer_error: Exception | None = None
         self._started = False
@@ -425,7 +437,7 @@ class TobiiGazeRecorder:
                     "Tobii gaze writer thread failed."
                 ) from self._writer_error
 
-    def _record_gaze_sample(self, gaze_data: dict[str, object]) -> None:
+    def _record_gaze_sample(self, gaze_data: GazeSample) -> None:
         if not self._started:
             return
 
@@ -446,7 +458,7 @@ class TobiiGazeRecorder:
                     continue
 
                 try:
-                    if item is _QUEUE_STOP:
+                    if item is None:
                         self._flush_gaze_file()
                         return
 
@@ -460,7 +472,7 @@ class TobiiGazeRecorder:
     def _write_gaze_sample(
         self,
         received_at: float,
-        gaze_data: dict[str, object],
+        gaze_data: GazeSample,
     ) -> None:
         if self._file is None:
             return
@@ -481,7 +493,7 @@ class TobiiGazeRecorder:
             return
 
         if self._writer_thread.is_alive():
-            self._queue.put(_QUEUE_STOP)
+            self._queue.put(None)
             self._writer_thread.join()
         self._writer_thread = None
 
@@ -601,7 +613,7 @@ def _json_safe(value: Any) -> Any:
     return str(value)
 
 
-def _tracker_metadata(eyetracker: object) -> dict[str, str]:
+def _tracker_metadata(eyetracker: TrackerIdentity) -> dict[str, str]:
     return {
         "address": eyetracker.address,
         "model": eyetracker.model,
@@ -642,7 +654,7 @@ def _open_tracker_after_calibration(
     address: str | None,
     serial_number: str | None,
     import_module: ImportModule,
-) -> object:
+) -> TobiiEyeTracker:
     if address is not None:
         return open_eyetracker(address=address, import_module=import_module)
 
@@ -665,7 +677,7 @@ def _open_tracker_after_calibration(
 
 def save_current_calibration(
     *,
-    eyetracker: object,
+    eyetracker: CalibratedTracker,
     output_dir: str | Path = DEFAULT_CALIBRATION_DIR,
     artifact_dir: str | Path | None = None,
     method: str,
@@ -695,6 +707,10 @@ def save_current_calibration(
             write_sys_info_snapshot(artifact_dir, collector=sys_info_collector)
 
     calibration_data = eyetracker.retrieve_calibration_data()
+    if calibration_data is None:
+        raise TobiiTrackerUnavailableError(
+            "The tracker has no active calibration to save."
+        )
     calibration_data_file = artifact_dir / "calibration.bin"
     calibration_data_file.write_bytes(bytes(calibration_data))
 
@@ -764,7 +780,7 @@ def run_eyetracker_manager_calibration(
 ) -> int:
     output = output_sink or print
     error = error_sink or (lambda message: print(message, file=sys.stderr))
-    executable = (
+    manager = str(
         executable if executable is not None else default_eyetracker_manager_path()
     )
     artifact_dir = None
@@ -785,7 +801,7 @@ def run_eyetracker_manager_calibration(
         return 3
 
     command = [
-        executable,
+        manager,
         "--mode=usercalibration",
         f"--screen={screen}",
     ]
@@ -814,7 +830,7 @@ def run_eyetracker_manager_calibration(
         else:
             result = run_command(command, check=False)
     except FileNotFoundError:
-        error(f"Tobii Pro Eye Tracker Manager was not found: {executable}")
+        error(f"Tobii Pro Eye Tracker Manager was not found: {manager}")
         return 44
 
     if result.returncode == 0:
@@ -832,7 +848,7 @@ def run_eyetracker_manager_calibration(
                     artifact_dir=artifact_dir,
                     method="tobii-pro-eye-tracker-manager",
                     screen=screen,
-                    manager_executable=executable,
+                    manager_executable=manager,
                     manager_return_code=result.returncode,
                     now=calibration_started_at,
                 )
