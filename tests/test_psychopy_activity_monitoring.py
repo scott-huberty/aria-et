@@ -1,10 +1,12 @@
 import sys
 from dataclasses import dataclass, field
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
 from aria_et.activity_monitoring import build_activity_monitoring_sequence
+from aria_et.protocols import MovieLike, WindowLike
 from aria_et.psychopy.activity_monitoring import (
     PsychoPyActivityMonitoringPresenter,
     video_duration_seconds,
@@ -87,7 +89,7 @@ class FakeFactories:
 
 
 def make_presenter(window, factories, **overrides):
-    defaults = {
+    defaults: dict[str, Any] = {
         "frame_duration_seconds": 20,
         "movie_duration_reader": lambda path: 20.0,
     }
@@ -256,6 +258,7 @@ def test_activity_monitoring_unloads_movie_even_when_playback_fails(failure_stag
             raise RuntimeError("playback failed")
 
     movie = SimpleNamespace(play=play, draw=draw, unload=lambda: unloaded.append(True))
+    movie = cast(MovieLike, movie)
     presenter = PsychoPyActivityMonitoringPresenter(
         window=FakeWindow(),
         movie_factory=lambda window, path: movie,
@@ -309,6 +312,7 @@ def test_activity_monitoring_movie_deadline_includes_play_startup_time():
         draw=lambda: draws.append(factories.elapsed),
         unload=lambda: unloaded.append(True),
     )
+    movie = cast(MovieLike, movie)
     presenter = PsychoPyActivityMonitoringPresenter(
         window=FakeWindow(),
         movie_factory=lambda window, path: movie,
@@ -333,11 +337,13 @@ def test_activity_monitoring_movie_unloads_after_last_frame():
         color=None,
         flip=lambda: (calls.append("flip"), setattr(factories, "elapsed", 1.0)),
     )
+    window = cast(WindowLike, window)
     movie = SimpleNamespace(
         play=lambda: calls.append("play"),
         draw=lambda: calls.append("draw"),
         unload=lambda: calls.append("unload"),
     )
+    movie = cast(MovieLike, movie)
     presenter = PsychoPyActivityMonitoringPresenter(
         window=window,
         movie_factory=lambda window, path: movie,

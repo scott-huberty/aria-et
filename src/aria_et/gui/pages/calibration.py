@@ -277,7 +277,7 @@ class CalibrationPage(QWidget):
 
     def _restore_defaults(self) -> None:
         defaults = self.default_calibration_options()
-        self._screen.setValue(defaults.screen)
+        self._screen.setValue(self._config.psychopy_screen)
         self._fullscreen.setChecked(defaults.fullscreen)
         self._window_size.setText(defaults.window_size)
         self._sound.setChecked(defaults.play_sound)

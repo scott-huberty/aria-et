@@ -102,9 +102,10 @@ class TrackBoxPanel(QWidget):
         )
 
         key = self.status_key()
+        monitor = self._monitor
         sample = None
-        if key not in ("no_tracker", "connecting", "stale"):
-            sample = self._monitor.latest()
+        if monitor is not None and key not in ("no_tracker", "connecting", "stale"):
+            sample = monitor.latest()
 
         # Eye dots, in DeToX's eye colours (opaque on the light theme).
         if sample is not None:

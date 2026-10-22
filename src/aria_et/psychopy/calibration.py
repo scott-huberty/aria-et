@@ -17,6 +17,9 @@ import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import TypedDict
+
+from typing_extensions import NotRequired
 
 from aria_et.calibration import (
     DEFAULT_ANIMATION,
@@ -31,6 +34,9 @@ from aria_et.calibration import (
 from aria_et.calibration_quality import (
     EYES,
     PASS_MARK,
+    EyeQuality,
+    Summary,
+    ToleranceVerdict,
     adcs_to_ucs,
     describe_tolerance,
     gaze_on_display,
@@ -40,9 +46,27 @@ from aria_et.calibration_quality import (
     tolerance_mark,
     tolerance_verdict,
 )
+from aria_et.protocols import ImportModule, StatusSink
 
-StatusSink = Callable[[str], None]
-ImportModule = Callable[[str], object]
+
+class CalibrationPoints(TypedDict):
+    """The calibration point positions that the tracker computed."""
+
+    count: int
+    positions_adcs: list[list[float]]
+
+
+class ValidationRecord(TypedDict):
+    """One validation, as saved in ``calibration.json``."""
+
+    points_adcs: list[list[float]]
+    settle_seconds: float
+    collect_seconds: float
+    status: str
+    points: list[dict[str, object]]
+    summary: Summary | None
+    tolerance: NotRequired[ToleranceVerdict | None]
+
 
 CALIBRATION_METHOD = "child-friendly-detox"
 
@@ -216,9 +240,7 @@ def _calibrate_validate_review(
                 calibration_attempts += 1
                 point_metadata = recorder.point_metadata()
                 action = "revalidate"
-            elif shown is None:
-                return False
-            else:
+            elif shown is not None:
                 status(
                     "Re-calibration aborted; the previous calibration is still "
                     "active on the tracker."
@@ -244,9 +266,13 @@ def _calibrate_validate_review(
             )
             validation_attempts += 1
             status(describe_validation(validation))
-            if validation.get("tolerance"):
-                status(describe_tolerance(validation["tolerance"]))
+            tolerance = validation.get("tolerance")
+            if tolerance:
+                status(describe_tolerance(tolerance))
             shown = (point_metadata, validation, gaze)
+        if shown is None:
+            # The first calibration did not succeed: nothing to save.
+            return False
         point_metadata, validation, gaze = shown
         action = show_validation_results(
             window, validation=validation, gaze=gaze, colors=colors
@@ -560,7 +586,7 @@ class _RecordingCalibration:
     def __getattr__(self, name):
         return getattr(self._calibration, name)
 
-    def point_metadata(self) -> dict[str, object]:
+    def point_metadata(self) -> CalibrationPoints:
         points = getattr(self.result, "calibration_points", None) or ()
         positions = [
             [float(value) for value in point.position_on_display_area]
@@ -578,13 +604,13 @@ def run_validation(
     play_sound: bool,
     status: StatusSink,
     animation: str = DEFAULT_ANIMATION,
-    animation_settings: object | None = None,
+    animation_settings: DetoxAnimationDefaults | None = None,
     points=DEFAULT_VALIDATION_POINTS,
     settle_seconds: float | None = None,
     collect_seconds: float = VALIDATION_COLLECT_SECONDS,
     rng: random.Random | None = None,
     gaze_out: list | None = None,
-) -> dict[str, object]:
+) -> ValidationRecord:
     """Show validation targets, record gaze at each, and compute quality.
 
     The operator presses Space when the child looks at the target; gaze is then
@@ -614,17 +640,20 @@ def run_validation(
     attention_sound = _load_sound(
         sound, stimulus_dir, enabled=play_sound, status=status
     )
-    record: dict[str, object] = {
+    record: ValidationRecord = {
         "points_adcs": [list(point) for point in points],
         "settle_seconds": settle_seconds,
         "collect_seconds": collect_seconds,
+        "status": "skipped",
+        "points": [],
+        "summary": None,
     }
-    results = []
+    targets: list[list[float]] = []
+    qualities: list[dict[str, EyeQuality]] = []
 
     eyetracker.subscribe_to(gaze_stream, collector.add, as_dictionary=True)
     try:
         if not _show_instructions(window, visual, event):
-            record.update(status="skipped", points=[], summary=None)
             return record
         for index, point in enumerate(order):
             target = _Target(
@@ -666,37 +695,30 @@ def run_validation(
                         **{eye: gaze_on_display(samples, eye) for eye in EYES},
                     }
                 )
-            results.append(
-                {
-                    "target_adcs": list(point),
-                    **{eye: point_quality(samples, target_ucs, eye) for eye in EYES},
-                }
+            targets.append(list(point))
+            qualities.append(
+                {eye: point_quality(samples, target_ucs, eye) for eye in EYES}
             )
     finally:
         eyetracker.unsubscribe_from(gaze_stream, collector.add)
 
-    if not results:
+    if not qualities:
         status_text = "skipped"
-    elif len(results) < len(order):
+    elif len(qualities) < len(order):
         status_text = "partial"
     else:
         status_text = "complete"
-    record.update(
-        status=status_text,
-        points=[
-            {
-                "target_adcs": result["target_adcs"],
-                **{eye: result[eye].as_dict() for eye in EYES},
-            }
-            for result in results
-        ],
-        summary=summarize(results) if results else None,
-    )
+    record["status"] = status_text
+    record["points"] = [
+        {"target_adcs": target, **{eye: quality[eye].as_dict() for eye in EYES}}
+        for target, quality in zip(targets, qualities)
+    ]
+    record["summary"] = summarize(qualities) if qualities else None
     record["tolerance"] = tolerance_verdict(record["summary"])
     return record
 
 
-def describe_validation(validation: dict[str, object]) -> str:
+def describe_validation(validation: ValidationRecord) -> str:
     """One-line validation summary for the console and GUI log."""
     summary = validation.get("summary")
     if not summary:

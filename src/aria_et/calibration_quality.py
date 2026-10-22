@@ -25,14 +25,33 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import TypedDict, overload
 
 import numpy as np
 
 from aria_et.calibration import ACCURACY_TOLERANCE_DEG
+from aria_et.protocols import DisplayArea, GazeSample
 
 EYES = ("left", "right")
 
-Vector = Sequence[float]
+Vector = Sequence[float] | np.ndarray
+
+EyeSummary = dict[str, float | None]
+"""Mean and worst-target values of one eye, for example ``accuracy_deg``."""
+
+Summary = dict[str, EyeSummary]
+"""``EyeSummary`` for each eye name."""
+
+
+class ToleranceVerdict(TypedDict):
+    """Whether a validation meets the accuracy tolerance."""
+
+    metric: str
+    tolerance_deg: float
+    rule: str
+    worst_target_deg: dict[str, float | None]
+    eyes: dict[str, bool | None]
+    passed: bool
 
 
 @dataclass(frozen=True)
@@ -51,7 +70,7 @@ class EyeQuality:
         }
 
 
-def adcs_to_ucs(point: Vector, display_area: object) -> np.ndarray:
+def adcs_to_ucs(point: Vector, display_area: DisplayArea) -> np.ndarray:
     """Position of an ADCS point in user coordinates, from the display area.
 
     ``display_area`` is the tracker's ``DisplayArea`` (``top_left``,
@@ -66,7 +85,7 @@ def adcs_to_ucs(point: Vector, display_area: object) -> np.ndarray:
 
 
 def point_quality(
-    samples: Sequence[Mapping[str, object]], target_ucs: Vector, eye: str
+    samples: Sequence[GazeSample], target_ucs: Vector, eye: str
 ) -> EyeQuality:
     """Accuracy, precision and data loss for one eye at one validation target."""
     target = np.asarray(target_ucs, dtype=float)
@@ -101,7 +120,7 @@ def point_quality(
     )
 
 
-def summarize(points: Iterable[Mapping[str, EyeQuality]]) -> dict[str, dict]:
+def summarize(points: Iterable[Mapping[str, EyeQuality]]) -> Summary:
     """Per-eye mean and worst-target accuracy, precision and data loss.
 
     ``points`` holds, for each validation target, a mapping from eye name to
@@ -109,7 +128,7 @@ def summarize(points: Iterable[Mapping[str, EyeQuality]]) -> dict[str, dict]:
     means (NaN-safe), so one missed target doesn't blank the summary.
     """
     points = list(points)
-    summary = {}
+    summary: Summary = {}
     for eye in EYES:
         qualities = [point[eye] for point in points if eye in point]
         accuracy = [q.accuracy_deg for q in qualities]
@@ -149,10 +168,11 @@ def format_quality(summary: Mapping[str, Mapping] | None, key: str) -> tuple[str
     scale, decimals = next(
         (row[3], row[4]) for row in QUALITY_ROWS if key in (row[1], row[2])
     )
-    values = [((summary or {}).get(eye) or {}).get(key) for eye in EYES]
-    return tuple(
-        "n/a" if value is None else f"{value * scale:.{decimals}f}" for value in values
+    left, right = (
+        "n/a" if value is None else f"{value * scale:.{decimals}f}"
+        for value in (((summary or {}).get(eye) or {}).get(key) for eye in EYES)
     )
+    return left, right
 
 
 def quality_table(
@@ -167,18 +187,26 @@ def quality_table(
     return rows
 
 
-def tolerance_mark(verdict: Mapping[str, object] | None, eye: str) -> str:
+def tolerance_mark(verdict: ToleranceVerdict | None, eye: str) -> str:
     """PASS_MARK / FAIL_MARK for one eye's worst accuracy, or "" if unknown."""
-    within = ((verdict or {}).get("eyes") or {}).get(eye)
+    within = verdict["eyes"].get(eye) if verdict else None
     if within is None:
         return ""
     return PASS_MARK if within else FAIL_MARK
 
 
+@overload
+def tolerance_verdict(
+    summary: Mapping[str, Mapping], tolerance_deg: float = ...
+) -> ToleranceVerdict: ...
+@overload
+def tolerance_verdict(
+    summary: Mapping[str, Mapping] | None, tolerance_deg: float = ...
+) -> ToleranceVerdict | None: ...
 def tolerance_verdict(
     summary: Mapping[str, Mapping] | None,
     tolerance_deg: float = ACCURACY_TOLERANCE_DEG,
-) -> dict[str, object] | None:
+) -> ToleranceVerdict | None:
     """Whether a validation meets the study's accuracy tolerance.
 
     An eye is within tolerance if its worst validation target's error
@@ -187,7 +215,7 @@ def tolerance_verdict(
     least one eye is (as in ABCCT). Returns None when there is no validation
     summary to judge.
     """
-    if not summary:
+    if summary is None:
         return None
     worst = {eye: (summary.get(eye) or {}).get("max_accuracy_deg") for eye in EYES}
     eyes = {
@@ -205,7 +233,7 @@ def tolerance_verdict(
 
 
 def describe_tolerance(
-    verdict: Mapping[str, object] | None, *, recalibrate_key: str | None = None
+    verdict: ToleranceVerdict | None, *, recalibrate_key: str | None = None
 ) -> str:
     """The short verdict under the quality table.
 
@@ -222,7 +250,9 @@ def describe_tolerance(
     return f"Above {tolerance} tolerance: re-calibrate{key}"
 
 
-def gaze_on_display(samples: Sequence[Mapping[str, object]], eye: str) -> list:
+def gaze_on_display(
+    samples: Sequence[GazeSample], eye: str
+) -> list[tuple[float, float]]:
     """Valid on-screen gaze positions (ADCS, 0-1) of one eye, for plotting."""
     positions = []
     for sample in samples:
@@ -238,7 +268,7 @@ def gaze_on_display(samples: Sequence[Mapping[str, object]], eye: str) -> list:
 
 
 def _gaze_vectors(
-    sample: Mapping[str, object], eye: str
+    sample: GazeSample, eye: str
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
     if not sample.get(f"{eye}_gaze_point_validity") or not sample.get(
         f"{eye}_gaze_origin_validity"

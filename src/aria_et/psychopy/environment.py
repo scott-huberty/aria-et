@@ -3,7 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import Any
+
+from aria_et.protocols import ClockLike, ClosableWindow
+
+
+@dataclass
+class PsychoPyClock:
+    """The runtime ``Clock``, read from a PsychoPy clock."""
+
+    psychopy_clock: ClockLike
+
+    def now(self) -> float:
+        return self.psychopy_clock.getTime()
 
 
 def warn_demo_sound_unavailable(*, sink: Any, error: BaseException) -> None:
@@ -169,7 +182,7 @@ def open_window(
     monitor_name: str,
     audio_speaker: str | None,
     speaker_names: Callable[[], Sequence[str]] = available_speaker_names,
-) -> object:
+) -> ClosableWindow:
     configure_audio(
         prefs_module=prefs_module,
         audio_speaker=audio_speaker,

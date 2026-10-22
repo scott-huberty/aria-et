@@ -49,6 +49,8 @@ def frames(path: Path) -> list[tuple[float, str]]:
             numerator, denominator = line.split(":", 1)[1].strip().split("/")
             timebase = int(numerator) / int(denominator)
         elif not line.startswith("#"):
+            if timebase is None:
+                raise ValueError(f"framemd5 output has no #tb header: {path}")
             fields = [field.strip() for field in line.split(",")]
             rows.append((int(fields[2]) * timebase, fields[5]))
     return rows

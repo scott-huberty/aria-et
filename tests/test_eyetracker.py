@@ -3,6 +3,7 @@ import math
 import subprocess
 import sys
 from datetime import datetime, timezone
+from types import ModuleType
 
 import pytest
 
@@ -102,8 +103,11 @@ class FakeEyeTracker:
         return self.calibration_data
 
 
-class FakeTobiiModule:
+class _FakeTobiiModule(ModuleType):
     EYETRACKER_GAZE_DATA = "eyetracker_gaze_data"
+
+
+FakeTobiiModule = _FakeTobiiModule("tobii_research")
 
 
 class ManualClock:

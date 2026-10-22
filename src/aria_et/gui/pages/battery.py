@@ -389,7 +389,7 @@ class BatteryPage(QWidget):
         defaults = self.default_presentation_options()
         self._fullscreen.setChecked(defaults.fullscreen)
         self._window_size.setText(defaults.window_size)
-        self._screen.setValue(defaults.screen)
+        self._screen.setValue(self._config.psychopy_screen)
         self._trial_limit.setValue(
             NO_TRIAL_LIMIT if defaults.trial_limit is None else defaults.trial_limit
         )

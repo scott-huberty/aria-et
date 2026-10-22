@@ -66,9 +66,11 @@ def test_activity_monitoring_static_trials_use_bundled_soundtrack():
     static_trials = [
         trial for trial in sequence.trials if trial.media_type == "static-image"
     ]
-    assert all(trial.stimulus.soundtrack is not None for trial in static_trials)
-    assert all(trial.stimulus.soundtrack.name == "satie.wav" for trial in static_trials)
-    assert all(trial.stimulus.soundtrack.is_file() for trial in static_trials)
+    soundtracks = [trial.stimulus.soundtrack for trial in static_trials]
+    assert all(
+        track is not None and track.name == "satie.wav" and track.is_file()
+        for track in soundtracks
+    )
 
 
 def test_activity_monitoring_sequence_uses_bundled_stimulus_files():

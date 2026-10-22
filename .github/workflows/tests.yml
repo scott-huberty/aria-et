@@ -48,6 +48,9 @@ jobs:
           - job: unit
             command: pixi run --locked python -m pytest -ra
             experimental: false
+          - job: typecheck
+            command: pixi run --locked typecheck
+            experimental: false
           - job: qt-gui
             command: pixi run --locked python -m pytest -m qt_gui -ra
             experimental: false

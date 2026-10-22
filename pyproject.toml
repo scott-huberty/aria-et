@@ -90,6 +90,12 @@ src = ["src"]
 python = ".pixi/envs/default"
 root = ["./src"]
 
+[tool.ty.analysis]
+# PsychoPy has no type stubs, and its lazy imports and factory classes (for
+# example `sound.Sound.__new__` returns a backend class) defeat inference.
+# aria_et.protocols types the PsychoPy objects that aria-et uses.
+replace-imports-with-any = ["psychopy", "psychopy.**"]
+
 [tool.pixi.workspace]
 channels = ["conda-forge"]
 # Linux is used only by the isolated docs and lint environments in CI.
@@ -136,6 +142,8 @@ bids-validator-deno = "*"
 
 [tool.pixi.feature.test.tasks]
 test = "python -m pytest"
+# The pre-commit hook and CI both run this task, so the checks cannot diverge.
+typecheck = "ty check"
 
 [tool.pixi.feature.docs.dependencies]
 python = "==3.10.21"

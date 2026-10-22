@@ -34,7 +34,7 @@ from aria_et.gui.widgets.crash_panel import CRASH_LOG_LINES
 from aria_et.gui.widgets.log_pane import LogPane
 from aria_et.gui.widgets.status_pill import PillTone, StatusPill
 from aria_et.gui.widgets.track_box import TrackBoxPanel
-from aria_et.position_monitor import PositionMonitor
+from aria_et.position_monitor import PositionMonitor, PositionSource
 
 NAV_ITEMS = ("1  Setup", "2  Hardware", "3  Calibration", "4  Battery", "5  Export")
 NAV_ICON_SIZE = 16
@@ -49,13 +49,13 @@ class MainWindow(QMainWindow):
         self,
         config: AriaEtConfig,
         screen_count: int = 1,
-        position_monitor: PositionMonitor | None = None,
+        position_monitor: PositionSource | None = None,
     ):
         super().__init__()
         self._config = config
         self._session: SessionState | None = None
         # Live child position; started once the Hardware check finds the tracker.
-        self._position_monitor = position_monitor or PositionMonitor()
+        self._position_monitor: PositionSource = position_monitor or PositionMonitor()
 
         self.setWindowTitle("ARIA-ET")
         self.setMinimumSize(1000, 680)

@@ -237,7 +237,7 @@ class ExportPage(QWidget):
     def report_exit(self, exit_code: int) -> None:
         if self._active is None:
             return
-        self._record_result(exit_code)
+        self._record_result(self._active.run.path.name, exit_code)
         self._active = None
         self._progress.setValue(self._progress.value() + 1)
         if self._queue:
@@ -254,8 +254,7 @@ class ExportPage(QWidget):
         self._finish()
         self._export_succeeded = False
 
-    def _record_result(self, exit_code: int) -> None:
-        name = self._active.run.path.name
+    def _record_result(self, name: str, exit_code: int) -> None:
         if exit_code != 0:
             self._results.append(f"{FAILURE_MARKER}  {name} — exit code {exit_code}")
             return
@@ -290,8 +289,7 @@ class ExportPage(QWidget):
             self.refresh()
 
     def refresh(self) -> None:
-        while self._runs_layout.count():
-            item = self._runs_layout.takeAt(0)
+        while (item := self._runs_layout.takeAt(0)) is not None:
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()

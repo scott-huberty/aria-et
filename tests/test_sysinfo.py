@@ -3,6 +3,7 @@ import subprocess
 import sys
 from importlib import metadata
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -20,7 +21,7 @@ from aria_et.sysinfo import (
 @pytest.fixture
 def collect(tmp_path):
     def run(**overrides):
-        options = dict(
+        options: dict[str, Any] = dict(
             version_lookup=lambda name: "1.2.3",
             distribution_lookup=lambda name: SimpleNamespace(
                 read_text=lambda name: None

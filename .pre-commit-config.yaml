@@ -6,3 +6,12 @@ repos:
     - id: ruff-check
       args: [ --fix ]
     - id: ruff-format
+  - repo: local
+    hooks:
+    # Same command as the CI typecheck job (pixi task in pyproject.toml).
+    - id: typecheck
+      name: ty
+      entry: pixi run --locked typecheck
+      language: system
+      pass_filenames: false
+      types_or: [python, pyi, toml]

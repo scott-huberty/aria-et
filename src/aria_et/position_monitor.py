@@ -16,7 +16,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from types import ModuleType
+from typing import Protocol
 
 from aria_et.calibration import (
     POSITION_CENTRE_RANGE,
@@ -24,8 +24,8 @@ from aria_et.calibration import (
     POSITION_STALE_SECONDS,
     POSITION_Z_TOLERANCE,
 )
+from aria_et.protocols import GazeSample, ImportModule
 
-ImportModule = Callable[[str], ModuleType]
 EYES = ("left", "right")
 Position = tuple[float, float, float]
 
@@ -56,7 +56,7 @@ class PositionSample:
         }
 
 
-def sample_from_guide(data: dict, received_at: float) -> PositionSample:
+def sample_from_guide(data: GazeSample, received_at: float) -> PositionSample:
     """Build a sample from a Tobii user position guide dictionary."""
 
     def position(eye: str) -> Position | None:
@@ -95,9 +95,9 @@ def classify(sample: PositionSample | None, now: float) -> str:
     if sample is None or now - sample.received_at > POSITION_STALE_SECONDS:
         return "stale"
     eyes = sample.eyes()
-    if not eyes:
-        return "no_eyes"
     z = mean_distance(sample)
+    if z is None:
+        return "no_eyes"
     if z < POSITION_IDEAL_Z - POSITION_Z_TOLERANCE:
         return "too_close"
     if z > POSITION_IDEAL_Z + POSITION_Z_TOLERANCE:
@@ -107,6 +107,22 @@ def classify(sample: PositionSample | None, now: float) -> str:
         if not (low <= x <= high and low <= y <= high):
             return "off_centre"
     return "good"
+
+
+class PositionSource(Protocol):
+    """What the GUI reads from a :class:`PositionMonitor`."""
+
+    status: str
+
+    def latest(self) -> PositionSample | None: ...
+
+    def now(self) -> float: ...
+
+    def start(
+        self, *, address: str | None = None, serial_number: str | None = None
+    ) -> object: ...
+
+    def stop(self) -> object: ...
 
 
 class PositionMonitor:
@@ -210,7 +226,7 @@ class PositionMonitor:
         with contextlib.suppress(Exception):
             tracker.unsubscribe_from(stream, self._on_sample)
 
-    def _on_sample(self, data: dict) -> None:
+    def _on_sample(self, data: GazeSample) -> None:
         sample = sample_from_guide(data, self._clock())
         with self._lock:
             self._latest = sample

@@ -73,7 +73,7 @@ class CliProcess(QObject):
         QTimer.singleShot(SIGTERM_GRACE_MILLISECONDS, self.kill)
 
     def _drain_output(self) -> None:
-        chunk = bytes(self._process.readAllStandardOutput()).decode(
+        chunk = bytes(self._process.readAllStandardOutput().data()).decode(
             "utf-8", errors="replace"
         )
         lines, self._buffer = split_output_lines(self._buffer, chunk)
