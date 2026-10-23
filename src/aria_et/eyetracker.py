@@ -28,13 +28,6 @@ from aria_et.protocols import (
     TrackerIdentity,
 )
 
-MACOS_EYETRACKER_MANAGER_PATH = (
-    "/Applications/TobiiProEyeTrackerManager.app/Contents/MacOS/"
-    "TobiiProEyeTrackerManager"
-)
-LINUX_EYETRACKER_MANAGER_PATH = (
-    "/opt/TobiiProEyeTrackerManager/TobiiProEyeTrackerManager"
-)
 __all__ = [
     "TobiiGazeRecorder",
     "TobiiSdkUnavailableError",
@@ -56,7 +49,6 @@ HEALTH_REPLACE_RETRY_SECONDS = 0.01
 
 
 def default_eyetracker_manager_path(
-    platform: str = sys.platform,
     environ: Mapping[str, str] = os.environ,
 ) -> str:
     """Return where Tobii Pro Eye Tracker Manager is installed by default.
@@ -68,8 +60,6 @@ def default_eyetracker_manager_path(
 
     Parameters
     ----------
-    platform : str
-        The value of ``sys.platform``. For tests.
     environ : Mapping of str to str
         The environment variables. For tests.
 
@@ -78,32 +68,22 @@ def default_eyetracker_manager_path(
     str
         The path of the ETM executable.
     """
-    if platform.startswith("win"):
-        install_dirs = (
-            ("LOCALAPPDATA", "Programs"),
-            ("ProgramFiles", ""),
-        )
-        candidates = [
-            str(
-                PureWindowsPath(
-                    environ[root],
-                    subdir,
-                    "TobiiProEyeTrackerManager",
-                    "TobiiProEyeTrackerManager.exe",
-                )
+    candidates = [
+        str(
+            PureWindowsPath(
+                environ[root],
+                subdir,
+                "TobiiProEyeTrackerManager",
+                "TobiiProEyeTrackerManager.exe",
             )
-            for root, subdir in install_dirs
-            if environ.get(root)
-        ]
-        for candidate in candidates:
-            if Path(candidate).exists():
-                return candidate
-        if candidates:
-            return candidates[0]
-        return "TobiiProEyeTrackerManager.exe"
-    if platform == "darwin":
-        return MACOS_EYETRACKER_MANAGER_PATH
-    return LINUX_EYETRACKER_MANAGER_PATH
+        )
+        for root, subdir in (("LOCALAPPDATA", "Programs"), ("ProgramFiles", ""))
+        if environ.get(root)
+    ]
+    for candidate in candidates:
+        if Path(candidate).exists():
+            return candidate
+    return candidates[0] if candidates else "TobiiProEyeTrackerManager.exe"
 
 
 class TobiiSdkUnavailableError(RuntimeError):

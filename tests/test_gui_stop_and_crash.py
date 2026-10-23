@@ -67,9 +67,7 @@ def test_stop_confirmation_names_the_task_and_the_consequence():
     assert "marked incomplete" in prompt
 
 
-def test_stop_confirmation_mentions_the_caveat_only_where_it_applies(monkeypatch):
-    monkeypatch.setattr("aria_et.gui.pages.battery.SIGINT_SUPPORTED", False)
-
+def test_stop_confirmation_mentions_buffered_samples():
     assert BUFFERED_SAMPLE_CAVEAT in describe_stop_confirmation("social-interactive")
 
 
