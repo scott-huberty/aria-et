@@ -4,20 +4,64 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+__all__ = [
+    "TASK_SPECS",
+    "TaskSpec",
+    "TrialTypeSpec",
+    "get_task_spec",
+]
+
 
 @dataclass(frozen=True)
 class TrialTypeSpec:
+    """The specified count and duration of one trial type of a task.
+
+    Attributes
+    ----------
+    name : str
+        The trial type, for example ``"static-image"``.
+    trial_count : int
+        The number of trials of this type.
+    duration_seconds : float
+        The duration of one trial of this type.
+    """
+
     name: str
     trial_count: int
     duration_seconds: float
 
     @property
     def total_seconds(self) -> float:
+        """Return the total duration of all trials of this type.
+
+        Returns
+        -------
+        float
+            The duration in seconds.
+        """
         return self.trial_count * self.duration_seconds
 
 
 @dataclass(frozen=True)
 class TaskSpec:
+    """The specified structure of a task, from the ABCCT protocol.
+
+    Attributes
+    ----------
+    task_id : str
+        The task id, for example ``"activity-monitoring"``.
+    trial_count : int
+        The number of trials.
+    block_count : int
+        The number of blocks.
+    trials_per_block : tuple of int
+        The number of trials in each block.
+    approximate_duration_seconds : float
+        The approximate duration of the task.
+    trial_types : tuple of TrialTypeSpec
+        The count and duration of each trial type.
+    """
+
     task_id: str
     trial_count: int
     block_count: int
@@ -27,10 +71,24 @@ class TaskSpec:
 
     @property
     def specified_trial_count(self) -> int:
+        """Return the sum of the trial counts of all trial types.
+
+        Returns
+        -------
+        int
+            The number of trials.
+        """
         return sum(trial_type.trial_count for trial_type in self.trial_types)
 
     @property
     def specified_trial_seconds(self) -> float:
+        """Return the sum of the durations of all trials.
+
+        Returns
+        -------
+        float
+            The duration in seconds.
+        """
         return sum(trial_type.total_seconds for trial_type in self.trial_types)
 
 
@@ -80,6 +138,23 @@ TASK_SPECS: dict[str, TaskSpec] = {
 
 
 def get_task_spec(task_id: str) -> TaskSpec:
+    """Return the specification of one task.
+
+    Parameters
+    ----------
+    task_id : str
+        The task id, for example ``"activity-monitoring"``.
+
+    Returns
+    -------
+    TaskSpec
+        The specification.
+
+    Raises
+    ------
+    ValueError
+        If the task has no specification.
+    """
     try:
         return TASK_SPECS[task_id]
     except KeyError as error:

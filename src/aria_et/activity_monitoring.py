@@ -8,18 +8,66 @@ from typing import Literal
 
 from aria_et.assets import ActivityMonitoringAssets, activity_monitoring_assets
 
+__all__ = [
+    "ActivityMonitoringBlock",
+    "ActivityMonitoringGazeCondition",
+    "ActivityMonitoringMediaType",
+    "ActivityMonitoringSequence",
+    "ActivityMonitoringStimulus",
+    "ActivityMonitoringTrial",
+    "build_activity_monitoring_sequence",
+]
+
+
 ActivityMonitoringMediaType = Literal["dynamic-video", "static-image"]
 ActivityMonitoringGazeCondition = Literal["activity-gaze", "mutual-gaze"]
 
 
 @dataclass(frozen=True)
 class ActivityMonitoringStimulus:
+    """The media of one Activity Monitoring trial.
+
+    Attributes
+    ----------
+    media : Traversable
+        The video or image file.
+    soundtrack : Traversable or None
+        The soundtrack of a static-image trial. None for a video, which has
+        its own audio.
+    """
+
     media: Traversable
     soundtrack: Traversable | None = None
 
 
 @dataclass(frozen=True)
 class ActivityMonitoringTrial:
+    """One Activity Monitoring trial.
+
+    Attributes
+    ----------
+    trial_id : str
+        The trial id, unique in the sequence.
+    block_number : int
+        The one-based number of the block of the trial.
+    block_trial_number : int
+        The one-based position of the trial in its block.
+    sequence_trial_number : int
+        The one-based position of the trial in the sequence.
+    media_type : ActivityMonitoringMediaType
+        ``"dynamic-video"`` or ``"static-image"``.
+    gaze_condition : ActivityMonitoringGazeCondition
+        ``"activity-gaze"`` or ``"mutual-gaze"``.
+    stimulus : ActivityMonitoringStimulus
+        The media of the trial.
+    fixation_seconds : float
+        The blank interval before the stimulus.
+    presentation_seconds : float or None
+        The stimulus duration. None plays the full video.
+    post_blank_seconds : float
+        The blank interval after the stimulus.
+    """
+
     trial_id: str
     block_number: int
     block_trial_number: int
@@ -34,6 +82,18 @@ class ActivityMonitoringTrial:
 
 @dataclass(frozen=True)
 class ActivityMonitoringBlock:
+    """One block of Activity Monitoring trials.
+
+    Attributes
+    ----------
+    block_id : str
+        The block id.
+    block_number : int
+        The one-based number of the block in the sequence.
+    trials : tuple of ActivityMonitoringTrial
+        The trials of the block, in presentation order.
+    """
+
     block_id: str
     block_number: int
     trials: tuple[ActivityMonitoringTrial, ...]
@@ -41,11 +101,28 @@ class ActivityMonitoringBlock:
 
 @dataclass(frozen=True)
 class ActivityMonitoringSequence:
+    """The complete Activity Monitoring sequence.
+
+    Attributes
+    ----------
+    sequence_id : str
+        The sequence id.
+    blocks : tuple of ActivityMonitoringBlock
+        The blocks, in presentation order.
+    """
+
     sequence_id: str
     blocks: tuple[ActivityMonitoringBlock, ...]
 
     @property
     def trials(self) -> tuple[ActivityMonitoringTrial, ...]:
+        """Return all trials of all blocks.
+
+        Returns
+        -------
+        tuple of ActivityMonitoringTrial
+            The trials, in presentation order.
+        """
         return tuple(trial for block in self.blocks for trial in block.trials)
 
 
@@ -110,6 +187,13 @@ _TRIAL_DEFINITIONS: tuple[_TrialDefinition, ...] = (
 
 
 def build_activity_monitoring_sequence() -> ActivityMonitoringSequence:
+    """Build the Activity Monitoring sequence from the bundled stimuli.
+
+    Returns
+    -------
+    ActivityMonitoringSequence
+        The sequence, with the trial order and timing of the ABCCT battery.
+    """
     assets = activity_monitoring_assets()
     blocks: list[ActivityMonitoringBlock] = []
 

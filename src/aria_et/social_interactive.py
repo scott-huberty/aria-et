@@ -8,16 +8,62 @@ from typing import Literal
 
 from aria_et.assets import SocialInteractiveAssets, social_interactive_assets
 
+__all__ = [
+    "SocialInteractiveBlock",
+    "SocialInteractivePlayCondition",
+    "SocialInteractiveSequence",
+    "SocialInteractiveStimulus",
+    "SocialInteractiveTrial",
+    "build_social_interactive_sequence",
+]
+
+
 SocialInteractivePlayCondition = Literal["parallel-play", "cooperative-play"]
 
 
 @dataclass(frozen=True)
 class SocialInteractiveStimulus:
+    """The video of one Social Interactive trial.
+
+    Attributes
+    ----------
+    video : Traversable
+        The video file, with its own audio.
+    """
+
     video: Traversable
 
 
 @dataclass(frozen=True)
 class SocialInteractiveTrial:
+    """One Social Interactive trial.
+
+    Attributes
+    ----------
+    trial_id : str
+        The trial id, unique in the sequence.
+    block_number : int
+        The one-based number of the block of the trial.
+    block_trial_number : int
+        The one-based position of the trial in its block.
+    sequence_trial_number : int
+        The one-based position of the trial in the sequence.
+    source_index : int
+        The one-based position of the trial in the source trial list.
+    source_id : str
+        The id of the source video, for example ``"05"`` for ``sibs5_*``.
+    play_condition : SocialInteractivePlayCondition
+        ``"parallel-play"`` or ``"cooperative-play"``.
+    stimulus : SocialInteractiveStimulus
+        The video of the trial.
+    fixation_seconds : float
+        The blank interval before the video.
+    presentation_seconds : float
+        The video duration.
+    post_blank_seconds : float
+        The blank interval after the video.
+    """
+
     trial_id: str
     block_number: int
     block_trial_number: int
@@ -33,6 +79,18 @@ class SocialInteractiveTrial:
 
 @dataclass(frozen=True)
 class SocialInteractiveBlock:
+    """One block of Social Interactive trials.
+
+    Attributes
+    ----------
+    block_id : str
+        The block id.
+    block_number : int
+        The one-based number of the block in the sequence.
+    trials : tuple of SocialInteractiveTrial
+        The trials of the block, in presentation order.
+    """
+
     block_id: str
     block_number: int
     trials: tuple[SocialInteractiveTrial, ...]
@@ -40,11 +98,28 @@ class SocialInteractiveBlock:
 
 @dataclass(frozen=True)
 class SocialInteractiveSequence:
+    """The complete Social Interactive sequence.
+
+    Attributes
+    ----------
+    sequence_id : str
+        The sequence id.
+    blocks : tuple of SocialInteractiveBlock
+        The blocks, in presentation order.
+    """
+
     sequence_id: str
     blocks: tuple[SocialInteractiveBlock, ...]
 
     @property
     def trials(self) -> tuple[SocialInteractiveTrial, ...]:
+        """Return all trials of all blocks.
+
+        Returns
+        -------
+        tuple of SocialInteractiveTrial
+            The trials, in presentation order.
+        """
         return tuple(trial for block in self.blocks for trial in block.trials)
 
 
@@ -84,6 +159,13 @@ _TRIAL_DEFINITIONS: tuple[_TrialDefinition, ...] = (
 
 
 def build_social_interactive_sequence() -> SocialInteractiveSequence:
+    """Build the Social Interactive sequence from the bundled stimuli.
+
+    Returns
+    -------
+    SocialInteractiveSequence
+        The sequence, with the trial order and timing of the ABCCT battery.
+    """
     assets = social_interactive_assets()
     blocks: list[SocialInteractiveBlock] = []
 
