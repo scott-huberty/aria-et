@@ -181,7 +181,7 @@ lint = "ruff check . && ruff format --check ."
 lint-fix = "ruff check --fix . && ruff format ."
 # numpydoc validation of the API modules. The pre-commit hook and the CI
 # `docstring` job both run this task. Add a module here once its docstrings pass.
-docstrings = "numpydoc lint src/aria_et/__init__.py src/aria_et/config.py src/aria_et/bids/__init__.py src/aria_et/bids/export.py src/aria_et/session.py src/aria_et/runtime.py src/aria_et/protocols.py src/aria_et/sysinfo.py src/aria_et/eyetracker.py src/aria_et/tasks.py src/aria_et/specs.py src/aria_et/activity_monitoring.py src/aria_et/social_interactive.py src/aria_et/static_social_scenes.py src/aria_et/pupillary_light_reflex.py src/aria_et/psychopy/environment.py src/aria_et/psychopy/activity_monitoring.py src/aria_et/psychopy/social_interactive.py src/aria_et/psychopy/static_social_scenes.py src/aria_et/psychopy/pupillary_light_reflex.py"
+docstrings = "numpydoc lint src/aria_et/__init__.py src/aria_et/config.py src/aria_et/bids/__init__.py src/aria_et/bids/export.py src/aria_et/session.py src/aria_et/runtime.py src/aria_et/protocols.py src/aria_et/sysinfo.py src/aria_et/eyetracker.py src/aria_et/tasks.py src/aria_et/specs.py src/aria_et/activity_monitoring.py src/aria_et/social_interactive.py src/aria_et/static_social_scenes.py src/aria_et/pupillary_light_reflex.py src/aria_et/psychopy/environment.py src/aria_et/psychopy/activity_monitoring.py src/aria_et/psychopy/social_interactive.py src/aria_et/psychopy/static_social_scenes.py src/aria_et/psychopy/pupillary_light_reflex.py src/aria_et/psychopy/calibration.py src/aria_et/cli.py"
 
 [tool.pixi.feature.logo.dependencies]
 python = "==3.10.21"

@@ -32,6 +32,38 @@ from aria_et.tasks import BATTERY_ORDER
 if TYPE_CHECKING:
     from aria_et.bids import BidsExportResult
 
+__all__ = [
+    "CalibrateEyeTrackerRunner",
+    "CheckEyeTrackerRunner",
+    "ChildFriendlyCalibrationOptions",
+    "ChildFriendlyCalibrationRunner",
+    "DemoActivityMonitoringRunner",
+    "DemoCalibrationRunner",
+    "DemoPupillaryLightReflexRunner",
+    "DemoSocialInteractiveRunner",
+    "DemoStaticSocialScenesRunner",
+    "ExportBidsRunner",
+    "FindEyeTrackerRunner",
+    "RunActivityMonitoringRunner",
+    "RunPupillaryLightReflexRunner",
+    "RunSocialInteractiveRunner",
+    "RunStaticSocialScenesRunner",
+    "build_parser",
+    "calibration_artifact_root",
+    "config_command",
+    "default_bids_root",
+    "default_data_root",
+    "default_sourcedata_root",
+    "export_bids_command",
+    "init_config_file",
+    "main",
+    "parse_float_pair",
+    "parse_window_size",
+    "resolve_tracker",
+    "warn_if_config_missing",
+]
+
+
 DemoCalibrationRunner = Callable[..., int]
 CalibrateEyeTrackerRunner = Callable[..., int]
 ChildFriendlyCalibrationRunner = Callable[..., int]
@@ -49,12 +81,26 @@ RunPupillaryLightReflexRunner = Callable[..., int]
 
 # TODO: perhaps this approach is better than above, we define the inputs and the return
 class ExportBidsRunner(Protocol):
+    """Exports one run, as ``export_run_to_bids`` does."""
+
     def __call__(
         self, *, run_dir: str | Path, bids_root: str | Path
     ) -> BidsExportResult: ...
 
 
 def build_parser(config: AriaEtConfig | None = None) -> argparse.ArgumentParser:
+    """Build the ``aria-et`` argument parser.
+
+    Parameters
+    ----------
+    config : AriaEtConfig or None
+        The user config, for the default values. None reads it.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        The parser, with one subcommand for each command.
+    """
     config = config or load_config()
     parser = argparse.ArgumentParser(prog="aria-et")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -506,6 +552,48 @@ def main(
     export_bids_runner: ExportBidsRunner | None = None,
     sys_info_runner: Callable[..., dict] | None = None,
 ) -> int:
+    """Run one ``aria-et`` command.
+
+    Parameters
+    ----------
+    argv : Sequence[str] or None
+        The command line arguments. None uses ``sys.argv``.
+    demo_calibration_runner : DemoCalibrationRunner or None
+        Runs the ``demo-calibration`` command. None uses the real function. For tests.
+    calibrate_eyetracker_runner : CalibrateEyeTrackerRunner or None
+        Runs the ``calibrate-eyetracker --routine etm`` command. None uses the real function. For tests.
+    child_friendly_calibration_runner : ChildFriendlyCalibrationRunner or None
+        Runs the ``calibrate-eyetracker`` command. None uses the real function. For tests.
+    demo_activity_monitoring_runner : DemoActivityMonitoringRunner or None
+        Runs the ``demo-am`` command. None uses the real function. For tests.
+    demo_social_interactive_runner : DemoSocialInteractiveRunner or None
+        Runs the ``demo-si`` command. None uses the real function. For tests.
+    demo_static_social_scenes_runner : DemoStaticSocialScenesRunner or None
+        Runs the ``demo-ss`` command. None uses the real function. For tests.
+    demo_pupillary_light_reflex_runner : DemoPupillaryLightReflexRunner or None
+        Runs the ``demo-plr`` command. None uses the real function. For tests.
+    check_eyetracker_runner : CheckEyeTrackerRunner or None
+        Runs the ``check-eyetracker`` command. None uses the real function. For tests.
+    find_eyetracker_runner : FindEyeTrackerRunner or None
+        Runs the ``find-eyetracker`` command. None uses the real function. For tests.
+    run_activity_monitoring_runner : RunActivityMonitoringRunner or None
+        Runs the ``run-am`` command. None uses the real function. For tests.
+    run_social_interactive_runner : RunSocialInteractiveRunner or None
+        Runs the ``run-si`` command. None uses the real function. For tests.
+    run_static_social_scenes_runner : RunStaticSocialScenesRunner or None
+        Runs the ``run-ss`` command. None uses the real function. For tests.
+    run_pupillary_light_reflex_runner : RunPupillaryLightReflexRunner or None
+        Runs the ``run-plr`` command. None uses the real function. For tests.
+    export_bids_runner : ExportBidsRunner or None
+        Runs the ``export-bids`` command. None uses the real function. For tests.
+    sys_info_runner : Callable[..., dict] or None
+        Runs the ``sys-info`` command. None uses the real function. For tests.
+
+    Returns
+    -------
+    int
+        The exit code of the command.
+    """
     arguments = list(sys.argv[1:] if argv is None else argv)
     # Diagnostics must remain usable even when the user's TOML is broken.
     config = AriaEtConfig() if arguments[:1] == ["sys-info"] else load_config()
@@ -1054,14 +1142,50 @@ def _add_run_presentation_arguments(
 
 
 def default_data_root(config: AriaEtConfig | None = None) -> Path:
+    """Return the data root folder.
+
+    Parameters
+    ----------
+    config : AriaEtConfig or None
+        The user config. None reads it.
+
+    Returns
+    -------
+    Path
+        The ``data.root`` setting of the config.
+    """
     return (config or load_config()).data_root
 
 
 def default_sourcedata_root(config: AriaEtConfig | None = None) -> Path:
+    """Return the raw data folder.
+
+    Parameters
+    ----------
+    config : AriaEtConfig or None
+        The user config. None reads it.
+
+    Returns
+    -------
+    Path
+        ``<data root>/sourcedata``.
+    """
     return default_data_root(config) / "sourcedata"
 
 
 def default_bids_root(config: AriaEtConfig | None = None) -> Path:
+    """Return the BIDS dataset folder.
+
+    Parameters
+    ----------
+    config : AriaEtConfig or None
+        The user config. None reads it.
+
+    Returns
+    -------
+    Path
+        ``<data root>/bids``.
+    """
     return default_data_root(config) / "bids"
 
 
@@ -1071,6 +1195,22 @@ def calibration_artifact_root(
     subject: str,
     session: str,
 ) -> Path:
+    """Return the calibrations folder of one subject and session.
+
+    Parameters
+    ----------
+    output_dir : str or Path
+        The ``sourcedata`` folder.
+    subject : str
+        The subject label, with or without ``"sub-"``.
+    session : str
+        The session label, with or without ``"ses-"``.
+
+    Returns
+    -------
+    Path
+        ``<output_dir>/sub-<subject>/ses-<session>/calibrations``.
+    """
     from aria_et.session import bids_subject_session_dir
 
     return (
@@ -1087,6 +1227,18 @@ def resolve_tracker(
     An explicit ``--address`` wins. Otherwise the tracker saved in the config
     is used, and its serial number lets the connection survive address
     changes. With neither, both are None and discovery picks the tracker.
+
+    Parameters
+    ----------
+    address : str or None
+        The ``--address`` argument, or None.
+    config : AriaEtConfig
+        The user config.
+
+    Returns
+    -------
+    tuple[str or None, str or None]
+        The address and the serial number.
     """
     if address is not None:
         return address, None
@@ -1100,7 +1252,25 @@ def export_bids_command(
     include_incomplete: bool,
     runner: ExportBidsRunner,
 ) -> int:
-    """Export one run, or every run below a session/subject/sourcedata folder."""
+    """Export one run, or every run below a session/subject/sourcedata folder.
+
+    Parameters
+    ----------
+    input_path : str or Path
+        A run folder, or a session, subject or ``sourcedata`` folder.
+    bids_root : str or Path
+        The root folder of the BIDS dataset.
+    include_incomplete : bool
+        True also exports runs that did not finish.
+    runner : ExportBidsRunner
+        Exports one run. ``export_run_to_bids`` in normal use.
+
+    Returns
+    -------
+    int
+        The exit code: 0 if all runs were exported, 1 if a run failed or no
+        run was found.
+    """
     from aria_et.gui import artifacts
 
     path = Path(input_path)
@@ -1170,6 +1340,19 @@ def _export_one_run(
 
 
 def config_command(args: argparse.Namespace) -> int:
+    """Run ``aria-et config show``, ``get``, ``set`` or ``unset``.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        The parsed ``aria-et config`` arguments.
+
+    Returns
+    -------
+    int
+        The exit code: 0 for success, 1 if ``get`` finds no value, 2 if
+        ``set`` receives a value of the wrong type.
+    """
     config_path = default_config_path()
     if args.config_action == "show":
         print(f"ARIA-ET config: {config_path}")
@@ -1202,6 +1385,21 @@ def config_command(args: argparse.Namespace) -> int:
 
 
 def init_config_file(path: str | Path | None = None, *, force: bool = False) -> int:
+    """Write a new config file with the lab defaults.
+
+    Parameters
+    ----------
+    path : str or Path or None
+        The config file. None uses the default path.
+    force : bool
+        True replaces an existing file.
+
+    Returns
+    -------
+    int
+        The exit code: 0 for success, 1 if the file exists and ``force`` is
+        False.
+    """
     config_path = Path(path).expanduser() if path is not None else default_config_path()
     if config_path.exists() and not force:
         print(
@@ -1218,6 +1416,13 @@ def init_config_file(path: str | Path | None = None, *, force: bool = False) -> 
 
 
 def warn_if_config_missing(path: str | Path | None = None) -> None:
+    """Print a warning to standard error if the config file does not exist.
+
+    Parameters
+    ----------
+    path : str or Path or None
+        The config file. None uses the default path.
+    """
     config_path = Path(path).expanduser() if path is not None else default_config_path()
     if config_path.exists():
         return
@@ -1240,6 +1445,23 @@ def _add_screen_argument(parser: argparse.ArgumentParser, config: AriaEtConfig) 
 
 
 def parse_window_size(value: str) -> tuple[int, int]:
+    """Parse a size such as ``"1024x768"``.
+
+    Parameters
+    ----------
+    value : str
+        The text, formatted as ``"WIDTHxHEIGHT"``.
+
+    Returns
+    -------
+    tuple[int, int]
+        The width and the height.
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        If the text is not two integers separated by x.
+    """
     try:
         width, height = value.lower().split("x", maxsplit=1)
         return int(width), int(height)
@@ -1250,6 +1472,23 @@ def parse_window_size(value: str) -> tuple[int, int]:
 
 
 def parse_float_pair(value: str) -> tuple[float, float]:
+    """Parse a pair such as ``"0.527x0.296"``.
+
+    Parameters
+    ----------
+    value : str
+        The text, formatted as ``"WIDTHxHEIGHT"``.
+
+    Returns
+    -------
+    tuple[float, float]
+        The two numbers.
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        If the text is not two numbers separated by x.
+    """
     try:
         width, height = value.lower().split("x", maxsplit=1)
         return float(width), float(height)

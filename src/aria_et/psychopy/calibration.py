@@ -62,6 +62,26 @@ from aria_et.protocols import (
     TrackerIdentity,
 )
 
+__all__ = [
+    "CALIBRATION_METHOD",
+    "RESULTS_KEYS_HINT",
+    "TOLERANCE_FAIL_COLOR",
+    "TOLERANCE_PASS_COLOR",
+    "CalibrationPoints",
+    "DetoxAnimationDefaults",
+    "DetoxColorDefaults",
+    "GazePlot",
+    "Point",
+    "ValidationRecord",
+    "WindowOptions",
+    "describe_validation",
+    "run_child_friendly_calibration_demo",
+    "run_child_friendly_eyetracker_calibration",
+    "run_validation",
+    "show_validation_results",
+]
+
+
 Point = Sequence[float]
 """A position in the active display area (ADCS: 0-1, origin top-left)."""
 
@@ -126,6 +146,64 @@ def run_child_friendly_eyetracker_calibration(
     status_sink: StatusSink | None = None,
     error_sink: StatusSink | None = None,
 ) -> int:
+    """Calibrate the tracker with DeToX, validate, and save the calibration.
+
+    The operator can accept the results, validate again, or calibrate again.
+    The function saves the accepted calibration with its validation to a new
+    folder in ``calibration_output_dir``.
+
+    Parameters
+    ----------
+    address : str or None
+        The tracker address. Use ``address`` or ``serial_number``, not both.
+    serial_number : str or None
+        The tracker serial number. If both are None, the tracker saved in
+        the config or discovery is used.
+    screen : int
+        The PsychoPy screen number of the stimulus display.
+    calibration_output_dir : str or Path
+        The ``calibrations`` folder of the session.
+    fullscreen : bool
+        True fills the screen. False opens a window of ``window_size``.
+    window_size : tuple[int, int]
+        The window width and height in pixels, when not fullscreen.
+    screen_distance_meters : float
+        The distance from the eyes of the participant to the screen.
+    screen_resolution_pixels : tuple[int, int]
+        The screen width and height in pixels.
+    screen_size_meters : tuple[float, float]
+        The screen width and height in meters.
+    monitor_name : str
+        The name of the PsychoPy monitor profile.
+    audio_speaker : str or None
+        The name, or part of the name, of the speaker for stimulus audio.
+        None uses the default speaker.
+    play_sound : bool
+        False plays no stimulus audio.
+    calibration_points : int
+        The number of calibration targets: 5 or 9.
+    shuffle : bool
+        True shows the targets in a random order.
+    animation : str
+        The target animation: ``"zoom"`` or ``"trill"``.
+    show_positioning : bool
+        True shows the DeToX positioning screen first.
+    import_module : ImportModule
+        Imports the Tobii SDK and DeToX. For tests.
+    status_sink : StatusSink or None
+        Receives status messages. None prints them to standard error.
+    error_sink : StatusSink or None
+        Receives error messages. None prints them to standard error.
+
+    Returns
+    -------
+    int
+        The exit code: 0 when the calibration is saved, 2 if the Tobii SDK
+        is not available, 3 if the tracker is not available or DeToX connects
+        to a different tracker, 4 if saving failed, 31 if the calibration was
+        stopped or did not succeed, 51 if both ``address`` and
+        ``serial_number`` are given.
+    """
     from aria_et.eyetracker import (
         TobiiSdkUnavailableError,
         TobiiTrackerUnavailableError,
@@ -347,6 +425,22 @@ def show_validation_results(
     """Titta-style results: targets, gaze per eye, and the quality table.
 
     Waits for a key and returns "accept", "revalidate" or "recalibrate".
+
+    Parameters
+    ----------
+    window : DrawingWindow
+        The PsychoPy window.
+    validation : ValidationRecord
+        The validation record.
+    gaze : list[GazePlot]
+        The valid gaze of each eye at each target, for the plot.
+    colors : Mapping[str, tuple[int, ...]]
+        The DeToX colour of each eye (RGBA, 0-255).
+
+    Returns
+    -------
+    str
+        ``"accept"``, ``"revalidate"`` or ``"recalibrate"``.
     """
     from psychopy import event, visual
 
@@ -557,7 +651,47 @@ def run_child_friendly_calibration_demo(
     import_module: ImportModule = importlib.import_module,
     status_sink: StatusSink | None = None,
 ) -> int:
-    """Preview the calibration without a tracker; the mouse stands in for gaze."""
+    """Preview the calibration without a tracker; the mouse stands in for gaze.
+
+    Parameters
+    ----------
+    fullscreen : bool
+        True fills the screen. False opens a window of ``window_size``.
+    screen : int
+        The PsychoPy screen number of the stimulus display.
+    window_size : tuple[int, int]
+        The window width and height in pixels, when not fullscreen.
+    screen_distance_meters : float
+        The distance from the eyes of the participant to the screen.
+    screen_resolution_pixels : tuple[int, int]
+        The screen width and height in pixels.
+    screen_size_meters : tuple[float, float]
+        The screen width and height in meters.
+    monitor_name : str
+        The name of the PsychoPy monitor profile.
+    audio_speaker : str or None
+        The name, or part of the name, of the speaker for stimulus audio.
+        None uses the default speaker.
+    play_sound : bool
+        False plays no stimulus audio.
+    calibration_points : int
+        The number of calibration targets: 5 or 9.
+    shuffle : bool
+        True shows the targets in a random order.
+    animation : str
+        The target animation: ``"zoom"`` or ``"trill"``.
+    show_positioning : bool
+        True shows the DeToX positioning screen first.
+    import_module : ImportModule
+        Imports DeToX. For tests.
+    status_sink : StatusSink or None
+        Receives status messages. None prints them to standard error.
+
+    Returns
+    -------
+    int
+        The exit code: 0 when the demo ends.
+    """
     status = status_sink or (
         lambda message: print(message, file=sys.stderr, flush=True)
     )
@@ -675,6 +809,43 @@ def run_validation(
     If ``gaze_out`` is given, each collected target's valid on-screen gaze
     positions are appended to it, for the results screen. They aren't part of
     the returned record, which is what gets saved.
+
+    Parameters
+    ----------
+    window : DrawingWindow
+        The PsychoPy window.
+    eyetracker : TobiiEyeTracker
+        The open tracker.
+    tobii_research : ModuleType
+        The ``tobii_research`` module.
+    stimulus_dir : Path or None
+        The DeToX stimulus folder with the target images and the sound. None
+        shows circles without sound.
+    play_sound : bool
+        False plays no stimulus audio.
+    status : StatusSink
+        Receives status messages.
+    animation : str
+        The target animation: ``"zoom"`` or ``"trill"``.
+    animation_settings : DetoxAnimationDefaults or None
+        The DeToX animation settings. None uses the bundled defaults.
+    points : Sequence[Point]
+        The validation targets (ADCS).
+    settle_seconds : float or None
+        The wait after Space before the gaze is collected. None uses the
+        DeToX ``focus_time``.
+    collect_seconds : float
+        The time that gaze is collected at each target.
+    rng : random.Random or None
+        Gives the random target order. None uses a new generator.
+    gaze_out : list[GazePlot] or None
+        If given, receives the valid on-screen gaze of each target, for the
+        results screen. It is not part of the saved record.
+
+    Returns
+    -------
+    ValidationRecord
+        The validation, as saved in ``calibration.json``.
     """
     from psychopy import core, event, sound, visual
 
@@ -770,7 +941,18 @@ def run_validation(
 
 
 def describe_validation(validation: ValidationRecord) -> str:
-    """One-line validation summary for the console and GUI log."""
+    """One-line validation summary for the console and GUI log.
+
+    Parameters
+    ----------
+    validation : ValidationRecord
+        The validation record.
+
+    Returns
+    -------
+    str
+        The status and the accuracy, precision and data loss of each eye.
+    """
     summary = validation.get("summary")
     if not summary:
         return f"Validation {validation.get('status', 'skipped')}."
