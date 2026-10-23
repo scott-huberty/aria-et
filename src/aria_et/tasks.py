@@ -4,6 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+__all__ = [
+    "ACTIVITY_MONITORING",
+    "BATTERY_ORDER",
+    "CALIBRATION",
+    "PUPILLARY_LIGHT_REFLEX",
+    "SOCIAL_INTERACTIVE",
+    "STANDALONE_TASKS",
+    "STATIC_SOCIAL_SCENES",
+    "TaskDefinition",
+    "task_ids",
+]
+
 
 @dataclass(frozen=True)
 class TaskDefinition:
@@ -38,4 +50,16 @@ STANDALONE_TASKS: tuple[TaskDefinition, ...] = (
 
 
 def task_ids(tasks: tuple[TaskDefinition, ...] = BATTERY_ORDER) -> tuple[str, ...]:
+    """Return the ids of some tasks.
+
+    Parameters
+    ----------
+    tasks : tuple of TaskDefinition
+        The tasks. The default is the battery order.
+
+    Returns
+    -------
+    tuple of str
+        The task ids, in the same order.
+    """
     return tuple(task.task_id for task in tasks)
