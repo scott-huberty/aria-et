@@ -31,7 +31,6 @@ from aria_et.gui.artifacts import (
     apply_events,
     derive_status,
 )
-from aria_et.gui.process import SIGINT_SUPPORTED
 from aria_et.gui.state import (
     PresentationOptions,
     SessionState,
@@ -68,9 +67,7 @@ def describe_stop_confirmation(task_id: str) -> str:
     """The §10.2 prompt — a misclick mid-acquisition is expensive."""
     name = _DISPLAY_NAMES.get(task_id, task_id)
     prompt = f"Stop {name}? The partial run will be saved and marked incomplete."
-    if not SIGINT_SUPPORTED:
-        prompt += f"\n\n{BUFFERED_SAMPLE_CAVEAT}"
-    return prompt
+    return f"{prompt}\n\n{BUFFERED_SAMPLE_CAVEAT}"
 
 
 def _card(title: str) -> tuple[QFrame, QVBoxLayout]:

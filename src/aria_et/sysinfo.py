@@ -113,7 +113,7 @@ def _git_info(root: Path) -> JsonDict:
             text=True,
             check=True,
             timeout=2.0,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            creationflags=subprocess.CREATE_NO_WINDOW,
         ).stdout.strip()
 
     result: JsonDict = {}
@@ -374,7 +374,7 @@ def read_native_versions() -> JsonDict:
         encoding="utf-8",
         check=True,
         timeout=4.0,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
     return json.loads(result.stdout)
 
@@ -391,11 +391,7 @@ def _executable() -> str:
         return sys.executable
     path = Path(shutil.which(sys.argv[0]) or sys.argv[0]).absolute()
     # Windows console launchers may strip .exe from argv[0].
-    if (
-        sys.platform == "win32"
-        and path.suffix != ".exe"
-        and path.with_suffix(".exe").is_file()
-    ):
+    if path.suffix != ".exe" and path.with_suffix(".exe").is_file():
         path = path.with_suffix(".exe")
     return str(path)
 
@@ -420,7 +416,6 @@ def collect_sys_info(
     native_reader: Callable[[], JsonDict] = read_native_versions,
     git_reader: Callable[[Path], JsonDict] = _git_info,
     environ: Mapping[str, str] | None = None,
-    platform_name: str | None = None,
 ) -> JsonDict:
     """Collect the system and software versions for ``sys_info.json``.
 
@@ -455,9 +450,6 @@ def collect_sys_info(
         Reads the git commit of an editable install. For tests.
     environ : Mapping of str to str or None
         The environment variables. None uses ``os.environ``. For tests.
-    platform_name : str or None
-        The value of ``sys.platform``. None uses the current platform. For
-        tests.
 
     Returns
     -------
@@ -469,7 +461,6 @@ def collect_sys_info(
     from aria_et.eyetracker import default_eyetracker_manager_path, open_eyetracker
 
     now = datetime.now().astimezone()
-    platform_name = sys.platform if platform_name is None else platform_name
     path = _probe(config_path or default_config_path)
     config = _probe(config_loader or load_config)
     info: JsonDict = {
@@ -526,16 +517,12 @@ def collect_sys_info(
             return {"path": str(path), "version": "not installed"}
         return {
             "path": str(path),
-            "version": _probe(file_version_reader, path)
-            if platform_name == "win32"
-            else "n/a (Windows only)",
+            "version": _probe(file_version_reader, path),
         }
 
     info["tobii"]["eye_tracker_manager"] = _probe(etm)
-    info["tobii"]["installed_software"] = (
-        _probe(lambda: _tobii_software(registry_reader()))
-        if platform_name == "win32"
-        else "n/a (Windows only)"
+    info["tobii"]["installed_software"] = _probe(
+        lambda: _tobii_software(registry_reader())
     )
     info["tobii"]["saved_tracker"] = _probe(
         lambda: {

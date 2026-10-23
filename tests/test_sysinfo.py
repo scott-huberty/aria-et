@@ -28,7 +28,6 @@ def collect(tmp_path):
             ),
             native_reader=lambda: {"ffpyplayer": {"ffmpeg": "6.0", "sdl2": "2.26.4"}},
             registry_reader=lambda: [],
-            platform_name="win32",
             environ={},
             config_path=lambda: tmp_path / "config.toml",
             config_loader=lambda: AriaEtConfig(
@@ -84,10 +83,6 @@ def test_registry_filters_names_and_publishers_and_deduplicates(collect):
     ]
     assert collect(registry_reader=broken)["tobii"]["installed_software"].startswith(
         "error:"
-    )
-    assert (
-        collect(platform_name="linux")["tobii"]["installed_software"]
-        == "n/a (Windows only)"
     )
 
 

@@ -201,7 +201,7 @@ def test_check_eyetracker_reports_explicit_address_connection_failure(capsys):
 def test_default_manager_path_uses_per_user_windows_install(tmp_path):
     environ = {"LOCALAPPDATA": "C:\\Users\\lab\\AppData\\Local"}
 
-    assert default_eyetracker_manager_path("win32", environ) == (
+    assert default_eyetracker_manager_path(environ) == (
         "C:\\Users\\lab\\AppData\\Local\\Programs\\TobiiProEyeTrackerManager"
         "\\TobiiProEyeTrackerManager.exe"
     )
@@ -218,17 +218,11 @@ def test_default_manager_path_prefers_an_existing_windows_install(tmp_path):
         "ProgramFiles": str(tmp_path / "Program Files"),
     }
 
-    assert default_eyetracker_manager_path("win32", environ) == str(executable)
+    assert default_eyetracker_manager_path(environ) == str(executable)
 
 
-def test_default_manager_path_on_macos_and_linux():
-    assert default_eyetracker_manager_path("darwin", {}) == (
-        "/Applications/TobiiProEyeTrackerManager.app/Contents/MacOS/"
-        "TobiiProEyeTrackerManager"
-    )
-    assert default_eyetracker_manager_path("linux", {}) == (
-        "/opt/TobiiProEyeTrackerManager/TobiiProEyeTrackerManager"
-    )
+def test_default_manager_path_without_install_directories():
+    assert default_eyetracker_manager_path({}) == "TobiiProEyeTrackerManager.exe"
 
 
 def test_check_eyetracker_reports_firmware_version(capsys):

@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import signal
 import sys
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
-SIGINT_SUPPORTED = os.name != "nt"
-
-SIGINT_GRACE_MILLISECONDS = 10_000
 SIGTERM_GRACE_MILLISECONDS = 5_000
 
 TERMINATE_WARNING = (
@@ -52,14 +47,10 @@ class CliProcess(QObject):
         return self._process.state() != QProcess.ProcessState.NotRunning
 
     def request_stop(self) -> None:
-        """Interrupt the child so its ``finally`` blocks drain the gaze writer."""
+        """Terminate the Windows child process."""
         if not self.is_running():
             return
-        if SIGINT_SUPPORTED:
-            os.kill(self._process.processId(), signal.SIGINT)
-            QTimer.singleShot(SIGINT_GRACE_MILLISECONDS, self._escalate_to_terminate)
-        else:
-            self._escalate_to_terminate()
+        self._escalate_to_terminate()
 
     def kill(self) -> None:
         if self.is_running():
