@@ -35,6 +35,20 @@ if TYPE_CHECKING:
     from aria_et.session import TrackerName
 
 
+__all__ = [
+    "ActivityMonitoringRunResult",
+    "ImageFactory",
+    "MovieFactory",
+    "PresentedActivityMonitoringTrial",
+    "PsychoPyActivityMonitoringPresenter",
+    "SoundFactory",
+    "StatusLoggingEventSink",
+    "run_activity_monitoring_demo",
+    "run_activity_monitoring_session",
+    "video_duration_seconds",
+]
+
+
 ImageFactory = Callable[[WindowLike, str], DrawableLike]
 MovieFactory = Callable[[WindowLike, str], MovieLike]
 SoundFactory = Callable[[str], SoundLike]
@@ -45,6 +59,21 @@ def video_duration_seconds(path: str) -> float:
 
     MovieStim reports container duration, which can include an audio tail after
     the last video frame. Do not ask the movie decoder for frames in that tail.
+
+    Parameters
+    ----------
+    path : str
+        The video file.
+
+    Returns
+    -------
+    float
+        The duration of the video stream in seconds.
+
+    Raises
+    ------
+    ValueError
+        If the file cannot be read or has no frame count or rate.
     """
     import cv2
 
@@ -68,6 +97,22 @@ def video_duration_seconds(path: str) -> float:
 
 @dataclass(frozen=True)
 class PresentedActivityMonitoringTrial:
+    """One Activity Monitoring trial that was shown.
+
+    Attributes
+    ----------
+    trial_id : str
+        The trial id.
+    media_type : str
+        ``"dynamic-video"`` or ``"static-image"``.
+    gaze_condition : str
+        ``"activity-gaze"`` or ``"mutual-gaze"``.
+    started_at : float
+        The start time, from the clock of the task.
+    ended_at : float
+        The end time, from the clock of the task.
+    """
+
     trial_id: str
     media_type: str
     gaze_condition: str
@@ -77,6 +122,20 @@ class PresentedActivityMonitoringTrial:
 
 @dataclass(frozen=True)
 class ActivityMonitoringRunResult:
+    """The result of one Activity Monitoring presentation.
+
+    Attributes
+    ----------
+    sequence_id : str
+        The sequence id.
+    presented_trials : tuple[PresentedActivityMonitoringTrial, ...]
+        The trials that were shown, in presentation order.
+    started_at : float
+        The start time, from the clock of the task.
+    ended_at : float
+        The end time, from the clock of the task.
+    """
+
     sequence_id: str
     presented_trials: tuple[PresentedActivityMonitoringTrial, ...]
     started_at: float
@@ -85,6 +144,48 @@ class ActivityMonitoringRunResult:
 
 @dataclass(frozen=True)
 class PsychoPyActivityMonitoringPresenter:
+    """Shows the Activity Monitoring sequence in a PsychoPy window.
+
+    Each trial shows a fixation blank, then a video or an image with its
+    soundtrack, then a blank. A blank inter-trial interval follows each
+    trial except the last.
+
+    Attributes
+    ----------
+    window : WindowLike
+        The PsychoPy window.
+    image_factory : ImageFactory or None
+        Makes an image stimulus. None uses ``psychopy.visual.ImageStim``.
+    movie_factory : MovieFactory or None
+        Makes a movie stimulus. None uses ``psychopy.visual.MovieStim``.
+    sound_factory : SoundFactory or None
+        Makes a sound. None uses ``psychopy.sound.Sound``.
+    wait : Wait or None
+        Waits a number of seconds. None uses ``psychopy.core.wait``.
+    play_sound : bool
+        False plays no stimulus audio.
+    audio_speaker : str or None
+        The name, or part of the name, of the speaker for stimulus audio.
+        None uses the default speaker.
+    continue_without_sound_on_error : bool
+        True continues without sound if a sound cannot play.
+    sound_error_sink : StatusSink or None
+        Receives a warning when a sound cannot play.
+    trial_limit : int or None
+        The maximum number of trials to show. None shows all trials.
+    frame_duration_seconds : float
+        The duration of one frame of the draw loop.
+    inter_trial_interval_seconds : float
+        The blank interval between trials.
+    render_status : StatusSink or None
+        Receives a status line for each stimulus that is drawn. None writes
+        nothing.
+    monotonic : Callable[[], float]
+        Gives the time in seconds for the draw loop. For tests.
+    movie_duration_reader : Callable[[str], float]
+        Reads the video duration of a movie file. For tests.
+    """
+
     window: WindowLike
     image_factory: ImageFactory | None = None
     movie_factory: MovieFactory | None = None
@@ -110,6 +211,22 @@ class PsychoPyActivityMonitoringPresenter:
         clock: Clock,
         event_sink: EventSink,
     ) -> ActivityMonitoringRunResult:
+        """Show the trials and emit their events.
+
+        Parameters
+        ----------
+        sequence : ActivityMonitoringSequence
+            The trial sequence to show.
+        clock : Clock
+            Gives the event times.
+        event_sink : EventSink
+            Receives the events of the task.
+
+        Returns
+        -------
+        ActivityMonitoringRunResult
+            The trials that were shown, with their times.
+        """
         selected_trials = self._selected_trials(sequence)
         started_at = clock.now()
         event_sink.emit(
@@ -359,10 +476,27 @@ class PsychoPyActivityMonitoringPresenter:
 
 @dataclass
 class StatusLoggingEventSink:
+    """An ``EventSink`` that also writes a status line for the main events.
+
+    Attributes
+    ----------
+    delegate : EventSink
+        The event sink that records the events.
+    status : StatusSink
+        Receives the status lines.
+    """
+
     delegate: EventSink
     status: StatusSink
 
     def emit(self, event: RuntimeEvent) -> None:
+        """Record one event, and write a status line for a start or end event.
+
+        Parameters
+        ----------
+        event : RuntimeEvent
+            The event.
+        """
         self.delegate.emit(event)
         if event.name == "activity-monitoring.started":
             self.status(f"Activity Monitoring started: {event.payload['sequence_id']}")
@@ -398,6 +532,44 @@ def run_activity_monitoring_demo(
     debug_render: bool = False,
     status_sink: StatusSink | None = None,
 ) -> int:
+    """Show the Activity Monitoring task without recording. For previews.
+
+    The demo writes no files. If the configured speaker fails, it continues
+    with the default speaker, then without sound.
+
+    Parameters
+    ----------
+    fullscreen : bool
+        True fills the screen. False opens a window of ``window_size``.
+    screen : int
+        The PsychoPy screen number of the stimulus display.
+    window_size : tuple[int, int]
+        The window width and height in pixels, when not fullscreen.
+    screen_distance_meters : float
+        The distance from the eyes of the participant to the screen.
+    screen_resolution_pixels : tuple[int, int]
+        The screen width and height in pixels.
+    screen_size_meters : tuple[float, float]
+        The screen width and height in meters.
+    monitor_name : str
+        The name of the PsychoPy monitor profile.
+    audio_speaker : str or None
+        The name, or part of the name, of the speaker for stimulus audio.
+        None uses the default speaker.
+    play_sound : bool
+        False plays no stimulus audio.
+    trial_limit : int or None
+        The maximum number of trials to show. None shows all trials.
+    debug_render : bool
+        True writes a status line for each stimulus that is drawn.
+    status_sink : StatusSink or None
+        Receives status messages. None prints them to standard error.
+
+    Returns
+    -------
+    int
+        The exit code: 0 when the demo ends.
+    """
     status = status_sink or (
         lambda message: print(message, file=sys.stderr, flush=True)
     )
@@ -490,13 +662,67 @@ def run_activity_monitoring_session(
     debug_render: bool = False,
     status_sink: StatusSink | None = None,
 ) -> int:
+    """Record one Activity Monitoring run.
+
+    The run writes its files to
+    ``<output_dir>/sub-<subject>/ses-<session>/task-<task>_run-<run>``. See
+    ``run_recording_session``.
+
+    Parameters
+    ----------
+    tracker : TrackerName
+        ``"tobii"`` records gaze. ``"none"`` is a dry run without gaze.
+    tracker_address : str or None
+        The tracker address. None uses the saved tracker, then discovery.
+    tracker_serial_number : str or None
+        The serial number of the tracker.
+    output_dir : str or Path
+        The ``sourcedata`` folder.
+    subject : str
+        The subject label, with or without ``"sub-"``.
+    session : str or None
+        The session label, with or without ``"ses-"``. None for no session.
+    run : str or None
+        The run label, with or without ``"run-"``. None gives the next free
+        run number.
+    fullscreen : bool
+        True fills the screen. False opens a window of ``window_size``.
+    screen : int
+        The PsychoPy screen number of the stimulus display.
+    window_size : tuple[int, int]
+        The window width and height in pixels, when not fullscreen.
+    screen_distance_meters : float
+        The distance from the eyes of the participant to the screen.
+    screen_resolution_pixels : tuple[int, int]
+        The screen width and height in pixels.
+    screen_size_meters : tuple[float, float]
+        The screen width and height in meters.
+    monitor_name : str
+        The name of the PsychoPy monitor profile.
+    audio_speaker : str or None
+        The name, or part of the name, of the speaker for stimulus audio.
+        None uses the default speaker.
+    play_sound : bool
+        False plays no stimulus audio.
+    trial_limit : int or None
+        The maximum number of trials to show. None shows all trials.
+    debug_render : bool
+        True writes a status line for each stimulus that is drawn.
+    status_sink : StatusSink or None
+        Receives status messages. None prints them to standard error.
+
+    Returns
+    -------
+    int
+        The exit code of ``run_recording_session``.
+    """
     from aria_et.session import run_recording_session
 
     status = status_sink or (
         lambda message: print(message, file=sys.stderr, flush=True)
     )
 
-    def present(event_sink: EventSink) -> None:
+    def present(event_sink: EventSink) -> None:  # numpydoc ignore=GL08
         status("Importing PsychoPy...")
         from psychopy import core, monitors, prefs, visual
 

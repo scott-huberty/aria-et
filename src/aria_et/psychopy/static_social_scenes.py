@@ -26,12 +26,38 @@ if TYPE_CHECKING:
     from aria_et.session import TrackerName
 
 
+__all__ = [
+    "ImageFactory",
+    "PresentedStaticSocialScenesTrial",
+    "PsychoPyStaticSocialScenesPresenter",
+    "SoundFactory",
+    "StaticSocialScenesRunResult",
+    "StatusLoggingEventSink",
+    "run_static_social_scenes_demo",
+    "run_static_social_scenes_session",
+]
+
+
 ImageFactory = Callable[[WindowLike, str], DrawableLike]
 SoundFactory = Callable[[str], SoundLike]
 
 
 @dataclass(frozen=True)
 class PresentedStaticSocialScenesTrial:
+    """One Static Social Scenes trial that was shown.
+
+    Attributes
+    ----------
+    trial_id : str
+        The trial id.
+    trial_type : str
+        ``"static-scene"`` or ``"visual-search"``.
+    started_at : float
+        The start time, from the clock of the task.
+    ended_at : float
+        The end time, from the clock of the task.
+    """
+
     trial_id: str
     trial_type: str
     started_at: float
@@ -40,6 +66,20 @@ class PresentedStaticSocialScenesTrial:
 
 @dataclass(frozen=True)
 class StaticSocialScenesRunResult:
+    """The result of one Static Social Scenes presentation.
+
+    Attributes
+    ----------
+    sequence_id : str
+        The sequence id.
+    presented_trials : tuple[PresentedStaticSocialScenesTrial, ...]
+        The trials that were shown, in presentation order.
+    started_at : float
+        The start time, from the clock of the task.
+    ended_at : float
+        The end time, from the clock of the task.
+    """
+
     sequence_id: str
     presented_trials: tuple[PresentedStaticSocialScenesTrial, ...]
     started_at: float
@@ -48,6 +88,36 @@ class StaticSocialScenesRunResult:
 
 @dataclass(frozen=True)
 class PsychoPyStaticSocialScenesPresenter:
+    """Shows the Static Social Scenes sequence in a PsychoPy window.
+
+    Each trial shows the background colour, then the image with its
+    soundtrack, then a blank.
+
+    Attributes
+    ----------
+    window : WindowLike
+        The PsychoPy window.
+    image_factory : ImageFactory or None
+        Makes an image stimulus. None uses ``psychopy.visual.ImageStim``.
+    sound_factory : SoundFactory or None
+        Makes a sound. None uses ``psychopy.sound.Sound``.
+    wait : Wait or None
+        Waits a number of seconds. None uses ``psychopy.core.wait``.
+    play_sound : bool
+        False plays no stimulus audio.
+    continue_without_sound_on_error : bool
+        True continues without sound if a sound cannot play.
+    sound_error_sink : StatusSink or None
+        Receives a warning when a sound cannot play.
+    trial_limit : int or None
+        The maximum number of trials to show. None shows all trials.
+    frame_duration_seconds : float
+        The duration of one frame of the draw loop.
+    render_status : StatusSink or None
+        Receives a status line for each stimulus that is drawn. None writes
+        nothing.
+    """
+
     window: WindowLike
     image_factory: ImageFactory | None = None
     sound_factory: SoundFactory | None = None
@@ -68,6 +138,22 @@ class PsychoPyStaticSocialScenesPresenter:
         clock: Clock,
         event_sink: EventSink,
     ) -> StaticSocialScenesRunResult:
+        """Show the trials and emit their events.
+
+        Parameters
+        ----------
+        sequence : StaticSocialScenesSequence
+            The trial sequence to show.
+        clock : Clock
+            Gives the event times.
+        event_sink : EventSink
+            Receives the events of the task.
+
+        Returns
+        -------
+        StaticSocialScenesRunResult
+            The trials that were shown, with their times.
+        """
         selected = tuple(self._selected_trials(sequence))
         started_at = clock.now()
         event_sink.emit(
@@ -243,10 +329,27 @@ class PsychoPyStaticSocialScenesPresenter:
 
 @dataclass
 class StatusLoggingEventSink:
+    """An ``EventSink`` that also writes a status line for the main events.
+
+    Attributes
+    ----------
+    delegate : EventSink
+        The event sink that records the events.
+    status : StatusSink
+        Receives the status lines.
+    """
+
     delegate: EventSink
     status: StatusSink
 
     def emit(self, event: RuntimeEvent) -> None:
+        """Record one event, and write a status line for a start or end event.
+
+        Parameters
+        ----------
+        event : RuntimeEvent
+            The event.
+        """
         self.delegate.emit(event)
         if event.name == "static-social-scenes.started":
             self.status(f"Static Social Scenes started: {event.payload['sequence_id']}")
@@ -281,6 +384,44 @@ def run_static_social_scenes_demo(
     debug_render: bool = False,
     status_sink: StatusSink | None = None,
 ) -> int:
+    """Show the Static Social Scenes task without recording. For previews.
+
+    The demo writes no files. If the configured speaker fails, it continues
+    with the default speaker, then without sound.
+
+    Parameters
+    ----------
+    fullscreen : bool
+        True fills the screen. False opens a window of ``window_size``.
+    screen : int
+        The PsychoPy screen number of the stimulus display.
+    window_size : tuple[int, int]
+        The window width and height in pixels, when not fullscreen.
+    screen_distance_meters : float
+        The distance from the eyes of the participant to the screen.
+    screen_resolution_pixels : tuple[int, int]
+        The screen width and height in pixels.
+    screen_size_meters : tuple[float, float]
+        The screen width and height in meters.
+    monitor_name : str
+        The name of the PsychoPy monitor profile.
+    audio_speaker : str or None
+        The name, or part of the name, of the speaker for stimulus audio.
+        None uses the default speaker.
+    play_sound : bool
+        False plays no stimulus audio.
+    trial_limit : int or None
+        The maximum number of trials to show. None shows all trials.
+    debug_render : bool
+        True writes a status line for each stimulus that is drawn.
+    status_sink : StatusSink or None
+        Receives status messages. None prints them to standard error.
+
+    Returns
+    -------
+    int
+        The exit code: 0 when the demo ends.
+    """
     status = status_sink or (
         lambda message: print(message, file=sys.stderr, flush=True)
     )
@@ -358,13 +499,67 @@ def run_static_social_scenes_session(
     debug_render: bool = False,
     status_sink: StatusSink | None = None,
 ) -> int:
+    """Record one Static Social Scenes run.
+
+    The run writes its files to
+    ``<output_dir>/sub-<subject>/ses-<session>/task-<task>_run-<run>``. See
+    ``run_recording_session``.
+
+    Parameters
+    ----------
+    tracker : TrackerName
+        ``"tobii"`` records gaze. ``"none"`` is a dry run without gaze.
+    tracker_address : str or None
+        The tracker address. None uses the saved tracker, then discovery.
+    tracker_serial_number : str or None
+        The serial number of the tracker.
+    output_dir : str or Path
+        The ``sourcedata`` folder.
+    subject : str
+        The subject label, with or without ``"sub-"``.
+    session : str or None
+        The session label, with or without ``"ses-"``. None for no session.
+    run : str or None
+        The run label, with or without ``"run-"``. None gives the next free
+        run number.
+    fullscreen : bool
+        True fills the screen. False opens a window of ``window_size``.
+    screen : int
+        The PsychoPy screen number of the stimulus display.
+    window_size : tuple[int, int]
+        The window width and height in pixels, when not fullscreen.
+    screen_distance_meters : float
+        The distance from the eyes of the participant to the screen.
+    screen_resolution_pixels : tuple[int, int]
+        The screen width and height in pixels.
+    screen_size_meters : tuple[float, float]
+        The screen width and height in meters.
+    monitor_name : str
+        The name of the PsychoPy monitor profile.
+    audio_speaker : str or None
+        The name, or part of the name, of the speaker for stimulus audio.
+        None uses the default speaker.
+    play_sound : bool
+        False plays no stimulus audio.
+    trial_limit : int or None
+        The maximum number of trials to show. None shows all trials.
+    debug_render : bool
+        True writes a status line for each stimulus that is drawn.
+    status_sink : StatusSink or None
+        Receives status messages. None prints them to standard error.
+
+    Returns
+    -------
+    int
+        The exit code of ``run_recording_session``.
+    """
     from aria_et.session import run_recording_session
 
     status = status_sink or (
         lambda message: print(message, file=sys.stderr, flush=True)
     )
 
-    def present(event_sink: EventSink) -> None:
+    def present(event_sink: EventSink) -> None:  # numpydoc ignore=GL08
         status("Importing PsychoPy...")
         from psychopy import core, monitors, prefs, visual
 
